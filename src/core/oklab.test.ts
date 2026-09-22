@@ -7,12 +7,10 @@ import {
   filmLinear,
   filmRgb255,
   gamutMap,
-  inkAlpha,
   linearToHex,
   linearToOklch,
   mixDye,
   oklchToLinear,
-  slideHex,
   stackLinear,
 } from './oklab'
 
@@ -121,19 +119,14 @@ describe('the verified film numbers', () => {
   })
 })
 
-describe('ink and mode selection', () => {
+describe('a sheet has one colour', () => {
   const dye: Dye = { L: 0.86, C: 0.16, h: 210, d: 0.55 }
 
-  it('alpha tracks density inside the documented window', () => {
-    expect(inkAlpha({ ...dye, d: 0.42 })).toBeCloseTo(0.62, 10)
-    expect(inkAlpha({ ...dye, d: 0.7 })).toBeCloseTo(0.82, 10)
-    expect(inkAlpha({ ...dye, d: 0.2 })).toBe(0.62)
-    expect(inkAlpha({ ...dye, d: 0.95 })).toBe(0.82)
-  })
-
-  it('slideHex switches at the midpoint of the crossfade', () => {
-    expect(slideHex(dye, 0.49)).toBe(filmHex(dye))
-    expect(slideHex(dye, 0.5)).not.toBe(filmHex(dye))
+  it('is the transmitted film, in both modes', () => {
+    // There used to be a second, opaque colour for mode B, and the tab picked
+    // between them. Mode B is light through the same film now, so the hex on
+    // the tab is a property of the sheet and nothing else.
+    expect(filmHex(dye)).toBe(linearToHex(...filmLinear(dye)))
   })
 })
 

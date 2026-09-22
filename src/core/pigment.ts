@@ -32,16 +32,19 @@
  *     an overlap, and its lightness comes from the sheets themselves. An
  *     overlap is never darker than the darkest sheet in it, at any depth.
  *
- * Mode B keeps the ordered, digital reading on purpose (see `stackInk`), so the
- * two modes are now a real choice between two models rather than one model and
- * a tint.
+ * Mode B is that physics, kept on purpose (see `stackLight`): the plain product
+ * of what each sheet transmits, which is the light that actually survives the
+ * stack. It is darker, it sludges the complementaries, and a fourth layer does
+ * cost a quarter of the light. That is the reading mode A refuses, which is
+ * exactly why it is worth being able to switch to. Paint or light, same sheets,
+ * two answers.
  *
  * Spaces: the cube's corners are defined in ENCODED sRGB, so the trilinear
  * interpolation happens there. Depth darkening is a light-transport term, so it
  * happens in LINEAR sRGB. Mixing those up desaturates everything.
  */
 
-import { decode, encode, gamutMap, linearToOklch, maxChroma } from './oklab'
+import { decode, encode, gamutMap, linearToOklch, maxChroma, stackLinear } from './oklab'
 
 /** Concentrations of red, yellow and blue pigment. 0 is bare white light. */
 export type Ryb = [number, number, number]
@@ -431,43 +434,35 @@ export function mixSummary(
 }
 
 /**
- * Mode B. Deliberately the other model: opaque screen-printed panels laid down
- * in stacking order, so the top one does govern and the result is a graphic
- * flat rather than a transmission. Ordered on purpose, which is why the painter
- * hands it the sheets sorted by depth.
+ * Mode B. Gels in series: a per-channel product of what each sheet transmits,
+ * which is both the optics of stacked film and what the GPU would have done for
+ * `multiply`. Order free, like the physics it is. One sheet is returned
+ * verbatim, so the two modes only ever disagree about crossings.
  *
- * `inks` are linear sRGB, bottom first. `alphas` are their coverages.
+ * `films` are the transmitted colours, linear sRGB. For a dyed sheet over a
+ * backlight that is the same number as its transmittance, which is what makes
+ * the product meaningful.
  */
-export function stackInk(
-  inks: readonly (readonly [number, number, number])[],
-  alphas: readonly number[],
+export function stackLight(
+  films: readonly (readonly [number, number, number])[],
 ): [number, number, number] {
-  let r = 1
-  let g = 1
-  let b = 1
-  for (let i = 0; i < inks.length; i++) {
-    const c = inks[i]
-    if (!c) continue
-    const a = clamp01(alphas[i] ?? 1)
-    r = r * (1 - a) + (c[0] as number) * a
-    g = g * (1 - a) + (c[1] as number) * a
-    b = b * (1 - a) + (c[2] as number) * a
-  }
-  return [r, g, b]
+  let out: [number, number, number] = [1, 1, 1]
+  for (const f of films) out = stackLinear(out, f)
+  return out
 }
 
-/** Both models, crossfaded in linear light. `mix` 0 is film, 1 is ink. */
+/** Both models, crossfaded in linear light. `mix` 0 is paint, 1 is light. */
 export function blendModes(
-  film: readonly [number, number, number],
-  ink: readonly [number, number, number],
+  paint: readonly [number, number, number],
+  light: readonly [number, number, number],
   mix: number,
 ): [number, number, number] {
-  if (mix <= 0) return [film[0] as number, film[1] as number, film[2] as number]
-  if (mix >= 1) return [ink[0] as number, ink[1] as number, ink[2] as number]
+  if (mix <= 0) return [paint[0] as number, paint[1] as number, paint[2] as number]
+  if (mix >= 1) return [light[0] as number, light[1] as number, light[2] as number]
   return [
-    (film[0] as number) + ((ink[0] as number) - (film[0] as number)) * mix,
-    (film[1] as number) + ((ink[1] as number) - (film[1] as number)) * mix,
-    (film[2] as number) + ((ink[2] as number) - (film[2] as number)) * mix,
+    (paint[0] as number) + ((light[0] as number) - (paint[0] as number)) * mix,
+    (paint[1] as number) + ((light[1] as number) - (paint[1] as number)) * mix,
+    (paint[2] as number) + ((light[2] as number) - (paint[2] as number)) * mix,
   ]
 }
 

@@ -1,5 +1,5 @@
 import { HISTORY_FRAMES, DT, MAX_SUBSTEPS, MODE_MS } from '../core/constants'
-import { slideHex } from '../core/oklab'
+import { filmHex } from '../core/oklab'
 import { Rng, randomSeed } from '../core/rng'
 import type { BlendMode, Dye, SlideState, Viewport } from '../core/types'
 import { generatePalette } from '../palette/palette'
@@ -70,7 +70,7 @@ export class Instrument {
   private playhead = 0
   private tick = 0
 
-  private blendTarget: BlendMode = 'light'
+  private blendTarget: BlendMode = 'paint'
   private modeMix = 0
 
   private selectedId: number | null = null
@@ -216,7 +216,7 @@ export class Instrument {
   }
 
   private easeMode(dt: number): void {
-    const target = this.blendTarget === 'blend' ? 1 : 0
+    const target = this.blendTarget === 'light' ? 1 : 0
     if (this.modeMix === target) return
     const step = dt / (MODE_MS / 1000)
     if (Math.abs(target - this.modeMix) <= step) {
@@ -276,7 +276,7 @@ export class Instrument {
   }
 
   toggleBlend(): void {
-    this.setBlend(this.blendTarget === 'light' ? 'blend' : 'light')
+    this.setBlend(this.blendTarget === 'paint' ? 'light' : 'paint')
   }
 
   /**
@@ -312,7 +312,7 @@ export class Instrument {
     // Through the simulation, because pinning also stops the colour drifting,
     // and it has to stop on exactly the colour that is on screen.
     this.sim.setLocked(id, !slide.locked)
-    const hex = slideHex(slide.dye, this.modeMix)
+    const hex = filmHex(slide.dye)
     if (slide.locked) {
       if (!this.pinOrder.includes(id)) this.pinOrder.push(id)
       this.announcement = `${hex} pinned.`
@@ -357,7 +357,7 @@ export class Instrument {
     for (const pinned of this.pinOrder) {
       if (pinned < 0) continue
       const slide = this.slide(pinned)
-      if (slide && slideHex(slide.dye, this.modeMix) === hex) {
+      if (slide && filmHex(slide.dye) === hex) {
         this.announcement = `${hex} is already pinned.`
         this.notify()
         return
@@ -388,7 +388,7 @@ export class Instrument {
   copy(id: number): void {
     const slide = this.slide(id)
     if (!slide) return
-    this.copyHex(slideHex(slide.dye, this.modeMix))
+    this.copyHex(filmHex(slide.dye))
     this.stage.flashCopied(id)
   }
 
@@ -534,7 +534,7 @@ export class Instrument {
           ? [
               {
                 id,
-                hex: slideHex(s.dye, this.modeMix),
+                hex: filmHex(s.dye),
                 locked: s.locked,
                 kind: 'slide',
                 sheets: 1,

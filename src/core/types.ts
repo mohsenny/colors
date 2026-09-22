@@ -22,7 +22,12 @@ export interface Dye extends Oklch {
   d: number
 }
 
-export type BlendMode = 'light' | 'blend'
+/**
+ * What a crossing is. `paint` mixes the sheets like pigment, so the hue is one
+ * a painter would predict and the light never runs out. `light` is the optics:
+ * the product of what each sheet transmits, darker and true.
+ */
+export type BlendMode = 'paint' | 'light'
 
 /**
  * One slide's complete simulation state.

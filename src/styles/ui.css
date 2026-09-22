@@ -161,7 +161,7 @@
   transition: transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
-.lb-seg[data-mode='blend'] .lb-seg-indicator {
+.lb-seg[data-mode='light'] .lb-seg-indicator {
   transform: translateX(100%);
 }
 

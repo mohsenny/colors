@@ -170,36 +170,17 @@ export function filmHex(dye: Dye): string {
   return linearToHex(r, g, b)
 }
 
-/** Mode B trades transmittance for pigment: darker, more chromatic, opaque. */
-export function inkLinear(dye: Dye): [number, number, number] {
-  const g = gamutMap(clamp(dye.L - 0.14, 0.5, 0.78), dye.C * 1.15, dye.h)
-  return [g.r, g.g, g.b]
-}
-
-export function inkRgb255(dye: Dye): [number, number, number] {
-  const [r, g, b] = inkLinear(dye)
-  return linearTo255(r, g, b)
-}
-
-export function inkHex(dye: Dye): string {
-  const [r, g, b] = inkLinear(dye)
-  return linearToHex(r, g, b)
-}
-
-export function inkAlpha(dye: Dye): number {
-  return clamp(0.62 + (0.2 * (dye.d - 0.42)) / 0.28, 0.62, 0.82)
-}
-
-/** The hex the tab shows. The label follows the mode the user is actually seeing. */
-export function slideHex(dye: Dye, modeMix: number): string {
-  return modeMix < 0.5 ? filmHex(dye) : inkHex(dye)
-}
-
 /**
- * Two gels in series. A plain per-channel product: that is both the physics of
+ * Gels in series. A plain per-channel product: that is both the physics of
  * stacked transmittances and exactly what the GPU does for `multiply`, which is
  * why the render track gets the optics for free. Feed it the channel values of
  * the space you are compositing in (the renderer composites in encoded sRGB).
+ *
+ * There is no second colour for a sheet any more. Mode B used to be opaque ink,
+ * so a sheet had a print colour as well as a transmitted one and the tab had to
+ * pick. Now both modes are light through the same film and only the crossings
+ * differ, so a sheet's hex is `filmHex` and it does not change when the mode
+ * does.
  */
 export function stackLinear(a: readonly number[], b: readonly number[]): [number, number, number] {
   return [

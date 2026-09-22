@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decode, filmLinear, linearToOklch } from './oklab'
-import { filmToRyb, mixBytes, mixFilm, rybToSrgb, srgbToRyb, stackInk } from './pigment'
+import { filmToRyb, mixBytes, mixFilm, rybToSrgb, srgbToRyb, stackLight } from './pigment'
 import type { Ryb } from './pigment'
 import type { Dye } from './types'
 
@@ -166,13 +166,32 @@ describe('stacking depth', () => {
 })
 
 describe('mode B', () => {
-  it('lets the last sheet govern, which is the point of it', () => {
-    const top: [number, number, number] = [0.8, 0.1, 0.1]
-    const out = stackInk([[0.1, 0.1, 0.8], top], [0.7, 0.8])
-    expect(out[0]).toBeGreaterThan(out[2])
+  it('passes one sheet through untouched', () => {
+    expect(stackLight([[0.2, 0.4, 0.6]])).toEqual([0.2, 0.4, 0.6])
   })
 
-  it('is fully opaque at alpha 1', () => {
-    expect(stackInk([[0.2, 0.4, 0.6]], [1])).toEqual([0.2, 0.4, 0.6])
+  it('does not care which sheet is on top', () => {
+    const a: [number, number, number] = [0.9, 0.85, 0.3]
+    const b: [number, number, number] = [0.3, 0.5, 0.9]
+    expect(stackLight([a, b])).toEqual(stackLight([b, a]))
+  })
+
+  it('costs light per sheet, which is what mode A refuses to do', () => {
+    const gel: [number, number, number] = [0.8, 0.7, 0.6]
+    const one = stackLight([gel])
+    const three = stackLight([gel, gel, gel])
+    for (let i = 0; i < 3; i++) expect(three[i] as number).toBeLessThan(one[i] as number)
+    expect(three[0]).toBeCloseTo(0.8 ** 3, 12)
+  })
+
+  it('sludges a complementary crossing, unlike pigment', () => {
+    // Yellow film over blue film. The product keeps almost nothing, which is
+    // the honest answer and the reason mode A exists.
+    const out = stackLight([
+      [0.95, 0.9, 0.2],
+      [0.2, 0.45, 0.95],
+    ])
+    expect(out[0]).toBeLessThan(0.25)
+    expect(out[2]).toBeLessThan(0.25)
   })
 })

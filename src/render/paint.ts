@@ -28,8 +28,8 @@
  */
 
 import { CORNER_INNER } from '../core/constants'
-import { encode, filmLinear, inkAlpha, inkLinear } from '../core/oklab'
-import { blendModes, filmStat, filmToRyb, mixFilm, stackInk } from '../core/pigment'
+import { encode, filmLinear } from '../core/oklab'
+import { blendModes, filmStat, filmToRyb, mixFilm, stackLight } from '../core/pigment'
 import type { Ryb, SheetStat } from '../core/pigment'
 import type { RenderOptions, SimState, SlideState, Viewport } from '../core/types'
 
@@ -50,10 +50,6 @@ const SHEEN_LOW = 0.02
 const LIP_ALPHA = 0.045
 const LIP_PX = 0.6
 
-/** Mode B's registration edge: the ink at higher density, so it reads as print. */
-const HAIRLINE_DENSITY = 0.88
-const HAIRLINE_ALPHA = 0.9
-
 /** Regions smaller than this many square px are not worth a fill. */
 const MIN_AREA = 0.5
 
@@ -67,13 +63,9 @@ interface Sheet {
   hh: number
   rot: number
   z: number
-  /** Stacking order for mode B only. Mode A does not have one, by design. */
-  rank: number
   film: [number, number, number]
   ryb: Ryb
   stat: SheetStat
-  ink: [number, number, number]
-  alpha: number
 }
 
 interface Cached {
@@ -84,8 +76,6 @@ interface Cached {
   film: [number, number, number]
   ryb: Ryb
   stat: SheetStat
-  ink: [number, number, number]
-  alpha: number
 }
 
 interface Region {
@@ -241,7 +231,7 @@ export class Painter {
     }
 
     // --- per-sheet material ---------------------------------------------------
-    for (let i = 0; i < n; i++) this.material(ctx, sheets[i] as Sheet, mix)
+    for (let i = 0; i < n; i++) this.material(ctx, sheets[i] as Sheet)
   }
 
   // --- pieces ----------------------------------------------------------------
@@ -283,23 +273,16 @@ export class Painter {
         hh,
         rot: slide.rot,
         z: slide.z,
-        rank: 0,
         film: c.film,
         ryb: c.ryb,
         stat: c.stat,
-        ink: c.ink,
-        alpha: c.alpha,
       })
     }
     for (const id of this.cache.keys()) if (!live.has(id)) this.cache.delete(id)
 
-    // Mode B needs a stacking order, and it has to be the same one the mounts
-    // use, including the lift a selected slide gets: the interior would
-    // otherwise disagree with the chrome about which slide is on top.
-    const order = sheets.slice().sort((a, b) => (a.z === b.z ? a.id - b.id : a.z - b.z))
-    for (let i = 0; i < order.length; i++) (order[i] as Sheet).rank = i
-    for (const s of sheets) if (s.id === opts.selectedId) s.rank = order.length
-
+    // No stacking order here on purpose. Both modes are now functions of the
+    // SET of sheets over a point, so the interior cannot disagree with the
+    // chrome about which slide is on top: it never asks.
     return sheets
   }
 
@@ -317,8 +300,6 @@ export class Painter {
       film,
       ryb: filmToRyb(film),
       stat: filmStat(film),
-      ink: inkLinear(dye),
-      alpha: inkAlpha(dye),
     }
     this.cache.set(slide.id, next)
     return next
@@ -383,19 +364,7 @@ export class Painter {
     }
 
     let out = mixFilm(pigments, films, stats)
-    if (mix > 0) {
-      const ordered = set
-        .map((i) => sheets[i] as Sheet)
-        .sort((a, b) => a.rank - b.rank)
-      out = blendModes(
-        out,
-        stackInk(
-          ordered.map((s) => s.ink),
-          ordered.map((s) => s.alpha),
-        ),
-        mix,
-      )
-    }
+    if (mix > 0) out = blendModes(out, stackLight(films), mix)
 
     // Depth, as brightness. Averaged over the set so the lift cannot depend on
     // stacking order, which the mix itself never does.
@@ -428,8 +397,8 @@ export class Painter {
     this.pathPoly(ctx, s.poly)
   }
 
-  /** Sheen, lip and (in mode B) the registration hairline, in the slide's frame. */
-  private material(ctx: CanvasRenderingContext2D, s: Sheet, mix: number): void {
+  /** Sheen and lip, in the slide's frame. Both modes: it is film either way. */
+  private material(ctx: CanvasRenderingContext2D, s: Sheet): void {
     if (s.hw < 1 || s.hh < 1) return
     ctx.save()
     ctx.translate(s.cx, s.cy)
@@ -440,20 +409,17 @@ export class Painter {
     ctx.roundRect(-s.hw, -s.hh, w, h, Math.min(CORNER_INNER, s.hw, s.hh))
     ctx.clip()
 
-    const film = 1 - mix
-    if (film > 0.01) {
-      const a = (SHEEN_ANGLE * Math.PI) / 180
-      const len = Math.abs(w * Math.cos(a)) + Math.abs(h * Math.sin(a))
-      const gx = (Math.cos(a) * len) / 2
-      const gy = (Math.sin(a) * len) / 2
-      const grad = ctx.createLinearGradient(-gx, -gy, gx, gy)
-      grad.addColorStop(0, `rgba(255,255,255,${(SHEEN_HIGH * film).toFixed(4)})`)
-      grad.addColorStop(0.38, `rgba(255,255,255,${(0.012 * film).toFixed(4)})`)
-      grad.addColorStop(0.62, 'rgba(255,255,255,0)')
-      grad.addColorStop(1, `rgba(0,0,0,${(SHEEN_LOW * film).toFixed(4)})`)
-      ctx.fillStyle = grad
-      ctx.fillRect(-s.hw, -s.hh, w, h)
-    }
+    const a = (SHEEN_ANGLE * Math.PI) / 180
+    const len = Math.abs(w * Math.cos(a)) + Math.abs(h * Math.sin(a))
+    const gx = (Math.cos(a) * len) / 2
+    const gy = (Math.sin(a) * len) / 2
+    const grad = ctx.createLinearGradient(-gx, -gy, gx, gy)
+    grad.addColorStop(0, `rgba(255,255,255,${SHEEN_HIGH.toFixed(4)})`)
+    grad.addColorStop(0.38, 'rgba(255,255,255,0.012)')
+    grad.addColorStop(0.62, 'rgba(255,255,255,0)')
+    grad.addColorStop(1, `rgba(0,0,0,${SHEEN_LOW.toFixed(4)})`)
+    ctx.fillStyle = grad
+    ctx.fillRect(-s.hw, -s.hh, w, h)
 
     ctx.lineWidth = LIP_PX
     ctx.strokeStyle = `rgba(0,0,0,${LIP_ALPHA})`
@@ -466,18 +432,6 @@ export class Painter {
       Math.min(CORNER_INNER, s.hw, s.hh),
     )
     ctx.stroke()
-
-    if (mix > 0.01) {
-      const d = HAIRLINE_DENSITY
-      const r = byte(s.ink[0] * d)
-      const g = byte(s.ink[1] * d)
-      const b = byte(s.ink[2] * d)
-      ctx.lineWidth = 1
-      ctx.strokeStyle = `rgba(${r},${g},${b},${(HAIRLINE_ALPHA * mix).toFixed(3)})`
-      ctx.beginPath()
-      ctx.roundRect(-s.hw + 0.5, -s.hh + 0.5, w - 1, h - 1, Math.min(CORNER_INNER, s.hw, s.hh))
-      ctx.stroke()
-    }
 
     ctx.restore()
   }

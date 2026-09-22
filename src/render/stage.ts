@@ -15,7 +15,7 @@ import {
 } from '../core/constants'
 import { lampsAt } from '../core/lamps'
 import type { Lamp } from '../core/lamps'
-import { slideHex } from '../core/oklab'
+import { filmHex } from '../core/oklab'
 import type { RenderOptions, SimState, SlideState, StageHandlers, Viewport } from '../core/types'
 import { Painter } from './paint'
 
@@ -105,7 +105,6 @@ interface Prev {
   frameH: number
   innerW: number
   innerH: number
-  modeMix: number
   dyeL: number
   dyeC: number
   dyeH: number
@@ -268,7 +267,6 @@ export class Stage {
         frameH: -1,
         innerW: -1,
         innerH: -1,
-        modeMix: -1,
         dyeL: Number.NaN,
         dyeC: Number.NaN,
         dyeH: Number.NaN,
@@ -352,7 +350,6 @@ export class Stage {
 
     const slides = state.slides
     const vh = vp.height
-    const modeMix = clamp(state.modeMix, 0, 1)
 
     for (let i = 0; i < slides.length; i += 1) {
       const slide = slides[i]
@@ -463,10 +460,10 @@ export class Stage {
         els.tab.style.left = `${tabLeft}px`
       }
 
-      const modeChanged = modeMix !== p.modeMix
-      p.modeMix = modeMix
-      if (dyeChanged || modeChanged) {
-        const hex = slideHex(dye, modeMix)
+      // The mode no longer touches the tab: both modes transmit the same film
+      // through one sheet and only differ where sheets cross.
+      if (dyeChanged) {
+        const hex = filmHex(dye)
         if (hex !== p.hex) {
           p.hex = hex
           els.hex.textContent = hex

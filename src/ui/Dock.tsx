@@ -138,6 +138,19 @@ export function Dock(props: DockProps): ReactElement {
 
       <div className="lb-seg" role="group" aria-label="Colour mode" data-mode={blend}>
         <span className="lb-seg-indicator" aria-hidden="true" />
+        {/*
+          Five letters each, which is not a coincidence: the sliding indicator
+          is a 50% pill, so two labels of different lengths would leave it
+          sitting off the word it is meant to be under.
+        */}
+        <button
+          type="button"
+          className="lb-seg-btn"
+          aria-pressed={blend === 'paint'}
+          onClick={() => onBlendChange('paint')}
+        >
+          Paint
+        </button>
         <button
           type="button"
           className="lb-seg-btn"
@@ -145,14 +158,6 @@ export function Dock(props: DockProps): ReactElement {
           onClick={() => onBlendChange('light')}
         >
           Light
-        </button>
-        <button
-          type="button"
-          className="lb-seg-btn"
-          aria-pressed={blend === 'blend'}
-          onClick={() => onBlendChange('blend')}
-        >
-          Blend
         </button>
       </div>
     </div>
