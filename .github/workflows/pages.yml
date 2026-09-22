@@ -31,7 +31,22 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # `npm ci`, with one retry.
+      #
+      # npm itself fails intermittently here with "Exit handler never called",
+      # a bug in npm and not in this lockfile: the install finishes and the
+      # process hangs on the way out. It took down the first deploy of this
+      # repo. A clean cache and a second attempt clears it, and a retry is
+      # honest about what it is rather than pinning a different npm and
+      # pretending the problem is ours.
+      - name: Install
+        run: |
+          npm ci --no-audit --no-fund || {
+            echo "npm ci failed, clearing the cache and retrying once"
+            npm cache clean --force
+            rm -rf node_modules
+            npm ci --no-audit --no-fund
+          }
       # Typecheck, lint and unit tests before the build, so a broken simulation
       # cannot reach the live page. `npm run build` runs tsc itself, but failing
       # here names which check failed instead of just "build failed".

@@ -323,12 +323,21 @@
 
 /* ------------------------------------------------------------ palette tray */
 
+/*
+ * Top right, not centred.
+ *
+ * Centred put the tray across the middle band of the surface, which is where
+ * the sheets cross and where the eye is. The corner is the quiet part of the
+ * frame: the list is there when you look for it and out of the composition when
+ * you are not. It also grows downward from a fixed edge, so a new colour does
+ * not shift the ones already saved.
+ */
 .lb-tray {
   position: fixed;
-  right: calc(14px + env(safe-area-inset-right, 0px));
-  top: 50%;
+  /* The same 16px the wordmark sits at, so the two corners read as one line. */
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  top: calc(16px + env(safe-area-inset-top, 0px));
   z-index: 200;
-  transform: translateY(-50%);
 }
 
 .lb-tray-list {

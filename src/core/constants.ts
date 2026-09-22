@@ -13,12 +13,12 @@ export const MAX_SUBSTEPS = 4
 
 /** Rolling history: 15 seconds at 60 Hz. */
 export const HISTORY_FRAMES = 900
-/** Floats per frame. 8 globals + 9 slides x 31 lanes, rounded up. */
+/** Floats per frame. 8 globals + one block of 31 lanes per slide, rounded up. */
 export const SLIDE_LANES = 32
 export const GLOBAL_LANES = 8
 
 /** Slides, by viewport. Small screens carry fewer so the composition can breathe. */
-export const SLIDE_COUNT = 9
+export const SLIDE_COUNT = 8
 export const SLIDE_COUNT_SMALL = 4
 export const SMALL_VIEWPORT = 620
 
