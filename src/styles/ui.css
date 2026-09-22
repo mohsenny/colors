@@ -1,0 +1,597 @@
+/*
+ * The floating chrome: wordmark, dock (play / timeline / regenerate / mode),
+ * palette tray.
+ *
+ * Everything here is subordinate to the slides. Rules of thumb applied
+ * throughout: translucent near-white panels so the lit surface shows through,
+ * hairline borders rather than 1px greys, the slides' own cool shadow language,
+ * and text at the same weight and colour as the slide hex labels.
+ *
+ * Custom properties are shared with src/styles/stage.css; every use carries a
+ * literal fallback so a missing name degrades rather than breaks.
+ *
+ * Z-ORDER: slides reach z-index 10 + zRank * 8 + 3 (max 53), so the chrome sits
+ * at 200 and never has to negotiate.
+ */
+
+/* ---------------------------------------------------------------- wordmark */
+
+.lb-wordmark {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  z-index: 200;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.185em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  user-select: none;
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------------- dock */
+
+.lb-dock {
+  /* The two timeline widths live here rather than on .lb-timeline because the
+     dock needs the difference to compute its own offset. */
+  --lb-tl-w: 132px;
+  --lb-tl-open: 304px;
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: var(--lb-r-pill, 999px);
+  /* The same fibre the mounts carry, so the chrome is made of the same stuff as
+     the slides rather than of screen. Over a blurred backdrop it reads as the
+     grain of a frosted panel. */
+  background-color: var(--lb-panel, rgba(255, 255, 255, 0.82));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  /* The blur is what lets the panel stay this pale and still read as an object:
+     the surface behind it remains visible but loses its detail. */
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+  box-shadow:
+    var(
+      --lb-shadow-float,
+      3.4px 9.6px 27.1px rgba(46, 52, 72, 0.092),
+      0.8px 2.4px 5.1px rgba(46, 52, 72, 0.052)
+    ),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transform: translateX(-50%);
+  transition:
+    opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/*
+ * Pausing widens the timeline. A centred dock would absorb half that growth on
+ * each side, sliding the play button ~86px left, out from under the pointer
+ * that just clicked it. Worse, what lands there instead is the scrubber, so the
+ * next click yanks the composition backwards. Offsetting by half the growth
+ * pins the left edge: the dock opens rightward and the button stays put. Same
+ * duration and easing as the width, or the edge wobbles mid-transition.
+ */
+.lb-dock.is-expanded {
+  transform: translateX(calc(-50% + (var(--lb-tl-open) - var(--lb-tl-w)) / 2));
+}
+
+/*
+ * There has to be room on the right to absorb the shift. The expanded dock is
+ * about 500px wide, so its right edge lands at half the viewport plus 336px,
+ * which runs off any window under about 672px, and the page cannot scroll to
+ * reach it. The cutoff is set at 768 rather than at that measured 672 so the
+ * chrome can grow a little without clipping the blend control in exactly the
+ * paused state that is meant to be read. Under it the dock keeps growing from
+ * the centre and the play control does move: the better trade on a narrow
+ * window, where the alternative is a control off the edge of the screen.
+ */
+@media (max-width: 767px) {
+  .lb-dock.is-expanded {
+    transform: translateX(-50%);
+  }
+}
+
+/* 0.35 is the floor: still legible against the bright surface, still an obvious
+   target. The dock is never allowed to disappear. */
+.lb-dock.is-idle {
+  opacity: 0.35;
+}
+
+.lb-dock.is-idle:hover,
+.lb-dock.is-idle:focus-within {
+  opacity: 1;
+}
+
+.lb-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-btn:hover {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(30, 34, 48, 0.055);
+}
+
+.lb-btn:active {
+  background: rgba(30, 34, 48, 0.09);
+}
+
+.lb-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* ------------------------------------------------------- segmented control */
+
+.lb-seg {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-left: 2px;
+  padding: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(30, 34, 48, 0.05);
+}
+
+.lb-seg-indicator {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  height: calc(100% - 4px);
+  border-radius: var(--lb-r-pill, 999px);
+  background: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
+  box-shadow:
+    0 1px 2px rgba(30, 34, 48, 0.1),
+    0 0 0 0.5px var(--lb-hairline-soft, rgba(30, 34, 48, 0.055));
+  transition: transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-seg[data-mode='blend'] .lb-seg-indicator {
+  transform: translateX(100%);
+}
+
+.lb-seg-btn {
+  position: relative;
+  z-index: 1;
+  padding: 4px 9px;
+  border-radius: var(--lb-r-pill, 999px);
+  /* Museum-label micro-type: the same uppercase and tracking as the wordmark,
+     which is what ties the chrome together and keeps two ordinary words from
+     reading as a web toggle. */
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  transition: color var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-seg-btn:hover {
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+.lb-seg-btn[aria-pressed='true'] {
+  color: var(--lb-ink-strong, #101014);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- timeline */
+
+.lb-timeline {
+  position: relative;
+  flex: none;
+  width: var(--lb-tl-w, 132px);
+  height: 24px;
+  margin: 0 2px;
+  transition: width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/*
+ * Paused, the scrubber is the reason the user came to the dock, so it takes the
+ * room and the dock opens around it. A 132px sliver with a knob added is
+ * "minimised but available", which is the playing state, not prominent.
+ */
+.lb-timeline.is-expanded {
+  width: var(--lb-tl-open, 304px);
+}
+
+/* Visually hidden but fully operative: keyboard stepping, AT value reporting and
+   pointer drag all come from the native control. Opacity 0 (not
+   display/clip-path) is what keeps it hit-testable. */
+.lb-timeline-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  /* A touch drag on the thumb must scrub, not pan or rubber-band the page. */
+  touch-action: none;
+}
+
+.lb-timeline-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 24px;
+}
+
+.lb-timeline-input::-moz-range-thumb {
+  width: 16px;
+  height: 24px;
+  border: 0;
+}
+
+.lb-timeline-visual {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lb-timeline-input:focus-visible ~ .lb-timeline-visual {
+  outline: 2px solid var(--lb-focus, rgba(26, 30, 44, 0.55));
+  outline-offset: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+}
+
+.lb-timeline-track,
+.lb-timeline-recorded {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+  transform: translateY(-50%);
+  transition: height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-timeline-track {
+  left: 0;
+  right: 0;
+  background: rgba(30, 34, 48, 0.09);
+}
+
+/* The recorded window abuts the live edge, so it grows leftwards from the right. */
+.lb-timeline-recorded {
+  left: var(--lb-tl-rec-left, 100%);
+  width: var(--lb-tl-rec-width, 0%);
+  background: rgba(30, 34, 48, 0.2);
+}
+
+.lb-timeline-head {
+  position: absolute;
+  top: 50%;
+  left: var(--lb-tl-pos, 100%);
+  width: 2px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transform: translate(-50%, -50%);
+  transition:
+    width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    background-color var(--lb-t-grow, 180ms) ease,
+    box-shadow var(--lb-t-grow, 180ms) ease,
+    border-radius var(--lb-t-grow, 180ms) ease;
+}
+
+.lb-timeline.is-expanded .lb-timeline-track,
+.lb-timeline.is-expanded .lb-timeline-recorded {
+  height: 4px;
+}
+
+/* Paused or scrubbing: the hairline tick becomes a real handle. */
+.lb-timeline.is-expanded .lb-timeline-head {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lb-panel-hover, rgba(255, 255, 255, 0.99));
+  box-shadow:
+    0 1px 2px rgba(30, 34, 48, 0.16),
+    0 0 0 0.5px rgba(30, 34, 48, 0.16);
+}
+
+.lb-timeline:hover .lb-timeline-head {
+  background: var(--lb-ink, #1a1a1e);
+}
+
+.lb-timeline.is-expanded:hover .lb-timeline-head {
+  background: var(--lb-panel-hover, rgba(255, 255, 255, 0.99));
+  box-shadow:
+    0 1px 3px rgba(30, 34, 48, 0.22),
+    0 0 0 0.5px rgba(30, 34, 48, 0.24);
+}
+
+/* ------------------------------------------------------------ palette tray */
+
+.lb-tray {
+  position: fixed;
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  top: 50%;
+  z-index: 200;
+  transform: translateY(-50%);
+}
+
+.lb-tray-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: var(--lb-r-chip, 7px);
+  background-color: var(--lb-panel, rgba(255, 255, 255, 0.82));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: blur(12px) saturate(1.04);
+  box-shadow:
+    var(
+      --lb-shadow-soft,
+      1.9px 5.5px 16.7px rgba(46, 52, 72, 0.119),
+      0.5px 1.4px 3.6px rgba(46, 52, 72, 0.073)
+    ),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.lb-tray-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 22px;
+  max-height: 22px;
+  padding: 0 4px;
+  border-radius: var(--lb-r-inner, 1.5px);
+  animation: lb-tray-in var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+}
+
+.lb-tray-item:hover {
+  background: rgba(30, 34, 48, 0.045);
+}
+
+/* Clipping only matters while collapsing, and the live item must stay unclipped
+   so the "Copied" label can sit outside the tray. */
+.lb-tray-item.is-leaving {
+  pointer-events: none;
+  overflow: hidden;
+  animation: lb-tray-out var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+}
+
+@keyframes lb-tray-in {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateX(7px);
+  }
+  to {
+    opacity: 1;
+    max-height: 22px;
+    transform: translateX(0);
+  }
+}
+
+@keyframes lb-tray-out {
+  from {
+    opacity: 1;
+    max-height: 22px;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+    transform: translateX(7px);
+  }
+}
+
+/* The half-pixel inner lip is the slides' own cue, at swatch scale. */
+.lb-tray-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--lb-swatch, #fff);
+  box-shadow:
+    inset 0 0 0 0.6px rgba(0, 0, 0, 0.075),
+    0 0 0 0.5px rgba(255, 255, 255, 0.7);
+}
+
+.lb-tray-hex {
+  flex: 1 1 auto;
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  font-variant-numeric: slashed-zero tabular-nums;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition: color var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-tray-hex:hover {
+  color: var(--lb-ink-strong, #101014);
+}
+
+/* A sampled crossing has no slide to select, so it does not offer to be one. */
+.lb-tray-hex.is-static {
+  cursor: default;
+}
+
+.lb-tray-hex.is-static:hover {
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+.lb-tray-lock,
+.lb-tray-lock-spacer {
+  flex: none;
+  width: 9px;
+  height: 9px;
+}
+
+.lb-tray-lock {
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+.lb-tray-unpin {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  opacity: 0;
+  transition: opacity var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-tray-item:hover .lb-tray-unpin,
+.lb-tray-unpin:focus-visible {
+  opacity: 1;
+}
+
+.lb-tray-unpin:hover {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(30, 34, 48, 0.07);
+}
+
+/* Sits just outside the tray so confirming a copy never shifts the layout. */
+.lb-tray-copied {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 6px);
+  transform: translateY(-50%);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-tray-copied[data-on='true'] {
+  opacity: 1;
+}
+
+/* ------------------------------------------------- small viewports (620px) */
+/* Mirrors SMALL_VIEWPORT in src/core/constants.ts; a media query cannot read it. */
+
+@media (max-width: 619px) {
+  .lb-wordmark {
+    display: none;
+  }
+
+  .lb-dock {
+    /* Still the widest thing in the dock when paused, but the dock has to stay
+       inside a phone: it grows to fill what is left rather than to a fixed
+       size. */
+    --lb-tl-w: 88px;
+    /* 196px is what the rest of the dock occupies at this type size, plus a
+       6px breathing margin each side. Measure it again if the chrome changes:
+       the uppercase mode labels alone moved it by 18px. */
+    --lb-tl-open: min(304px, calc(100vw - 196px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    gap: 2px;
+  }
+
+  .lb-seg-btn {
+    padding: 4px 7px;
+    font-size: 9px;
+    letter-spacing: 0.09em;
+  }
+
+  /* The tray becomes a horizontal strip just above the dock. Still floating,
+     still narrow: it scrolls rather than growing into a bar. */
+  .lb-tray {
+    right: auto;
+    left: 50%;
+    top: auto;
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 24px);
+    transform: translateX(-50%);
+  }
+
+  .lb-tray-list {
+    flex-direction: row;
+    gap: 2px;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .lb-tray-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lb-tray-item {
+    max-height: none;
+    max-width: 118px;
+    animation-name: lb-tray-in-row;
+  }
+
+  .lb-tray-item.is-leaving {
+    animation-name: lb-tray-out-row;
+  }
+
+  /* No hover on touch, so the unpin control is simply always there. */
+  .lb-tray-unpin {
+    opacity: 1;
+  }
+
+  .lb-tray-copied {
+    top: auto;
+    right: auto;
+    left: 50%;
+    bottom: calc(100% + 4px);
+    transform: translateX(-50%);
+  }
+
+  @keyframes lb-tray-in-row {
+    from {
+      opacity: 0;
+      max-width: 0;
+      padding-left: 0;
+      padding-right: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      max-width: 118px;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes lb-tray-out-row {
+    from {
+      opacity: 1;
+      max-width: 118px;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      max-width: 0;
+      padding-left: 0;
+      padding-right: 0;
+      transform: translateY(6px);
+    }
+  }
+}

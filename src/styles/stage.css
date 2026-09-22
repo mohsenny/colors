@@ -1,0 +1,431 @@
+/*
+ * The playground: the lit surface and the slides on it.
+ *
+ * Everything per-slide that changes (transform, z-index, size, colour, shadow)
+ * is written inline by src/render/stage.ts. This file holds only what is
+ * constant: structure, the mount, the tab, and the surface itself.
+ */
+
+:root {
+  /* Greys. The UI file reads these so the chrome matches the mount exactly. */
+  --lb-surface: #fbfaf8;
+  --lb-mount: rgba(255, 255, 255, 0.955);
+  --lb-mount-hover: rgba(255, 255, 255, 0.982);
+  --lb-mount-selected: rgba(255, 255, 255, 0.99);
+  --lb-ink-900: rgba(16, 16, 20, 0.95);
+  --lb-ink-700: rgba(26, 26, 30, 0.72);
+  --lb-ink-500: rgba(26, 26, 30, 0.5);
+  --lb-ink-300: rgba(26, 26, 30, 0.26);
+  /* The one hairline used for lips, rings and focus. Cool graphite, never blue. */
+  --lb-graphite: rgba(26, 30, 44, 0.18);
+  --lb-lip: rgba(30, 34, 48, 0.055);
+  --lb-tab-shadow: rgba(30, 34, 48, 0.1);
+  /* Shadows are deliberately cooler than the surface: the signature of a lit box. */
+  --lb-shadow-rgb: 46, 52, 72;
+}
+
+.lb-stage {
+  /* Geometry the renderer also knows about. stage.ts overwrites --lb-frame from
+     the measured viewport; the rest are constants mirrored from core/constants. */
+  --lb-frame: 7px;
+  --lb-tab-h: 18px;
+  --lb-tab-proud: 14px;
+  --lb-tab-radius: 3px;
+  --lb-radius-outer: 3px;
+  --lb-radius-inner: 1.5px;
+
+  /* The four tubes. render/stage.ts rewrites these from the simulation clock,
+     slowly: each is an sRGB triple plus a brightness scalar around 1. The
+     values here are the neutral state the box is in before the first frame. */
+  --lb-tube-1: 255 250 240;
+  --lb-tube-1-i: 1;
+  --lb-tube-2: 248 250 253;
+  --lb-tube-2-i: 1;
+  --lb-tube-3: 255 251 243;
+  --lb-tube-3-i: 1;
+  --lb-tube-4: 245 249 255;
+  --lb-tube-4-i: 1;
+
+  position: fixed;
+  inset: 0;
+  /* Dynamic units so mobile browser chrome cannot clip the surface. */
+  width: 100dvw;
+  height: 100dvh;
+  overflow: hidden;
+  /* Keeps every multiply and screen layer inside the stage. Load-bearing. */
+  isolation: isolate;
+  margin: 0;
+  background-color: var(--lb-surface);
+  /*
+   * Bottom to top: the trough between the lamps, two very broad lobes, the rim,
+   * then the four tubes.
+   *
+   * THE TUBES. What makes a lightbox a lightbox is that you can almost see the
+   * lamps through the diffuser. Four of them, upright, each a narrow core
+   * inside a broad halo, and both ellipses are shorter than the viewport so the
+   * streak fades out before the edges: that falloff is the whole trick, because
+   * a band running edge to edge reads as a gradient and a band with ends reads
+   * as a fixture.
+   *
+   * THE TROUGH IS WHY THEY ARE VISIBLE. The first version painted near-white
+   * lamps on a near-white base and the whole effect vanished: you cannot make
+   * something read as brighter than a surface that is already at the top of the
+   * range. So the base is the DARK part, the shade between two fixtures, and
+   * the tubes bring it back to full white. The peak is still essentially paper
+   * white and the trough is only about 6% under it, which is roughly what a real
+   * diffuser does between lamps 25% of the width apart.
+   *
+   * Each tube's colour and brightness come from the simulation clock and drift
+   * over a minute and a half (core/lamps.ts), one warming while another cools.
+   * With the trough underneath, that warm-to-cool difference finally has
+   * something to be a difference FROM.
+   */
+  background-image:
+    radial-gradient(
+      1.9% 44% at 12.5% 47%,
+      rgb(var(--lb-tube-1) / calc(0.92 * var(--lb-tube-1-i))) 0%,
+      rgb(var(--lb-tube-1) / 0) 58%
+    ),
+    radial-gradient(
+      1.9% 44% at 37.5% 50%,
+      rgb(var(--lb-tube-2) / calc(0.92 * var(--lb-tube-2-i))) 0%,
+      rgb(var(--lb-tube-2) / 0) 58%
+    ),
+    radial-gradient(
+      1.9% 44% at 62.5% 50%,
+      rgb(var(--lb-tube-3) / calc(0.92 * var(--lb-tube-3-i))) 0%,
+      rgb(var(--lb-tube-3) / 0) 58%
+    ),
+    radial-gradient(
+      1.9% 44% at 87.5% 53%,
+      rgb(var(--lb-tube-4) / calc(0.92 * var(--lb-tube-4-i))) 0%,
+      rgb(var(--lb-tube-4) / 0) 58%
+    ),
+    radial-gradient(
+      17% 88% at 12.5% 47%,
+      rgb(var(--lb-tube-1) / calc(0.82 * var(--lb-tube-1-i))) 0%,
+      rgb(var(--lb-tube-1) / 0) 74%
+    ),
+    radial-gradient(
+      17% 88% at 37.5% 50%,
+      rgb(var(--lb-tube-2) / calc(0.82 * var(--lb-tube-2-i))) 0%,
+      rgb(var(--lb-tube-2) / 0) 74%
+    ),
+    radial-gradient(
+      17% 88% at 62.5% 50%,
+      rgb(var(--lb-tube-3) / calc(0.82 * var(--lb-tube-3-i))) 0%,
+      rgb(var(--lb-tube-3) / 0) 74%
+    ),
+    radial-gradient(
+      17% 88% at 87.5% 53%,
+      rgb(var(--lb-tube-4) / calc(0.82 * var(--lb-tube-4-i))) 0%,
+      rgb(var(--lb-tube-4) / 0) 74%
+    ),
+    /* The rim. A panel loses a little light where it meets its housing, and the
+       falloff is what tells the eye this is a surface with edges rather than a
+       page that happens to be white. Under 2% at its strongest. */
+    linear-gradient(to bottom, rgba(223, 229, 240, 0.34) 0%, rgba(223, 229, 240, 0) 5.5%),
+    linear-gradient(to top, rgba(223, 229, 240, 0.3) 0%, rgba(223, 229, 240, 0) 5%),
+    linear-gradient(to right, rgba(223, 229, 240, 0.28) 0%, rgba(223, 229, 240, 0) 3.5%),
+    linear-gradient(to left, rgba(223, 229, 240, 0.28) 0%, rgba(223, 229, 240, 0) 3.5%),
+    radial-gradient(154% 146% at 28% 18%, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 66%),
+    radial-gradient(158% 150% at 81% 86%, rgba(228, 233, 244, 0.34) 0%, rgba(228, 233, 244, 0) 70%),
+    linear-gradient(118deg, rgb(247, 244, 236) 0%, rgb(239, 242, 250) 100%);
+}
+
+/*
+ * Grain. Static by construction: animated grain shimmers exactly when the user
+ * has paused to study a colour. Sits below every slide (slides start at z 10).
+ */
+.lb-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* 140 user units over 140 px keeps the noise cell at 1 CSS px. */
+  background-size: 140px 140px;
+}
+
+/* --- the interiors --------------------------------------------------------- */
+
+/*
+ * One canvas for every slide interior, under all the mounts. The mix is
+ * computed in RYB pigment space rather than composited by the GPU, because a
+ * channel product is the wrong model for colour (core/pigment.ts). Multiply is
+ * still what puts it on the box: the paint carries the transmitted colour and
+ * the surface underneath carries the lamps, the rim and the grain, so the tubes
+ * read THROUGH the film exactly as they would through real acetate.
+ */
+.lb-paint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+/*
+ * The mounts are direct children of the stage, positioned by the renderer.
+ */
+.lb-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  /*
+   * The transform string ends in translate(-50%, -50%), so the origin must be
+   * the stage corner. With the default 50% 50% origin the rotation would drag
+   * the slide's centre away from (x, y).
+   */
+  transform-origin: 0 0;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/*
+ * The mount. Border only: the interior has to stay transparent so the painted
+ * colour underneath shows through. Only this layer is hit-testable, so hit
+ * testing is native and respects z-order for free.
+ */
+.lb-frame {
+  border: var(--lb-frame) solid var(--lb-mount);
+  border-radius: var(--lb-radius-outer);
+  background: transparent;
+  /* Grab, not pointer: these are objects on a table, not links. Pressing one
+     stops it dead, so the cursor is the only warning the user gets that the
+     thing under the hand is about to be picked up rather than clicked. */
+  cursor: grab;
+  touch-action: none;
+  transition: border-color 110ms linear;
+}
+
+.lb-frame:active {
+  cursor: grabbing;
+}
+
+/*
+ * The mount is card, so it gets a fibre.
+ *
+ * It has to sit ABOVE the border: the mount is 95.5% white over the surface, so
+ * a texture painted underneath would come through at 4.5% strength, which is
+ * nothing. So it is a layer of its own, sized to the border box and masked down
+ * to the ring, which leaves the painted interior fully visible through the
+ * middle. The mask is border-box minus padding-box, and both clip boxes follow
+ * the corner radius.
+ *
+ * Not border-image: slicing repeats a sub-region of the noise tile rather than
+ * the tile, so the seams are visible as a grid at any zoom. A plain repeating
+ * background tiles seamlessly because the turbulence is stitched.
+ */
+.lb-frame::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--lb-frame));
+  border: var(--lb-frame) solid transparent;
+  border-radius: var(--lb-radius-outer);
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: border-box, padding-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: border-box, padding-box;
+  mask-composite: exclude;
+}
+
+.lb-frame:hover,
+.lb-frame.is-hovered {
+  border-color: var(--lb-mount-hover);
+}
+
+.lb-frame.is-selected {
+  border-color: var(--lb-mount-selected);
+}
+
+.lb-frame:focus {
+  outline: none;
+}
+
+.lb-frame:focus-visible {
+  outline: 1px solid var(--lb-graphite);
+  outline-offset: 2px;
+}
+
+/* --- the tab -------------------------------------------------------------- */
+
+/*
+ * The tab's containing block is the frame's padding box, which is already
+ * inset by the border, so the frame thickness has to be added back to stand
+ * exactly --lb-tab-proud above the outer edge (4px of the tab overlaps the mount).
+ *
+ * `left` is set per slide by the renderer, always the same top-left corner on
+ * every slide. The 50% here is only the fallback for the first frame.
+ */
+.lb-tab {
+  position: absolute;
+  left: 50%;
+  top: calc(-1 * (var(--lb-tab-proud) + var(--lb-frame)));
+  height: var(--lb-tab-h);
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 4px;
+  overflow: hidden;
+  border-radius: var(--lb-tab-radius);
+  /* Same card as the mount, so the same fibre over the same tone. */
+  background-color: var(--lb-mount);
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  box-shadow: 0 1px 2px var(--lb-tab-shadow);
+  transition: width 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lb-hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  /* A slashed zero is the one typographic tell that says instrument rather than
+     website, and tabular figures stop the tab jittering as digits change. */
+  font-variant-numeric: slashed-zero tabular-nums;
+  text-transform: uppercase;
+  color: var(--lb-ink-700);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.lb-frame.is-selected .lb-hex {
+  color: var(--lb-ink-900);
+  font-weight: 600;
+}
+
+.lb-copy,
+.lb-lock {
+  display: none;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--lb-ink-500);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.lb-frame.is-selected .lb-copy,
+.lb-frame.is-selected .lb-lock {
+  display: grid;
+  place-items: center;
+}
+
+.lb-copy:hover,
+.lb-lock:hover {
+  color: var(--lb-ink-900);
+  background: rgba(26, 30, 44, 0.06);
+}
+
+.lb-copy:focus,
+.lb-lock:focus {
+  outline: none;
+}
+
+.lb-copy:focus-visible,
+.lb-lock:focus-visible {
+  outline: 1px solid var(--lb-graphite);
+  outline-offset: 1px;
+}
+
+.lb-lock[aria-pressed='true'] {
+  color: var(--lb-ink-900);
+}
+
+.lb-copy svg,
+.lb-lock svg {
+  display: block;
+  width: 11px;
+  height: 11px;
+}
+
+/* The confirmation takes the whole tab over: at 56px there is no room beside. */
+.lb-copied {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--lb-tab-radius);
+  background: rgba(18, 19, 24, 0.92);
+  color: rgba(255, 255, 255, 0.96);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms linear;
+}
+
+.lb-copied.is-on {
+  opacity: 1;
+}
+
+/* --- the resize grip ------------------------------------------------------ */
+
+.lb-grip {
+  position: absolute;
+  right: calc(-1 * var(--lb-frame));
+  bottom: calc(-1 * var(--lb-frame));
+  width: 13px;
+  height: 13px;
+  display: none;
+  border-radius: 2px 2px var(--lb-radius-outer) 2px;
+  background: var(--lb-mount);
+  box-shadow: 0 1px 2px var(--lb-tab-shadow);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.lb-frame.is-selected .lb-grip {
+  display: block;
+}
+
+.lb-grip::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background-image: linear-gradient(
+    315deg,
+    transparent 0 32%,
+    var(--lb-ink-300) 32% 44%,
+    transparent 44% 60%,
+    var(--lb-ink-300) 60% 72%,
+    transparent 72% 100%
+  );
+}
+
+/* --- reduced motion ------------------------------------------------------- */
+
+/*
+ * Anything longer than 120ms is movement the user asked not to see. The two
+ * short colour fades stay: they carry state, not motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .lb-tab {
+    transition: none;
+  }
+}
+
+.lb-stage.is-reduced .lb-tab {
+  transition: none;
+}
