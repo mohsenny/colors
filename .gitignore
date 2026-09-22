@@ -18,8 +18,10 @@ dist-ssr
 .env
 .env.*
 
-# Screenshots dropped in the root while reviewing the look.
-Screenshot*.png
+# Screenshots dropped in the root while reviewing the look. Anchored: the repo
+# is on a case-insensitive filesystem, so an unanchored rule also swallowed
+# docs/screenshot.png, which the README needs.
+/Screenshot*.png
 
 # Editor directories and files
 .vscode/*
