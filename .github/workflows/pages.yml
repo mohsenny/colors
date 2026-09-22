@@ -30,23 +30,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      # `npm ci`, with one retry.
+          # No lockfile to key a cache on, see the install step below.
+      # Resolve from the public registry, ignoring the committed lockfile.
       #
-      # npm itself fails intermittently here with "Exit handler never called",
-      # a bug in npm and not in this lockfile: the install finishes and the
-      # process hangs on the way out. It took down the first deploy of this
-      # repo. A clean cache and a second attempt clears it, and a retry is
-      # honest about what it is rather than pinning a different npm and
-      # pretending the problem is ours.
+      # The lockfile was generated behind a corporate JFrog mirror, so every one
+      # of its `resolved` URLs points at a host no runner can reach. `npm ci`
+      # hangs on the first tarball and then dies claiming "Exit handler never
+      # called", which reads like an npm bug and is really a network it cannot
+      # get to. Dropping the lockfile here makes the runner resolve the ranges
+      # in package.json from registry.npmjs.org.
+      #
+      # The cost is real: CI is no longer installing the exact tree that was
+      # tested locally, only a compatible one. The fix is a lockfile with public
+      # URLs in it, and then this goes back to being `npm ci`.
       - name: Install
         run: |
-          npm ci --no-audit --no-fund || {
-            echo "npm ci failed, clearing the cache and retrying once"
-            npm cache clean --force
-            rm -rf node_modules
-            npm ci --no-audit --no-fund
-          }
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
       # Typecheck, lint and unit tests before the build, so a broken simulation
       # cannot reach the live page. `npm run build` runs tsc itself, but failing
       # here names which check failed instead of just "build failed".
