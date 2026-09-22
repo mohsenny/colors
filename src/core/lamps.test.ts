@@ -82,3 +82,66 @@ describe('the tubes', () => {
     expect(agreed / 900).toBeLessThan(0.15)
   })
 })
+
+describe('the warmth control', () => {
+  const meanBalance = (warmth: number): number => {
+    let sum = 0
+    let n = 0
+    for (let t = 0; t < 900; t += 1) {
+      for (const l of lampsAt(t, warmth)) {
+        sum += balance(l)
+        n++
+      }
+    }
+    return sum / n
+  }
+
+  it('moves where the tubes sit without pinning them there', () => {
+    const warm = meanBalance(-1)
+    const neutral = meanBalance(0)
+    const cool = meanBalance(1)
+    // Warm is more red than blue, cool the other way round, so balance falls
+    // as the control goes cool. Fifteen code values apart is visible on a
+    // full-viewport wash; much less and the control would not be worth having.
+    expect(warm).toBeGreaterThan(neutral + 7)
+    expect(neutral).toBeGreaterThan(cool + 7)
+  })
+
+  it('keeps every lamp drifting at either end of the control', () => {
+    for (const warmth of [-1, -0.5, 0, 0.5, 1]) {
+      for (let i = 0; i < TUBE_COUNT; i++) {
+        let lo = Infinity
+        let hi = -Infinity
+        for (let t = 0; t < 900; t += 1) {
+          const l = lampsAt(t, warmth)[i]
+          if (!l) continue
+          lo = Math.min(lo, balance(l))
+          hi = Math.max(hi, balance(l))
+        }
+        // The swing narrows as the bias grows, which is the point: it shifts
+        // the centre and gives up range rather than clipping flat against the
+        // end. A tube that stops moving is a tube that has stopped being a
+        // fluorescent lamp and become a background colour.
+        expect(hi - lo).toBeGreaterThan(12)
+      }
+    }
+  })
+
+  it('stays inside the warm-to-cool band whatever it is asked for', () => {
+    for (const warmth of [-4, -1, 0, 1, 4]) {
+      for (let t = 0; t < 400; t += 3) {
+        for (const l of lampsAt(t, warmth)) {
+          expect(Math.max(l.r, l.g, l.b)).toBe(255)
+          expect(balance(l)).toBeGreaterThanOrEqual(Math.min(WARM_BALANCE, COOL_BALANCE) - 2)
+          expect(balance(l)).toBeLessThanOrEqual(Math.max(WARM_BALANCE, COOL_BALANCE) + 2)
+        }
+      }
+    }
+  })
+
+  it('is the same lamps as before when nobody has touched it', () => {
+    for (let t = 0; t < 300; t += 7) {
+      expect(lampsAt(t, 0)).toEqual(lampsAt(t))
+    }
+  })
+})

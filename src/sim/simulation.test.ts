@@ -7,11 +7,14 @@ import {
   OMEGA_MAX_DEG,
   ROT_RESTORE_DEG,
   SLIDE_COUNT,
+  SLIDE_COUNT_MAX,
+  SLIDE_COUNT_MIN,
   SPEED_MAX,
   SPEED_MIN,
   TAB_PROUD,
 } from '../core/constants'
 import { DEG, wrapPi } from '../core/noise'
+import { sideBand } from '../core/size'
 import type { Dye, SimState, SlideState, Viewport } from '../core/types'
 import { History } from './history'
 import { Simulation } from './simulation'
@@ -525,6 +528,77 @@ describe('mutation', () => {
     expect(s.sizeFrac).toBeGreaterThanOrEqual(0.12)
   })
 
+  it('lays out every legal slide count without losing a slide off the stage', () => {
+    // The placement radii are indexed by slide, so a count past the end of that
+    // table used to put the last slides at NaN, which drops them through every
+    // bounds check silently. This is the test that says the count control
+    // cannot ask for a number the layout does not have a place for.
+    for (let count = SLIDE_COUNT_MIN; count <= SLIDE_COUNT_MAX; count++) {
+      const sim = new Simulation(9321 + count, { ...VP, slideCount: count })
+      expect(sim.state.slides).toHaveLength(count)
+      for (const s of sim.state.slides) {
+        expect(Number.isFinite(s.x)).toBe(true)
+        expect(Number.isFinite(s.y)).toBe(true)
+        expect(s.w).toBeGreaterThan(0)
+        expect(s.h).toBeGreaterThan(0)
+        expect(s.x - s.w / 2).toBeGreaterThanOrEqual(-1e-9)
+        expect(s.y - s.h / 2).toBeGreaterThanOrEqual(-1e-9)
+        expect(s.x + s.w / 2).toBeLessThanOrEqual(sim.state.aspect + 1e-9)
+        expect(s.y + s.h / 2).toBeLessThanOrEqual(1 + 1e-9)
+      }
+    }
+  })
+
+  it('cuts every sheet to the same size whatever the count', () => {
+    // The size used to fall as the count rose, which is a reasonable thing to
+    // want and impossible to keep now that the count can change while the
+    // instrument is running: a sheet arriving must not resize the eleven
+    // already on the glass. Crowding is what adding a sheet means.
+    const area = (count: number): number => {
+      const sim = new Simulation(4242, { ...VP, slideCount: count })
+      const s = sim.state.slides[0] as SlideState
+      return s.w * s.h
+    }
+    expect(area(SLIDE_COUNT_MIN)).toBeCloseTo(area(SLIDE_COUNT), 12)
+    expect(area(SLIDE_COUNT)).toBeCloseTo(area(SLIDE_COUNT_MAX), 12)
+  })
+
+  it('resizes one axis at a time', () => {
+    const sim = new Simulation(2468, VP)
+    const s = sim.state.slides[0] as SlideState
+    const h0 = s.h
+    sim.setSize(s.id, 400 / VP.height, h0)
+    expect(s.w * VP.height).toBeCloseTo(400, 6)
+    expect(s.h).toBeCloseTo(h0, 10)
+  })
+
+  it('holds both sides above the floor however hard the grip is pulled', () => {
+    const sim = new Simulation(2468, VP)
+    const s = sim.state.slides[0] as SlideState
+    const band = sideBand(VP.short)
+    sim.setSize(s.id, 1 / VP.height, 1 / VP.height)
+    expect(s.w * VP.height).toBeCloseTo(band.min, 6)
+    expect(s.h * VP.height).toBeCloseTo(band.min, 6)
+    sim.setSize(s.id, 9999 / VP.height, 9999 / VP.height)
+    expect(s.w * VP.height).toBeCloseTo(band.max, 6)
+    expect(s.h * VP.height).toBeCloseTo(band.max, 6)
+  })
+
+  it('keeps a letterbox through a viewport change instead of squaring it up', () => {
+    // setSize writes sizeFrac and aspect, and a relayout rebuilds w and h from
+    // that pair. If the pair did not round-trip, every window resize would
+    // quietly undo a shape the user chose by hand.
+    const sim = new Simulation(2468, VP)
+    const s = sim.state.slides[0] as SlideState
+    const band = sideBand(VP.short)
+    sim.setSize(s.id, band.max / VP.height, band.min / VP.height)
+    const ratio = s.w / s.h
+    expect(ratio).toBeGreaterThan(1.5)
+    sim.setViewport(VP)
+    const after = sim.state.slides.find((v) => v.id === s.id) as SlideState
+    expect(after.w / after.h).toBeCloseTo(ratio, 6)
+  })
+
   it('keeps colours moving and motion untouched when the palette is regenerated', () => {
     const sim = new Simulation(1379, VP)
     run(sim, 5)
@@ -594,5 +668,164 @@ describe('mutation', () => {
     s.dye.h = 0
     expect(s.dyeTo.h).toBe(h)
     expect(pinned.h).toBe(212)
+  })
+})
+
+describe('adding and removing sheets', () => {
+  /** Everything about a slide that the eye would notice moving. */
+  const pose = (s: SlideState) => ({
+    x: s.x,
+    y: s.y,
+    heading: s.heading,
+    speed0: s.speed0,
+    rot: s.rot,
+    omegaRot: s.omegaRot,
+    w: s.w,
+    h: s.h,
+    z: s.z,
+    zTarget: s.zTarget,
+    dye: { ...s.dye },
+    rngState: s.rngState,
+  })
+
+  it('leaves every sheet already on the stage exactly where it was', () => {
+    // The whole reason this path exists. Re-seeding for the new count is the
+    // easy implementation and it throws away the composition the user reached
+    // for the stepper because they liked.
+    const sim = new Simulation(31337, VP)
+    run(sim, 6)
+    const before = new Map(sim.state.slides.map((s) => [s.id, pose(s)]))
+
+    const { added, removed } = sim.setSlideCount(SLIDE_COUNT + 1)
+    expect(added).toHaveLength(1)
+    expect(removed).toHaveLength(0)
+    expect(sim.state.slides).toHaveLength(SLIDE_COUNT + 1)
+
+    for (const s of sim.state.slides) {
+      const was = before.get(s.id)
+      if (!was) continue
+      expect(pose(s)).toEqual(was)
+    }
+  })
+
+  it('leaves the survivors untouched when one goes from the middle', () => {
+    const sim = new Simulation(4711, VP)
+    run(sim, 4)
+    // Pin everything but one middle sheet, so that is the one that has to go.
+    sim.state.slides.forEach((s, i) => {
+      s.locked = i !== 2
+    })
+    const before = new Map(sim.state.slides.map((s) => [s.id, pose(s)]))
+
+    const { removed } = sim.setSlideCount(SLIDE_COUNT - 1)
+    expect(removed).toEqual([2])
+    expect(sim.state.slides.some((s) => s.id === 2)).toBe(false)
+    for (const s of sim.state.slides) expect(pose(s)).toEqual(before.get(s.id))
+  })
+
+  it('steers a sheet by its identity, not by its place in the list', () => {
+    // This is what lets a sheet leave from the middle. Homes and noise tables
+    // used to be keyed by array position, so removing one handed every sheet
+    // after it a stranger's steering and the whole set visibly flinched.
+    // Permuting the list is the sharp version of the same question.
+    const a = new Simulation(6006, VP)
+    const b = new Simulation(6006, VP)
+    run(a, 3)
+    run(b, 3)
+    b.state.slides.reverse()
+
+    // One tick, where nothing has had time to amplify: if a sheet's home or
+    // noise came from its position, this alone is a different number.
+    a.step(false)
+    b.step(false)
+    for (const s of a.state.slides) {
+      const other = b.state.slides.find((v) => v.id === s.id) as SlideState
+      expect(other.x).toBeCloseTo(s.x, 12)
+      expect(other.y).toBeCloseTo(s.y, 12)
+      expect(other.heading).toBeCloseTo(s.heading, 12)
+    }
+
+    // And four seconds on. Not exact: the crowd term is a sum over neighbours
+    // and float addition is not associative, so reordering moves the last bits
+    // and the dynamics spread them. A hundredth of a pixel is not a flinch.
+    run(a, 4)
+    run(b, 4)
+    for (const s of a.state.slides) {
+      const other = b.state.slides.find((v) => v.id === s.id) as SlideState
+      expect(Math.hypot(other.x - s.x, other.y - s.y)).toBeLessThan(1e-3)
+    }
+  })
+
+  it('takes an unpinned sheet before a pinned one', () => {
+    const sim = new Simulation(8642, VP)
+    for (const s of sim.state.slides) s.locked = true
+    const keep = sim.state.slides[SLIDE_COUNT - 1] as SlideState
+    keep.locked = false
+    const { removed } = sim.setSlideCount(SLIDE_COUNT - 1)
+    expect(removed).toEqual([keep.id])
+  })
+
+  it('never hands a new sheet an id that belonged to an old one', () => {
+    // A tray pin holds a slide id. Reusing ids would let a pin removed with
+    // one sheet silently reattach itself to the next sheet that arrives.
+    const sim = new Simulation(1122, VP)
+    const first = new Set(sim.state.slides.map((s) => s.id))
+    sim.setSlideCount(SLIDE_COUNT - 1)
+    const { added } = sim.setSlideCount(SLIDE_COUNT)
+    expect(added).toHaveLength(1)
+    expect(first.has(added[0] as number)).toBe(false)
+  })
+
+  it('puts a new sheet on the stage, in one piece', () => {
+    for (let count = SLIDE_COUNT_MIN; count <= SLIDE_COUNT_MAX; count++) {
+      const sim = new Simulation(555 + count, { ...VP, slideCount: SLIDE_COUNT_MIN })
+      run(sim, 2)
+      sim.setSlideCount(count)
+      expect(sim.state.slides).toHaveLength(count)
+      run(sim, 2)
+      for (const s of sim.state.slides) {
+        const b = unionBox(s, VP)
+        expect(b.left).toBeGreaterThanOrEqual(-1e-9)
+        expect(b.right).toBeLessThanOrEqual(sim.state.aspect + 1e-9)
+        expect(b.top).toBeGreaterThanOrEqual(-1e-9)
+        expect(b.bottom).toBeLessThanOrEqual(1 + 1e-9)
+      }
+    }
+  })
+
+  it('fades a new sheet up from clear rather than switching it on', () => {
+    const sim = new Simulation(9753, VP)
+    const [id] = sim.setSlideCount(SLIDE_COUNT + 1).added
+    const target: Dye = { L: 0.62, C: 0.2, h: 140, d: 0.88 }
+    sim.introduce(id as number, target)
+    const s = sim.state.slides.find((v) => v.id === id) as SlideState
+    // Clear film: it is on the glass but it is not yet colouring anything.
+    expect(s.dye.d).toBeLessThan(0.1)
+    expect(s.tweenT).toBe(0)
+    sim.tickColour(1.2)
+    expect(s.tweenT).toBe(1)
+    expect(s.dyeBase.d).toBeCloseTo(target.d, 6)
+    expect(hueGap(s.dye.h, target.h)).toBeLessThanOrEqual(DRIFT_HUE_DEG + 1e-9)
+  })
+
+  it('records and scrubs the new sheet like any other', () => {
+    const sim = new Simulation(2024, VP)
+    sim.setSlideCount(SLIDE_COUNT + 1)
+    const history = new History(SLIDE_COUNT + 1)
+    for (let i = 0; i < 120; i++) {
+      sim.step(false)
+      history.capture(sim.state, i)
+    }
+    const mark = sim.state.slides.map((s) => ({ x: s.x, y: s.y }))
+    for (let i = 120; i < 240; i++) {
+      sim.step(false)
+      history.capture(sim.state, i)
+    }
+    history.restore(sim.state, 119)
+    sim.state.slides.forEach((s, i) => {
+      const m = mark[i] as { x: number; y: number }
+      expect(s.x).toBeCloseTo(m.x, 12)
+      expect(s.y).toBeCloseTo(m.y, 12)
+    })
   })
 })

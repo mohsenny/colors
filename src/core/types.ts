@@ -161,6 +161,8 @@ export interface RenderOptions {
   hoveredId: number | null
   /** Movement is substantially reduced; also disables the surface shimmer. */
   reducedMotion: boolean
+  /** Lamp colour bias, -1 warm to +1 cool. */
+  warmth: number
 }
 
 /** Callbacks the stage raises. All are user intent, never animation. */
@@ -168,8 +170,12 @@ export interface StageHandlers {
   onSelect(id: number | null): void
   onCopy(id: number): void
   onToggleLock(id: number): void
-  /** Live during a drag; `sizeFrac` is already clamped to legal bounds. */
-  onResize(id: number, sizeFrac: number): void
+  /**
+   * Live during a drag. Width and height in height units, each already clamped
+   * into the legal side band, and independent of each other: dragging the grip
+   * straight down changes only the height.
+   */
+  onResize(id: number, w: number, h: number): void
   /** Raised once when a resize drag ends, so history can branch. */
   onResizeEnd(): void
   /** Live during a drag; the centre in u, clamped by the simulation. */

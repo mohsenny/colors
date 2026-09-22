@@ -208,6 +208,26 @@
 }
 
 /*
+ * A sheet added while the instrument is running. Opacity only, never transform:
+ * the renderer owns the transform and writes it every frame, so anything else
+ * touching it would fight the simulation. The dye fades up over a longer beat
+ * on its own, so the mount is visible slightly before its colour, which is the
+ * order a real slide arrives in.
+ */
+.lb-frame.is-entering {
+  animation: lb-frame-in 420ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+}
+
+@keyframes lb-frame-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/*
  * The mount is card, so it gets a fibre.
  *
  * It has to sit ABOVE the border: the mount is 95.5% white over the surface, so
@@ -279,12 +299,17 @@
   gap: 3px;
   padding: 0 4px;
   overflow: hidden;
-  border-radius: var(--lb-tab-radius);
+  /*
+   * Top corners only, and no shadow. The tab is cut from the same card as the
+   * mount, not stuck onto it: a rounded bottom edge and a cast shadow both draw
+   * a seam 4px down inside the white, which reads as a separate sticker. One
+   * piece of card does not cast a shadow onto itself.
+   */
+  border-radius: var(--lb-tab-radius) var(--lb-tab-radius) 0 0;
   /* Same card as the mount, so the same fibre over the same tone. */
   background-color: var(--lb-mount);
   background-image: var(--lb-fibre);
   background-size: 64px 64px;
-  box-shadow: 0 1px 2px var(--lb-tab-shadow);
   transition: width 140ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -364,7 +389,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  border-radius: var(--lb-tab-radius);
+  border-radius: var(--lb-tab-radius) var(--lb-tab-radius) 0 0;
   background: rgba(18, 19, 24, 0.92);
   color: rgba(255, 255, 255, 0.96);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

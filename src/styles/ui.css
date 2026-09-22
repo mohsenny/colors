@@ -30,6 +30,56 @@
   pointer-events: none;
 }
 
+/* ------------------------------------------------------------------ legend */
+
+/*
+ * Bottom left, at the same inset as the wordmark top left, so the four corners
+ * of the chrome sit on one margin.
+ *
+ * No panel behind it, unlike the dock and the tray. Those are controls and have
+ * to be hittable, so they need a surface. This is a caption: giving it a card
+ * would make it look like another thing to operate, and it would be the most
+ * prominent object on a mostly empty surface. Type on the lit surface, and
+ * nothing else. It stays for the whole sitting, so the weight matters more
+ * than it would for something that leaves.
+ */
+.lb-legend {
+  position: fixed;
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.lb-legend-row {
+  display: flex;
+  align-items: baseline;
+  /* The gesture column is fixed so the three effects line up. Sized to
+     "Double-click", which is the longest and is not going to get longer. */
+  gap: 10px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.lb-legend-gesture {
+  flex: 0 0 auto;
+  width: 98px;
+  /* Never wrap. A two-line gesture breaks the row rhythm and, worse, reads as
+     a sentence rather than a key name. */
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+.lb-legend-effect {
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
 /* -------------------------------------------------------------------- dock */
 
 .lb-dock {
@@ -135,6 +185,137 @@
   height: 14px;
 }
 
+/* The plus turns into the cross that closes it. */
+.lb-plus {
+  transition: transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-plus.is-open {
+  transform: rotate(45deg);
+}
+
+.lb-btn-more.is-on {
+  color: var(--lb-ink-strong, #101014);
+  background: rgba(30, 34, 48, 0.075);
+}
+
+/* ----------------------------------------------------------- options panel */
+
+/*
+ * The drawer opens above the dock and centred on it, so the pair reads as one
+ * object growing upward rather than as a second panel arriving from the side.
+ * A child of the dock, so it travels with it.
+ */
+.lb-options {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: 12px;
+  background-color: var(--lb-panel, rgba(255, 255, 255, 0.82));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+  box-shadow:
+    var(
+      --lb-shadow-float,
+      3.4px 9.6px 27.1px rgba(46, 52, 72, 0.092),
+      0.8px 2.4px 5.1px rgba(46, 52, 72, 0.052)
+    ),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  /* Closed: settled back into the dock and slightly shrunk, so it unfolds out
+     of the plus rather than appearing above it. Visibility, not display, so the
+     transition has something to run on and the controls keep their identity. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 6px) scale(0.97);
+  transform-origin: bottom center;
+  transition:
+    opacity var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    visibility 0s linear var(--lb-t-grow, 180ms);
+}
+
+.lb-options.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0) scale(1);
+  transition-delay: 0s;
+}
+
+.lb-opt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* The label column is fixed so the two controls line up on their left edge
+     and the panel does not resize when the drawer's content changes. */
+  justify-content: space-between;
+}
+
+.lb-opt-label {
+  flex: 0 0 auto;
+  min-width: 44px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+/* --------------------------------------------------------------- stepper */
+
+.lb-stepper {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(30, 34, 48, 0.05);
+}
+
+.lb-step-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-step-btn:hover:not(:disabled) {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/*
+ * At the end of the range the button stays in place and goes quiet. Removing it
+ * would move the other one, and a control that moves when you reach the end of
+ * its travel is a control you then have to re-aim at.
+ */
+.lb-step-btn:disabled {
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  opacity: 0.4;
+  cursor: default;
+}
+
+.lb-step-value {
+  min-width: 22px;
+  /* Tabular, so stepping 9 to 10 does not shove the buttons sideways. */
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--lb-ink-strong, #101014);
+}
+
 /* ------------------------------------------------------- segmented control */
 
 .lb-seg {
@@ -163,6 +344,38 @@
 
 .lb-seg[data-mode='light'] .lb-seg-indicator {
   transform: translateX(100%);
+}
+
+/*
+ * Three-up. The indicator is a third of the track rather than a half, and it
+ * steps by whole indicator widths, which only lines up because the three labels
+ * are padded to equal width below.
+ */
+/*
+ * Fixed width, three equal cells. Left to shrink-wrap, the cells would divide
+ * the sum of three unequal words evenly and "Neutral" would come out narrower
+ * than the word it has to hold.
+ */
+.lb-seg-3 {
+  width: 192px;
+}
+
+.lb-seg-3 .lb-seg-btn {
+  flex: 1 1 0;
+  padding-inline: 0;
+  text-align: center;
+}
+
+.lb-seg-3 .lb-seg-indicator {
+  width: calc((100% - 4px) / 3);
+}
+
+.lb-seg-3[data-index='1'] .lb-seg-indicator {
+  transform: translateX(100%);
+}
+
+.lb-seg-3[data-index='2'] .lb-seg-indicator {
+  transform: translateX(200%);
 }
 
 .lb-seg-btn {
@@ -506,6 +719,12 @@
 
 @media (max-width: 619px) {
   .lb-wordmark {
+    display: none;
+  }
+
+  /* No room for it beside the dock, and every gesture in it is a mouse
+     gesture. A touch user gets none of the three. */
+  .lb-legend {
     display: none;
   }
 

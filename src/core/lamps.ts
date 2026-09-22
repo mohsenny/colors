@@ -17,7 +17,15 @@
  * the timeline restores `t` and the lamps come back with it.
  */
 
-import { TUBE_COOL, TUBE_COUNT, TUBE_FAST_S, TUBE_GAIN, TUBE_SLOW_S, TUBE_WARM } from './constants'
+import {
+  TUBE_COOL,
+  TUBE_COUNT,
+  TUBE_FAST_S,
+  TUBE_GAIN,
+  TUBE_SLOW_S,
+  TUBE_WARM,
+  TUBE_WARMTH_BIAS,
+} from './constants'
 import { hash01 } from './rng'
 
 export interface Lamp {
@@ -35,8 +43,17 @@ const TAU = Math.PI * 2
  * All four tubes at time `t`. Allocates a small array per call: the renderer
  * calls this at most a few times a second, because nothing here moves fast
  * enough to be worth a style write on every frame.
+ *
+ * `warmth` runs -1 (warm) to +1 (cool) and shifts the centre of the drift
+ * without stopping it. The swing is squeezed by however much the shift used up,
+ * so a tube pushed all the way warm still moves, just over a shorter arc, and
+ * never clips flat against the end of the range.
  */
-export function lampsAt(t: number): Lamp[] {
+export function lampsAt(t: number, warmth = 0): Lamp[] {
+  const bias = clampUnit(warmth) * TUBE_WARMTH_BIAS
+  const centre = 0.5 + 0.5 * bias
+  const swing = 0.5 * (1 - Math.abs(bias))
+
   const out: Lamp[] = []
   for (let i = 0; i < TUBE_COUNT; i++) {
     // Rates differ per tube, so the phase relationship between any two of them
@@ -47,7 +64,7 @@ export function lampsAt(t: number): Lamp[] {
     const p2 = hash01(i, 0x5f33, 0)
 
     const wave = 0.68 * Math.sin(TAU * (t / slow + p1)) + 0.32 * Math.sin(TAU * (t / fast + p2))
-    const temp = 0.5 + 0.5 * clampUnit(wave)
+    const temp = centre + swing * clampUnit(wave)
 
     // Renormalised to full brightness: see TUBE_WARM. The interpolation decides
     // the tube's colour, never how bright it is, which is what `gain` is for.

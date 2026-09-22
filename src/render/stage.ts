@@ -3,10 +3,6 @@ import {
   CORNER_OUTER,
   H_MM_BASE,
   H_MM_RANGE,
-  SIZE_FRAC_MAX,
-  SIZE_FRAC_MIN,
-  SIZE_PX_MAX,
-  SIZE_PX_MIN,
   TAB_H,
   TAB_INSET,
   TAB_PROUD,
@@ -16,6 +12,7 @@ import {
 import { lampsAt } from '../core/lamps'
 import type { Lamp } from '../core/lamps'
 import { filmHex } from '../core/oklab'
+import { clampSide, sideBand } from '../core/size'
 import type { RenderOptions, SimState, SlideState, StageHandlers, Viewport } from '../core/types'
 import { Painter } from './paint'
 
@@ -75,7 +72,7 @@ const COPIED_MS = 1100
  */
 const MOVE_DEADZONE = 3.5
 
-/** Keyboard resize increments, in sizeFrac per press. */
+/** Keyboard resize increments, as a fraction of the viewport short edge. */
 const KEY_RESIZE_STEP = 0.005
 const KEY_RESIZE_STEP_COARSE = 0.02
 
@@ -133,10 +130,13 @@ interface DragState {
   pointerId: number
   target: Element
   kind: 'resize' | 'move'
-  /** Resize only: where on the grip the pointer landed, over the half-diagonal. */
+  /** Unused by resize since the grip went two-axis; kept for the move path. */
   grabRatio: number
-  /** Move only: pointer-to-centre offset in u, taken once at the grab. The
-   *  slide is held still for the whole drag, so this stays true. */
+  /**
+   * Move: pointer-to-centre offset in u, taken once at the grab. Resize:
+   * pointer-to-corner offset in px, in the slide's own axes. Either way it is
+   * read once and the slide is held still, so it stays true for the drag.
+   */
   grabDX: number
   grabDY: number
   /** Where the pointer went down, in client px, for the dead zone below. */
@@ -200,6 +200,10 @@ export class Stage {
   // --- DOM lifecycle --------------------------------------------------------
 
   sync(slides: SlideState[]): void {
+    // Nothing on the stage yet means this is the first layout, and the whole
+    // set appearing at once is the page loading rather than a sheet arriving.
+    // A sheet added to a stage that already has sheets on it gets the fade.
+    const populated = this.recs.size > 0
     const seen = new Set<number>()
     for (let i = 0; i < slides.length; i += 1) {
       const slide = slides[i]
@@ -211,7 +215,7 @@ export class Stage {
         existing.ordinal = i + 1
         continue
       }
-      this.recs.set(slide.id, this.create(slide, i + 1))
+      this.recs.set(slide.id, this.create(slide, i + 1, populated))
     }
     for (const [id, rec] of this.recs) {
       if (seen.has(id)) continue
@@ -220,8 +224,8 @@ export class Stage {
     }
   }
 
-  private create(slide: SlideState, ordinal: number): SlideRec {
-    const frame = div('lb-frame')
+  private create(slide: SlideState, ordinal: number, entering = false): SlideRec {
+    const frame = div(entering ? 'lb-frame is-entering' : 'lb-frame')
     const tab = div('lb-tab')
     const grip = div('lb-grip')
 
@@ -321,8 +325,8 @@ export class Stage {
    * colour only changes a couple of times a second, and a style write on a
    * full-viewport element is not something to do 60 times a second for nothing.
    */
-  private writeLamps(t: number): void {
-    const lamps = lampsAt(t)
+  private writeLamps(t: number, warmth: number): void {
+    const lamps = lampsAt(t, warmth)
     for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i] as Lamp
       const key = `${l.r} ${l.g} ${l.b}|${l.gain.toFixed(3)}`
@@ -345,7 +349,7 @@ export class Stage {
       this.root.classList.toggle('is-reduced', opts.reducedMotion)
     }
 
-    this.writeLamps(state.t)
+    this.writeLamps(state.t, opts.warmth)
     this.painter.draw(state, opts)
 
     const slides = state.slides
@@ -520,16 +524,19 @@ export class Stage {
       const rect = this.root.getBoundingClientRect()
       this.originX = rect.left
       this.originY = rect.top
-      const grabRatio = this.diagonalRatio(rec.state, e.clientX, e.clientY, vp)
-      if (!(grabRatio > 0.05)) return
+      // Where the corner is relative to where the pointer landed on the grip.
+      // Held for the whole drag so the corner does not jump to the cursor on
+      // the first move.
+      const { lx, ly } = this.localOffset(rec.state, e.clientX, e.clientY, vp)
+      const vh = vp.height
       this.drag = {
         id: rec.state.id,
         pointerId: e.pointerId,
         target: grip,
         kind: 'resize',
-        grabRatio,
-        grabDX: 0,
-        grabDY: 0,
+        grabRatio: 0,
+        grabDX: (rec.state.w * vh) / 2 - lx,
+        grabDY: (rec.state.h * vh) / 2 - ly,
         startX: e.clientX,
         startY: e.clientY,
         armed: true,
@@ -611,10 +618,14 @@ export class Stage {
       }
       // The slide keeps drifting under the pointer, so the centre, the rotation
       // and the current size are all re-read from the live state each move.
-      const ratio = this.diagonalRatio(rec.state, e.clientX, e.clientY, vp)
-      if (!(ratio > 0)) return
-      const next = clampSizeFrac((rec.state.sizeFrac * ratio) / drag.grabRatio, vp)
-      this.handlers.onResize(drag.id, next)
+      const { lx, ly } = this.localOffset(rec.state, e.clientX, e.clientY, vp)
+      const band = sideBand(vp.short)
+      const vh = vp.height
+      this.handlers.onResize(
+        drag.id,
+        clampSide(2 * (lx + drag.grabDX), band) / vh,
+        clampSide(2 * (ly + drag.grabDY), band) / vh,
+      )
       return
     }
 
@@ -735,11 +746,19 @@ export class Stage {
         const vp = this.viewport
         if (!vp) return
         e.preventDefault()
-        const step = e.shiftKey ? KEY_RESIZE_STEP_COARSE : KEY_RESIZE_STEP
+        // One axis per key, matching the grip: left and right are the width,
+        // up and down are the height. The old pair-of-signs mapping scaled both
+        // axes at once, which there is no longer any way to ask for and no
+        // reason to want.
+        const step = (e.shiftKey ? KEY_RESIZE_STEP_COARSE : KEY_RESIZE_STEP) * vp.short
+        const band = sideBand(vp.short)
+        const vh = vp.height
+        const horizontal = e.key === 'ArrowLeft' || e.key === 'ArrowRight'
         const sign = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : -1
-        const next = clampSizeFrac(rec.state.sizeFrac + sign * step, vp)
-        if (next === rec.state.sizeFrac) return
-        this.handlers.onResize(id, next)
+        const w = horizontal ? clampSide(rec.state.w * vh + sign * step, band) : rec.state.w * vh
+        const h = horizontal ? rec.state.h * vh : clampSide(rec.state.h * vh + sign * step, band)
+        if (w === rec.state.w * vh && h === rec.state.h * vh) return
+        this.handlers.onResize(id, w / vh, h / vh)
         this.handlers.onResizeEnd()
         return
       }
@@ -750,22 +769,25 @@ export class Stage {
 
   /**
    * The pointer's offset from the slide centre, un-rotated into the slide's own
-   * axes and projected onto its half-diagonal. 1 means the pointer sits exactly
-   * on the corner, so this is directly a multiplier for `sizeFrac`.
+   * axes, in CSS px. The grip is the bottom-right corner in that frame, so
+   * these are directly the half-extents the corner is being dragged to.
+   *
+   * Two numbers rather than one projection onto the half-diagonal: the axes are
+   * independent now, so dragging straight right changes only the width and
+   * straight down only the height.
    */
-  private diagonalRatio(slide: SlideState, clientX: number, clientY: number, vp: Viewport): number {
+  private localOffset(
+    slide: SlideState,
+    clientX: number,
+    clientY: number,
+    vp: Viewport,
+  ): { lx: number; ly: number } {
     const vh = vp.height
     const dx = clientX - this.originX - slide.x * vh
     const dy = clientY - this.originY - slide.y * vh
     const cos = Math.cos(slide.rot)
     const sin = Math.sin(slide.rot)
-    const lx = dx * cos + dy * sin
-    const ly = -dx * sin + dy * cos
-    const hw = (slide.w * vh) / 2
-    const hh = (slide.h * vh) / 2
-    const half2 = hw * hw + hh * hh
-    if (half2 <= 0) return 0
-    return (lx * hw + ly * hh) / half2
+    return { lx: dx * cos + dy * sin, ly: -dx * sin + dy * cos }
   }
 }
 
@@ -799,10 +821,3 @@ function shadowStack(z: number, selected: boolean): string {
     : `${OUTER_LIP}, ${soft}, ${contact}`
 }
 
-/** Both the fractional range and the absolute pixel range have to hold. */
-function clampSizeFrac(frac: number, vp: Viewport): number {
-  const short = Math.max(1, vp.short)
-  const lo = Math.max(SIZE_FRAC_MIN, SIZE_PX_MIN / short)
-  const hi = Math.max(lo, Math.min(SIZE_FRAC_MAX, SIZE_PX_MAX / short))
-  return clamp(frac, lo, hi)
-}

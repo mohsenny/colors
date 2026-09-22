@@ -21,13 +21,29 @@ export const GLOBAL_LANES = 8
 export const SLIDE_COUNT = 8
 export const SLIDE_COUNT_SMALL = 4
 export const SMALL_VIEWPORT = 620
+/**
+ * What the count control may ask for.
+ *
+ * Three is the floor because two sheets can only ever make one crossing, and
+ * the crossing is the point of the thing. Twelve is the ceiling because past
+ * that the sheets shrink to fit and the hex tab, which is a fixed 56px, starts
+ * to be wider than the slide carrying it.
+ */
+export const SLIDE_COUNT_MIN = 3
+export const SLIDE_COUNT_MAX = 12
 
 // --- slide anatomy, all in CSS px and never scaled by depth -----------------
 export const FRAME_PX = 7
 export const FRAME_PX_SMALL = 5
 export const CORNER_OUTER = 3
 export const CORNER_INNER = 1.5
-export const TAB_W = 56
+/**
+ * Wide enough for "#RRGGBB" plus the tab's own padding, with a pixel to spare.
+ * At 56 the content measured 57 and the tab clips its overflow from both ends,
+ * which ate the leading hash on some hexes and turned the one piece of data on
+ * the slide into a typo.
+ */
+export const TAB_W = 60
 export const TAB_H = 18
 /** How far the tab stands proud of the top frame edge. */
 export const TAB_PROUD = 14
@@ -46,9 +62,19 @@ export const TAB_INSET = 0
 /** Legal size range as a fraction of `min(vw, vh)`, enforced during resize. */
 export const SIZE_FRAC_MIN = 0.12
 export const SIZE_FRAC_MAX = 0.62
-/** Absolute pixel clamps so a slide is never unreadable or wall-to-wall. */
-export const SIZE_PX_MIN = 120
+/**
+ * Absolute pixel clamps, applied to EACH SIDE rather than to the area, so a
+ * freely resized slide can be a letterbox but never a sliver. The floor is what
+ * stops a drag producing something too small to read a hex off or to hit again.
+ */
+export const SIZE_PX_MIN = 160
 export const SIZE_PX_MAX = 560
+/**
+ * ...but the floor is also never more than this much of the short side. On a
+ * phone a flat 160px would be nearly half the stage, so the absolute floor is
+ * a desktop rule that yields to the relative one when the viewport is small.
+ */
+export const SIZE_PX_MIN_CAP_FRAC = 0.3
 
 /**
  * One size for every slide, as a fraction of `min(vw, vh)`, and one aspect.
@@ -65,6 +91,17 @@ export const SIZE_PX_MAX = 560
  * was very close to the old six-rung ladder.
  */
 export const SIZE_FRAC_ONE = 0.27
+/**
+ * The same thing on a phone, where the short edge is the width and the stage is
+ * tall and narrow. 0.27 of a 390px screen is 105px, under the readable floor,
+ * so the band would clamp it up to 117 and every sheet would sit at the
+ * minimum: legible, but huddled in a third of a tall screen because the
+ * placement radii scale with sheet size.
+ *
+ * A fraction of the screen and never of the live count, so adding a sheet still
+ * moves nothing. Crowding is what adding a sheet means.
+ */
+export const SIZE_FRAC_ONE_SMALL = 0.4
 /**
  * Width over height. Square, and `dimensions` keeps AREA fixed rather than
  * width, so changing this changes the shape of a slide and not how much of the
@@ -268,6 +305,14 @@ export const TUBE_WARM = [255, 246, 226] as const
 export const TUBE_COOL = [231, 243, 255] as const
 /** Brightness wobble, a fraction of full. Under 8% or it reads as a flicker. */
 export const TUBE_GAIN = 0.075
+/**
+ * How far the warmth control can push the centre of the drift, on the same
+ * 0-to-1 axis `lampsAt` interpolates along. Not a bulb colour picker: the tubes
+ * keep drifting either way, and all this does is decide which end they spend
+ * more of their time near. A picker would freeze them, and the one thing worth
+ * keeping about this lightbox is that it is never quite the same twice.
+ */
+export const TUBE_WARMTH_BIAS = 0.34
 
 // --- reduced motion -----------------------------------------------------------
 /** Global speed multiplier when the user asked for less movement. */

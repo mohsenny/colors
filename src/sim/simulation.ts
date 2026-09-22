@@ -31,10 +31,10 @@ import {
   SIZE_FRAC_MAX,
   SIZE_FRAC_MIN,
   SIZE_FRAC_ONE,
-  SIZE_PX_MAX,
-  SIZE_PX_MIN,
+  SIZE_FRAC_ONE_SMALL,
   SLIDE_ASPECT,
   SLIDE_ASPECT_SPREAD,
+  SMALL_VIEWPORT,
   SOFT_CATCH_CHANCE,
   SOFT_CATCH_FACTOR,
   SOFT_CATCH_RECOVER,
@@ -56,6 +56,7 @@ import { driftDye } from '../core/drift'
 import { DEG, clamp, clampAbs, makeNoiseTables, smoothstep, vnoise, wrapPi } from '../core/noise'
 import { mixDye } from '../core/oklab'
 import { Rng, splitmix32 } from '../core/rng'
+import { clampSide, fitSides, sideBand } from '../core/size'
 import type { Dye, SimState, SlideState, Viewport } from '../core/types'
 
 /** Noise tables per slide: heading slow, heading slower, speed, rotation. */
@@ -67,7 +68,9 @@ const NOISE_SIZE = 32
  * One entry per slide: a short list leaves the last slides on an undefined
  * radius, which places them at NaN and drops them off the stage entirely.
  */
-const PLACEMENT_RADII = [0.5, 0.58, 0.66, 0.8, 0.92, 1.02, 1.12, 1.24, 1.42]
+const PLACEMENT_RADII = [
+  0.5, 0.58, 0.66, 0.8, 0.92, 1.02, 1.12, 1.24, 1.42, 1.5, 1.58, 1.66, 1.74,
+]
 
 const PROBE_SECONDS = 4
 const PROBE_DT = 1 / 30
@@ -120,10 +123,20 @@ export class Simulation {
   readonly state: SimState
   private master: number
   private viewport: Viewport
-  private runtime: SlideRuntime[] = []
+  /**
+   * Noise tables and PRNG stream per slide, keyed by id and not by position.
+   *
+   * By position was simpler and wrong the moment a sheet could leave from the
+   * middle of the list: every slide after it would inherit a stranger's noise
+   * and a stranger's home orbit, so removing one sheet visibly disturbed all
+   * the ones that stayed. Identity is the thing these are attached to.
+   */
+  private runtime = new Map<number, SlideRuntime>()
   /** Placement origin and home-ring phases, from the layout stream. */
   private origin = { x: 0.5, y: 0.5, p1: 0, p2: 0 }
   private tabProudU = 0
+  /** Never reused, so a sheet that leaves cannot be confused with its successor. */
+  private nextId = 0
 
   constructor(seed: number, viewport: Viewport) {
     this.master = seed >>> 0
@@ -179,11 +192,12 @@ export class Simulation {
     }
     this.state.slides = slides
     this.state.aspect = this.viewport.aspect
-    this.runtime = slides.map((_, i) => this.makeRuntime(this.master, i))
+    this.runtime = new Map(slides.map((s) => [s.id, this.makeRuntime(this.master, s.id)]))
     // The stream position lives in the slide so the history buffer carries it.
-    slides.forEach((s, i) => {
-      s.rngState = (this.runtime[i] as SlideRuntime).rng.state
-    })
+    for (const s of slides) {
+      s.rngState = (this.runtime.get(s.id) as SlideRuntime).rng.state
+    }
+    this.nextId = slides.reduce((max, s) => Math.max(max, s.id), -1) + 1
   }
 
   /** Noise tables are drawn first, then the stream is left for bounce events. */
@@ -218,12 +232,12 @@ export class Simulation {
     // One size, so the px clamp is resolved once. It still matters: on a phone
     // the fraction would come out under the readable floor, and on a very large
     // monitor a 30% slide would be big enough to cover most of the stage.
-    const sizePx = clamp(
-      SIZE_FRAC_ONE * vp.short,
-      SIZE_PX_MIN,
-      Math.min(SIZE_PX_MAX, vp.short * 0.82),
-    )
-    const sizeFrac = clamp(sizePx / vp.short, SIZE_FRAC_MIN, SIZE_FRAC_MAX)
+    // One size for every count. It used to shrink as sheets were added, which
+    // is the right instinct and the wrong mechanism: the count can now change
+    // while the instrument is running, and a sheet arriving must not resize the
+    // eleven already on the glass. Crowding is what adding a sheet means.
+    const sizeFrac = this.stockSize()
+    const sizePx = sizeFrac * vp.short
     const meanSizeU = sizePx / vp.height
 
     const slides: SlideState[] = []
@@ -339,10 +353,10 @@ export class Simulation {
         dyeTo: cloneDye(s.dyeTo),
       })),
     }
-    const runtime = candidate.slides.map((_, i) => this.makeRuntime(master, i))
-    scratch.slides.forEach((s, i) => {
-      s.rngState = (runtime[i] as SlideRuntime).rng.state
-    })
+    const runtime = new Map(candidate.slides.map((s) => [s.id, this.makeRuntime(master, s.id)]))
+    for (const s of scratch.slides) {
+      s.rngState = (runtime.get(s.id) as SlideRuntime).rng.state
+    }
     const origin = candidate.origin
 
     let bestPairs = 0
@@ -363,11 +377,30 @@ export class Simulation {
 
   // --- geometry -------------------------------------------------------------
 
+  /**
+   * The size a sheet is cut to before anybody resizes it, as a fraction of the
+   * short edge. The px band decides and the fraction follows: on a phone the
+   * plain fraction lands under the readable floor, and on a very large monitor
+   * a 30% sheet would cover most of the box.
+   *
+   * A function of the screen only. It used to shrink as sheets were added,
+   * which cannot survive a count that changes while the instrument is running.
+   */
+  private stockSize(): number {
+    const vp = this.viewport
+    const frac = vp.short < SMALL_VIEWPORT ? SIZE_FRAC_ONE_SMALL : SIZE_FRAC_ONE
+    const px = clampSide(frac * vp.short, sideBand(vp.short))
+    return clamp(px / vp.short, SIZE_FRAC_MIN, SIZE_FRAC_MAX)
+  }
+
   private dimensions(sizeFrac: number, aspect: number): { w: number; h: number } {
     const vp = this.viewport
-    const sPx = clamp(sizeFrac * vp.short, SIZE_PX_MIN, Math.min(SIZE_PX_MAX, vp.short * 0.82))
+    const sPx = sizeFrac * vp.short
     const root = Math.sqrt(aspect)
-    return { w: (sPx * root) / vp.height, h: sPx / root / vp.height }
+    // fitSides, not clampSide: this path rebuilds a shape the user already
+    // chose, so when the band bites it must give up size and not aspect.
+    const { w, h } = fitSides(sPx * root, sPx / root, sideBand(vp.short))
+    return { w: w / vp.height, h: h / vp.height }
   }
 
   /** Half-extents of the rotated frame-plus-tab union, and that union's centre. */
@@ -396,18 +429,18 @@ export class Simulation {
    * never reads as a circle. Pure in its arguments: a restored frame replays to
    * the same homes, which is what keeps scrubbing exact.
    */
-  private homeOf(i: number, t: number, A: number, at: Origin): { x: number; y: number } {
+  private homeOf(id: number, t: number, A: number, at: Origin): { x: number; y: number } {
     // Three independent per-slide numbers, from two irrationals so they cannot
     // correlate: how fast the orbit turns, how wide it is, and where it is
     // centred. Six orbits of one radius about one centre is a hexagon, and a
     // hexagon that turns is still a formation however slowly it shears. Giving
     // each slide its own orbit is what makes them read as six objects that
     // happen to share a table rather than one object with six parts.
-    const f1 = (i * 0.3819660113) % 1
-    const f2 = (i * 0.7548776662) % 1
-    const rate = HOME_DRIFT * (0.45 + 1.6 * f1) * (i % 2 === 0 ? 1 : -1)
+    const f1 = (id * 0.3819660113) % 1
+    const f2 = (id * 0.7548776662) % 1
+    const rate = HOME_DRIFT * (0.45 + 1.6 * f1) * (id % 2 === 0 ? 1 : -1)
     const ring = HOME_RING * (0.55 + 0.85 * f2)
-    const theta = 2 * Math.PI * ((i * 0.6180339887) % 1) + at.p1 + rate * t
+    const theta = 2 * Math.PI * ((id * 0.6180339887) % 1) + at.p1 + rate * t
     const wobble = 0.18 * Math.sin(0.013 * t + at.p2 + 2 * Math.PI * f2)
     const cx = 0.5 + HOME_OFFSET * Math.cos(2 * Math.PI * f2 + at.p2)
     const cy = 0.5 + HOME_OFFSET * Math.sin(2 * Math.PI * f1 + at.p1)
@@ -506,7 +539,7 @@ export class Simulation {
 
   private advance(
     st: SimState,
-    runtime: SlideRuntime[],
+    runtime: Map<number, SlideRuntime>,
     origin: Origin,
     dt: number,
     reduced: boolean,
@@ -522,7 +555,7 @@ export class Simulation {
 
     for (let i = 0; i < slides.length; i++) {
       const s = slides[i] as SlideState
-      const rt = runtime[i] as SlideRuntime
+      const rt = runtime.get(s.id) as SlideRuntime
       const o = occ[i] as number
       // Adopt the stream position recorded on the slide. After a scrub this is a
       // restored value, which is exactly why the future replays identically.
@@ -549,7 +582,7 @@ export class Simulation {
       // shears instead of rotating rigidly, which would read as choreography.
       // Territories overlap far more than they exclude, so slides still cross
       // constantly; what they no longer do is all sit in the middle.
-      const home = this.homeOf(i, t, A, origin)
+      const home = this.homeOf(s.id, t, A, origin)
       const dhx = home.x - s.x
       const dhy = home.y - s.y
       // Normalised per axis. A circular leash on a 16:10 box wastes the width.
@@ -560,7 +593,7 @@ export class Simulation {
         // whatever heading joins the two, and often enough that is horizontal:
         // axis dwell went from 5% to 13% on one seed. The lead turns the
         // approach into a spiral, in the same direction the slide's home orbits.
-        const lead = Math.atan2(dhy, dhx) + (i % 2 === 0 ? HOME_LEAD : -HOME_LEAD)
+        const lead = Math.atan2(dhy, dhx) + (s.id % 2 === 0 ? HOME_LEAD : -HOME_LEAD)
         steer += HOME_GAIN_DEG * pull * turnSign(s.heading, lead)
       }
 
@@ -625,7 +658,7 @@ export class Simulation {
       const axisGap = wrapPi(s.heading - Math.round(s.heading / (Math.PI / 2)) * (Math.PI / 2))
       const axisWindow = AXIS_ESCAPE_DEG * DEG
       if (Math.abs(axisGap) < axisWindow) {
-        const away = axisGap === 0 ? (i % 2 === 0 ? 1 : -1) : Math.sign(axisGap)
+        const away = axisGap === 0 ? (s.id % 2 === 0 ? 1 : -1) : Math.sign(axisGap)
         steer += AXIS_ESCAPE_GAIN_DEG * (1 - Math.abs(axisGap) / axisWindow) * away
       }
 
@@ -790,6 +823,188 @@ export class Simulation {
     }
   }
 
+  // --- adding and removing sheets -------------------------------------------
+
+  /**
+   * Change how many sheets are on the stage without touching the ones already
+   * there.
+   *
+   * This is the whole point of the method: the obvious implementation is to
+   * re-seed the layout for the new count, and re-seeding throws away the
+   * composition the user was looking at when they reached for the control. A
+   * sheet arrives, or a sheet leaves, and nothing else moves.
+   */
+  setSlideCount(count: number): { added: number[]; removed: number[] } {
+    const added: number[] = []
+    const removed: number[] = []
+    while (this.state.slides.length < count) added.push(this.addSlide())
+    while (this.state.slides.length > count) {
+      const id = this.removeSlide()
+      if (id === null) break
+      removed.push(id)
+    }
+    return { added, removed }
+  }
+
+  /** One more sheet, cut to the stock size and dropped into the emptiest gap. */
+  private addSlide(): number {
+    const id = this.nextId++
+    // Its own stream, from the same master, so the sheet is still a function of
+    // the seed and the order it was added in rather than of the wall clock.
+    const layout = substream(this.master, 0x1000 + id)
+    const slide = this.cutSheet(id, layout)
+    this.state.slides.push(slide)
+    const rt = this.makeRuntime(this.master, id)
+    this.runtime.set(id, rt)
+    slide.rngState = rt.rng.state
+    return id
+  }
+
+  /**
+   * One fewer sheet. Takes the most recently added one it is allowed to take,
+   * skipping anything the user pinned: a pin is a colour somebody decided to
+   * keep, and the stepper is not the place to lose it.
+   */
+  private removeSlide(): number | null {
+    const slides = this.state.slides
+    if (slides.length === 0) return null
+    let at = -1
+    for (let i = slides.length - 1; i >= 0; i--) {
+      if (!(slides[i] as SlideState).locked) {
+        at = i
+        break
+      }
+    }
+    if (at < 0) at = slides.length - 1
+    const gone = slides.splice(at, 1)[0] as SlideState
+    this.runtime.delete(gone.id)
+    return gone.id
+  }
+
+  /**
+   * A new sheet's geometry: stock size, a position with room around it, and a
+   * heading that takes it towards company rather than into a corner.
+   */
+  private cutSheet(id: number, layout: Rng): SlideState {
+    const A = this.state.aspect
+    const sizeFrac = this.stockSize()
+    const slideAspect = SLIDE_ASPECT * (1 + layout.spread(SLIDE_ASPECT_SPREAD))
+    const { w, h } = this.dimensions(sizeFrac, slideAspect)
+    const radius = 0.45 * ((w + h) / 2) * 0.9
+
+    // Dropped on the stack, a new sheet hides whatever made the user curious in
+    // the first place. So it looks for a gap: candidates are scored on how much
+    // they overlap, with a small pull towards the middle so the sheet does not
+    // arrive in a corner and spend ten seconds crossing the empty box.
+    let bx = A / 2
+    let by = 0.5
+    let best = Infinity
+    for (let k = 0; k < 40; k++) {
+      const x = clamp(layout.next() * A, 0.04 + w / 2, A - 0.04 - w / 2)
+      const y = clamp(layout.next(), 0.04 + h / 2, 0.96 - h / 2)
+      let cost = 0.35 * Math.hypot((x - A / 2) / (A / 2), (y - 0.5) / 0.5)
+      for (const o of this.state.slides) {
+        cost += clamp(1 - Math.hypot(x - o.x, y - o.y) / (radius + this.proxyRadius(o)), 0, 1)
+      }
+      if (cost < best) {
+        best = cost
+        bx = x
+        by = y
+      }
+    }
+
+    // Aimed at the nearest sheet and then thrown off by a wide angle, which is
+    // how the seed layout does it: straight at a neighbour is a collision, and
+    // a collision looks arranged.
+    let nearest: SlideState | null = null
+    let nd = Infinity
+    for (const o of this.state.slides) {
+      const d = Math.hypot(bx - o.x, by - o.y)
+      if (d < nd) {
+        nd = d
+        nearest = o
+      }
+    }
+    const bearing = nearest
+      ? Math.atan2(nearest.y - by, nearest.x - bx)
+      : Math.atan2(0.5 - by, A / 2 - bx)
+    let heading = bearing
+    for (let tries = 0; tries < 8; tries++) {
+      heading = bearing + (layout.chance(0.5) ? 1 : -1) * (24 + 42 * layout.next()) * DEG
+      const off = Math.abs(wrapPi(heading))
+      const nearAxis =
+        off < 10 * DEG ||
+        Math.abs(off - Math.PI / 2) < 10 * DEG ||
+        Math.abs(off - Math.PI) < 10 * DEG
+      if (!nearAxis) break
+    }
+
+    const z = clamp(0.02 + 0.96 * layout.next(), 0.02, 0.98)
+    const speed0 = clamp(
+      (0.076 - 0.038 * (1 - z)) * (0.82 + 0.36 * layout.next()),
+      SPEED_MIN,
+      SPEED_MAX,
+    )
+
+    const dye: Dye = { L: 0.82, C: 0.1, h: (id * 57) % 360, d: 0.8 }
+    const slide: SlideState = {
+      id,
+      x: bx,
+      y: by,
+      heading,
+      speed0,
+      rot: layout.spread(TILT_DEG) * DEG,
+      omegaRot: clampAbs(
+        (layout.chance(0.5) ? 1 : -1) * (OMEGA_MIN_DEG + 0.85 * layout.next()) * DEG,
+        OMEGA_MAX_DEG * DEG,
+      ),
+      sizeFrac,
+      aspect: slideAspect,
+      w,
+      h,
+      z,
+      zTarget: z,
+      dye,
+      dyeBase: cloneDye(dye),
+      dyeFrom: cloneDye(dye),
+      dyeTo: cloneDye(dye),
+      tweenT: 1,
+      tweenDelay: 0,
+      driftGate: 1,
+      lonelyTimer: 0,
+      stickyTimer: 0,
+      cd: [0, 0, 0, 0],
+      rngState: 0,
+      catchUntil: 0,
+      speedPre: speed0,
+      locked: false,
+      held: false,
+    }
+    this.depenetrate(slide, A)
+    return slide
+  }
+
+  /**
+   * Bring a new sheet's colour up out of clear film.
+   *
+   * A sheet that appears at full density is a rectangle of colour switching on,
+   * and the eye reads a switch as a glitch rather than as an object arriving.
+   * Fading the dye up through the same crossfade a regenerate uses makes it a
+   * slide being laid on the lightbox, which is what it is.
+   */
+  introduce(id: number, dye: Dye): void {
+    const s = this.state.slides.find((v) => v.id === id)
+    if (!s) return
+    const clear: Dye = { L: Math.min(0.97, dye.L + 0.1), C: dye.C * 0.12, h: dye.h, d: 0.04 }
+    s.dyeFrom = clear
+    s.dyeTo = cloneDye(dye)
+    s.dyeBase = cloneDye(clear)
+    s.dye = cloneDye(clear)
+    s.tweenT = 0
+    s.tweenDelay = 0
+    this.state.paletteEpoch += 1
+  }
+
   // --- external mutations ---------------------------------------------------
 
   setViewport(vp: Viewport): void {
@@ -855,14 +1070,36 @@ export class Simulation {
     for (const s of this.state.slides) s.held = s.id === id
   }
 
+  /**
+   * Resize to an explicit width and height, both in height units. The two
+   * sides are clamped independently, so a slide can be pulled into a letterbox
+   * but never into a sliver.
+   *
+   * `sizeFrac` and `aspect` are recomputed rather than kept: they are the pair
+   * `dimensions` reads, so a later window resize has to be able to rebuild
+   * exactly this shape from them.
+   */
+  setSize(id: number, w: number, h: number): void {
+    const s = this.state.slides.find((x) => x.id === id)
+    if (!s) return
+    const vp = this.viewport
+    const band = sideBand(vp.short)
+    const wPx = clampSide(w * vp.height, band)
+    const hPx = clampSide(h * vp.height, band)
+    s.aspect = wPx / hPx
+    s.sizeFrac = clamp(Math.sqrt(wPx * hPx) / vp.short, SIZE_FRAC_MIN, SIZE_FRAC_MAX)
+    s.w = wPx / vp.height
+    s.h = hPx / vp.height
+    this.depenetrate(s, this.state.aspect)
+  }
+
+  /** Resize about the slide's own aspect, which is what the size band means. */
   setSizeFrac(id: number, sizeFrac: number): void {
     const s = this.state.slides.find((x) => x.id === id)
     if (!s) return
-    s.sizeFrac = clamp(sizeFrac, SIZE_FRAC_MIN, SIZE_FRAC_MAX)
-    const dim = this.dimensions(s.sizeFrac, s.aspect)
-    s.w = dim.w
-    s.h = dim.h
-    this.depenetrate(s, this.state.aspect)
+    const frac = clamp(sizeFrac, SIZE_FRAC_MIN, SIZE_FRAC_MAX)
+    const dim = this.dimensions(frac, s.aspect)
+    this.setSize(id, dim.w, dim.h)
   }
 
   /**

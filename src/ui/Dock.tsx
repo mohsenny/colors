@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { BlendMode } from '../core/types'
+import { Options } from './Options'
 import { Timeline } from './Timeline'
 import type { TimelineProps } from './Timeline'
 
@@ -9,9 +10,14 @@ export interface DockProps {
   blend: BlendMode
   /** Passed straight through to Timeline. */
   timeline: TimelineProps
+  /** Passed straight through to Options. */
+  slideCount: number
+  warmth: number
   onTogglePlay(): void
   onRegenerate(): void
   onBlendChange(mode: BlendMode): void
+  onSlideCountChange(count: number): void
+  onWarmthChange(warmth: number): void
 }
 
 /** Quiet time before the chrome recedes. Long enough to not flicker mid-reach. */
@@ -63,9 +69,44 @@ function RegenerateIcon(): ReactElement {
   )
 }
 
+/**
+ * The plus, and the cross it becomes. One path that rotates rather than two
+ * that swap, so opening the drawer is a single continuous gesture.
+ */
+function PlusIcon({ open }: { open: boolean }): ReactElement {
+  return (
+    <svg
+      className={`lb-icon lb-plus${open ? ' is-open' : ''}`}
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M7 3.2v7.6M3.2 7h7.6" />
+    </svg>
+  )
+}
+
 export function Dock(props: DockProps): ReactElement {
-  const { playing, blend, timeline, onTogglePlay, onRegenerate, onBlendChange } = props
+  const {
+    playing,
+    blend,
+    timeline,
+    slideCount,
+    warmth,
+    onTogglePlay,
+    onRegenerate,
+    onBlendChange,
+    onSlideCountChange,
+    onWarmthChange,
+  } = props
   const [idle, setIdle] = useState(false)
+  const [optionsOpen, setOptionsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -75,8 +116,9 @@ export function Dock(props: DockProps): ReactElement {
       window.clearTimeout(timer)
       // Paused is a studying state: the controls stay fully present. Listeners
       // stay attached while paused so the activity that resumes playback is
-      // itself what clears a stale idle flag.
-      if (!playing) return
+      // itself what clears a stale idle flag. An open drawer is the same kind
+      // of state: you opened it to change something, so it waits.
+      if (!playing || optionsOpen) return
       timer = window.setTimeout(() => {
         const root = rootRef.current
         // Keyboard users park focus on a control; fading it out would be a trap.
@@ -110,7 +152,7 @@ export function Dock(props: DockProps): ReactElement {
       window.removeEventListener('focusin', wake)
       window.removeEventListener('focusout', wake)
     }
-  }, [playing])
+  }, [playing, optionsOpen])
 
   return (
     <div
@@ -160,6 +202,24 @@ export function Dock(props: DockProps): ReactElement {
           Light
         </button>
       </div>
+
+      <button
+        type="button"
+        className={`lb-btn lb-btn-more${optionsOpen ? ' is-on' : ''}`}
+        aria-label="More options"
+        aria-expanded={optionsOpen}
+        onClick={() => setOptionsOpen((v) => !v)}
+      >
+        <PlusIcon open={optionsOpen} />
+      </button>
+
+      <Options
+        open={optionsOpen}
+        slideCount={slideCount}
+        warmth={warmth}
+        onSlideCountChange={onSlideCountChange}
+        onWarmthChange={onWarmthChange}
+      />
     </div>
   )
 }

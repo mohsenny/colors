@@ -37,6 +37,10 @@ export interface InstrumentSnapshot {
   filled: number
   /** The timeline should be prominent. */
   expanded: boolean
+  /** How many sheets are on the stage right now. */
+  slideCount: number
+  /** Lamp colour bias, -1 warm to +1 cool. */
+  warmth: number
   /** Text for the polite live region. Purely for screen readers. */
   announcement: string
 }
@@ -93,6 +97,14 @@ export class Instrument {
   private reduceQuery: MediaQueryList | null = null
   private announcement = ''
 
+  /**
+   * The user's answer to the two questions in the options panel. Null count
+   * means they have not asked, so the viewport decides. Neither is persisted:
+   * they are part of the sitting, like the seed.
+   */
+  private countOverride: number | null = null
+  private warmth = 0
+
   private listeners = new Set<() => void>()
   private snapshot: InstrumentSnapshot
   private resizeObserver: ResizeObserver | null = null
@@ -117,7 +129,7 @@ export class Instrument {
       onSelect: (id) => this.select(id),
       onCopy: (id) => this.copy(id),
       onToggleLock: (id) => this.toggleLock(id),
-      onResize: (id, sizeFrac) => this.resizeSlide(id, sizeFrac),
+      onResize: (id, w, h) => this.resizeSlide(id, w, h),
       onResizeEnd: () => this.notify(),
       onMove: (id, x, y) => this.moveSlide(id, x, y),
       onMoveEnd: () => this.notify(),
@@ -212,6 +224,7 @@ export class Instrument {
       selectedId: this.selectedId,
       hoveredId: this.hoveredId,
       reducedMotion: this.reducedMotion,
+      warmth: this.warmth,
     })
   }
 
@@ -398,9 +411,9 @@ export class Instrument {
     this.notify()
   }
 
-  resizeSlide(id: number, sizeFrac: number): void {
+  resizeSlide(id: number, w: number, h: number): void {
     this.commitBranch()
-    this.sim.setSizeFrac(id, sizeFrac)
+    this.sim.setSize(id, w, h)
   }
 
   /** Live during a drag. The slide is already held, so it goes where it is put. */
@@ -477,31 +490,119 @@ export class Instrument {
   private onViewportResize = (): void => {
     clearTimeout(this.resizeTimer)
     this.resizeTimer = window.setTimeout(() => {
-      const next = measureViewport(this.root)
+      const next = measureViewport(this.root, this.countOverride)
       if (!viewportSignificant(this.viewport, next)) {
         this.viewport = next
         return
       }
-      const countChanged = next.slideCount !== this.viewport.slideCount
-      this.viewport = next
-      this.sim.setViewport(next)
-      if (countChanged) {
-        this.history = new History(next.slideCount)
-        // The slides are new objects: a selection carried across would point at
-        // a stranger, and since selecting now holds a slide still, that stranger
-        // would sit frozen with nothing on screen explaining why.
-        this.selectedId = null
-        // Sampled crossings survive a relayout: they are values, not slides.
-        this.pinOrder = this.pinOrder.filter((id) => id < 0 || this.slide(id)?.locked)
-        this.sim.setPalette(this.rollPalette())
-        this.stage.sync(this.sim.state.slides)
-      } else {
-        this.history.clear()
-      }
-      this.tick = 0
-      this.playhead = 0
+      this.applyViewport(next)
       this.notify()
     }, 250)
+  }
+
+  /**
+   * Adopt a new viewport, rebuilding whatever it invalidates.
+   *
+   * Shared by the window resize and the count control, because to everything
+   * downstream those are the same event: the stage is a different shape or has
+   * a different number of things on it, and the history ring, whose width is
+   * fixed at construction, has to be rebuilt either way.
+   */
+  private applyViewport(next: Viewport): void {
+    const countChanged = next.slideCount !== this.viewport.slideCount
+    this.viewport = next
+    this.sim.setViewport(next)
+    if (countChanged) {
+      this.history = new History(next.slideCount)
+      // The slides are new objects: a selection carried across would point at
+      // a stranger, and since selecting now holds a slide still, that stranger
+      // would sit frozen with nothing on screen explaining why.
+      this.selectedId = null
+      // Sampled crossings survive a relayout: they are values, not slides.
+      this.pinOrder = this.pinOrder.filter((id) => id < 0 || this.slide(id)?.locked)
+      this.sim.setPalette(this.rollPalette())
+      this.stage.sync(this.sim.state.slides)
+    } else {
+      this.history.clear()
+    }
+    this.tick = 0
+    this.playhead = 0
+  }
+
+  // --- options -------------------------------------------------------------
+
+  /**
+   * How many sheets are on the stage. Clamped in `measureViewport`, so passing
+   * something out of range is a no-op rather than an error: the control is a
+   * stepper and the caller should not have to know where the ends are.
+   *
+   * Deliberately not `applyViewport`. Re-seeding for the new count is the easy
+   * implementation and it throws away the composition: the user reaches for
+   * the stepper because they like what is on the glass and want one more of
+   * it, and the reward for asking was a completely different picture. Here a
+   * sheet arrives, or a sheet leaves, and nothing else moves.
+   */
+  setSlideCount(count: number): void {
+    const next = measureViewport(this.root, count)
+    if (next.slideCount === this.viewport.slideCount) return
+    // An edit, so it happens at the live edge like every other one.
+    this.commitBranch()
+    this.countOverride = next.slideCount
+    this.viewport = next
+
+    const { added, removed } = this.sim.setSlideCount(next.slideCount)
+    // One at a time, so each new colour is chosen against the ones already
+    // there including any that arrived a moment ago.
+    for (const id of added) this.sim.introduce(id, this.mintDye(id))
+    if (removed.length > 0) {
+      this.pinOrder = this.pinOrder.filter((id) => id < 0 || !removed.includes(id))
+      if (this.selectedId !== null && removed.includes(this.selectedId)) this.selectedId = null
+    }
+    this.previousPalette = this.sim.state.slides.map((s) => ({ ...s.dyeBase }))
+
+    // The ring's stride is fixed at construction and every frame in it
+    // describes a different set of sheets, so the scrub window starts again.
+    // The stage does not: this is the one thing a count change still costs.
+    this.history = new History(next.slideCount)
+    this.tick = 0
+    this.playhead = 0
+
+    this.stage.sync(this.sim.state.slides)
+    this.announcement = `${next.slideCount} sheets.`
+    this.notify()
+  }
+
+  /**
+   * One colour for one new sheet, chosen against the whole set.
+   *
+   * The generator already knows how to do this: every other slot goes in as
+   * `keep`, so it is judging complete palettes and only has one slot free. A
+   * slide mid-crossfade offers the colour it is heading for rather than the
+   * one it is passing through, or a sheet added twice in a second would be
+   * matched against a colour that is about to stop existing.
+   */
+  private mintDye(id: number): Dye {
+    const slides = this.sim.state.slides
+    const areas = slides.map((s) => s.w * s.h)
+    const maxArea = Math.max(...areas, 1e-6)
+    const index = slides.findIndex((s) => s.id === id)
+    const dyes = generatePalette({
+      rng: this.paletteRng,
+      count: slides.length,
+      areaNorm: areas.map((a) => a / maxArea),
+      keep: slides.map((s) => (s.id === id ? null : s.tweenT < 1 ? s.dyeTo : s.dye)),
+      previous: null,
+    })
+    return (dyes[index] ?? { L: 0.78, C: 0.16, h: (id * 57) % 360, d: 0.82 }) as Dye
+  }
+
+  /** Lamp colour bias, -1 warm to +1 cool. Takes effect on the next frame. */
+  setWarmth(warmth: number): void {
+    const next = Math.max(-1, Math.min(1, warmth))
+    if (next === this.warmth) return
+    this.warmth = next
+    this.announcement = next < 0 ? 'Warm light.' : next > 0 ? 'Cool light.' : 'Neutral light.'
+    this.notify()
   }
 
   private onReduceChange = (e: MediaQueryListEvent): void => {
@@ -545,6 +646,8 @@ export class Instrument {
       position: span > 0 ? (this.playhead - oldest) / span : 1,
       filled: head < 0 ? 0 : (head - oldest + 1) / HISTORY_FRAMES,
       expanded: !this.isPlaying() || this.playback === 'scrubbing',
+      slideCount: this.viewport.slideCount,
+      warmth: this.warmth,
       announcement: this.announcement,
     }
   }

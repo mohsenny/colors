@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Instrument } from './app/instrument'
 import type { InstrumentSnapshot } from './app/instrument'
 import { Dock } from './ui/Dock'
+import { Legend } from './ui/Legend'
 import { PaletteTray } from './ui/PaletteTray'
 import { Wordmark } from './ui/Wordmark'
 
@@ -75,6 +76,7 @@ export default function App() {
       <Wordmark />
       {snapshot && instrument ? (
         <>
+          <Legend />
           <PaletteTray
             pinned={snapshot.pinned}
             onUnpin={(id) => instrument.unpin(id)}
@@ -92,9 +94,13 @@ export default function App() {
               onScrubStart: () => instrument.beginScrub(),
               onScrubEnd: () => instrument.endScrub(),
             }}
+            slideCount={snapshot.slideCount}
+            warmth={snapshot.warmth}
             onTogglePlay={() => instrument.togglePlay()}
             onRegenerate={() => instrument.regenerate()}
             onBlendChange={(mode) => instrument.setBlend(mode)}
+            onSlideCountChange={(n) => instrument.setSlideCount(n)}
+            onWarmthChange={(w) => instrument.setWarmth(w)}
           />
           <p className="lb-sr" role="status" aria-live="polite">
             {snapshot.announcement}
