@@ -5,7 +5,7 @@ cross you get a third colour that nobody chose. That colour is the point.
 
 **[Open Lightbox](https://mohsenny.github.io/colors/)**
 
-![Eight translucent colour sheets drifting over a bright white surface, several of them overlapping to produce new colours, with a small control dock at the bottom and one saved colour in the top right](docs/screenshot.png)
+![Eight translucent colour sheets drifting over a bright white surface, several of them overlapping to produce new colours, with a small control dock at the bottom and one saved colour in the top right](docs/screenshot.jpg)
 
 ## What it is
 
