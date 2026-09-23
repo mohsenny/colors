@@ -108,6 +108,7 @@ export function Dock(props: DockProps): ReactElement {
   const [idle, setIdle] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const moreRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     let timer = 0
@@ -153,6 +154,52 @@ export function Dock(props: DockProps): ReactElement {
       window.removeEventListener('focusout', wake)
     }
   }, [playing, optionsOpen])
+
+  /*
+   * The drawer is a transient layer, so touching anything else puts it away.
+   * Reaching past it to grab a sheet or sample a crossing means you are done
+   * with it, and having to come back and press the cross is a second gesture
+   * for something you already said.
+   *
+   * `pointerdown`, not `click`: the sheets start a drag on pointerdown, so a
+   * drag that begins outside the drawer never produces a click and the drawer
+   * would survive the whole gesture. Nothing is prevented or stopped here, so
+   * the press still reaches the stage and the drag starts on the same frame.
+   */
+  useEffect(() => {
+    if (!optionsOpen) return
+
+    const away = (e: PointerEvent): void => {
+      const root = rootRef.current
+      if (root && e.target instanceof Node && root.contains(e.target)) return
+      setOptionsOpen(false)
+    }
+
+    const escape = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      /*
+       * Escape peels one layer, and while the drawer is up the drawer is the
+       * top layer. App also answers Escape, by clearing the selection, and a
+       * single press doing both would restart a sheet the user had deliberately
+       * stopped. Capture phase on window fires before any bubble listener on
+       * window whatever order they were attached in, so stopping here is
+       * deterministic rather than a race with effect ordering.
+       */
+      e.stopPropagation()
+      setOptionsOpen(false)
+      // Only the keyboard path has to move focus. An outside press has already
+      // moved it to whatever was pressed, but Escape would leave it parked on a
+      // control inside a drawer that is now hidden from the accessibility tree.
+      moreRef.current?.focus()
+    }
+
+    window.addEventListener('pointerdown', away)
+    window.addEventListener('keydown', escape, true)
+    return () => {
+      window.removeEventListener('pointerdown', away)
+      window.removeEventListener('keydown', escape, true)
+    }
+  }, [optionsOpen])
 
   return (
     <div
@@ -204,6 +251,7 @@ export function Dock(props: DockProps): ReactElement {
       </div>
 
       <button
+        ref={moreRef}
         type="button"
         className={`lb-btn lb-btn-more${optionsOpen ? ' is-on' : ''}`}
         aria-label="More options"
