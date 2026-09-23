@@ -11,19 +11,18 @@ import { measureViewport, viewportSignificant } from './viewport'
 export interface PinnedEntry {
   id: number
   hex: string
-  locked: boolean
   /**
    * `slide` follows a live slide and changes as that slide drifts. `mix` is a
    * crossing that was sampled and frozen: the sheets that made it have long
    * since moved apart, so there is nothing left to follow.
+   *
+   * The tray used to also show where a sample came from, one sheet or a
+   * crossing of several, and whether the row's slide was locked. Both were
+   * true and neither was wanted: a saved colour is a saved colour, and the
+   * lock mark was on every slide row anyway, because locking is the only way
+   * a slide gets into the tray.
    */
   kind: 'slide' | 'mix'
-  /**
-   * How many sheets were stacked where the colour was taken. Always 1 for a
-   * slide pin; 1 or more for a sample, which is what lets the tray say whether
-   * a frozen colour came off one sheet or out of a crossing.
-   */
-  sheets: number
 }
 
 export interface InstrumentSnapshot {
@@ -627,21 +626,11 @@ export class Instrument {
         if (id < 0) {
           const sample = this.mixPins.get(id)
           return sample
-            ? [{ id, hex: sample.hex, locked: true, kind: 'mix', sheets: sample.sheets }]
+            ? [{ id, hex: sample.hex, kind: 'mix' }]
             : []
         }
         const s = this.slide(id)
-        return s
-          ? [
-              {
-                id,
-                hex: filmHex(s.dye),
-                locked: s.locked,
-                kind: 'slide',
-                sheets: 1,
-              },
-            ]
-          : []
+        return s ? [{ id, hex: filmHex(s.dye), kind: 'slide' }] : []
       }),
       position: span > 0 ? (this.playhead - oldest) / span : 1,
       filled: head < 0 ? 0 : (head - oldest + 1) / HISTORY_FRAMES,

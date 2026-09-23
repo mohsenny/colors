@@ -665,17 +665,6 @@
   color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
 }
 
-.lb-tray-lock,
-.lb-tray-lock-spacer {
-  flex: none;
-  width: 9px;
-  height: 9px;
-}
-
-.lb-tray-lock {
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-}
-
 /*
  * Copy, and unpin. Both 14px boxes at the right edge of the row.
  *
@@ -813,10 +802,10 @@
     display: none;
   }
 
-  /* Wider than the column rows by exactly the copy button and its gap. */
+  /* The row is the swatch, seven characters of hex, and two 14px controls. */
   .lb-tray-item {
     max-height: none;
-    max-width: 139px;
+    max-width: 124px;
     gap: 6px;
     animation-name: lb-tray-in-row;
   }
@@ -840,7 +829,7 @@
     }
     to {
       opacity: 1;
-      max-width: 139px;
+      max-width: 124px;
       transform: translateY(0);
     }
   }
@@ -848,7 +837,7 @@
   @keyframes lb-tray-out-row {
     from {
       opacity: 1;
-      max-width: 139px;
+      max-width: 124px;
       transform: translateY(0);
     }
     to {

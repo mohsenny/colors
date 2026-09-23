@@ -4,16 +4,8 @@ import type { CSSProperties, ReactElement } from 'react'
 export interface PinnedColor {
   id: number
   hex: string
-  locked: boolean
   /** A live slide's colour, or a colour that was sampled off the film and frozen. */
   kind: 'slide' | 'mix'
-  /**
-   * How many sheets were stacked where a sample was taken, and always 1 for a
-   * slide pin. The row needs it because a frozen colour off one sheet and a
-   * frozen crossing are different things to have saved, and the hex alone
-   * cannot say which.
-   */
-  sheets: number
 }
 
 export interface PaletteTrayProps {
@@ -54,71 +46,8 @@ function prefersReducedMotion(): boolean {
   )
 }
 
-function LockGlyph(): ReactElement {
-  return (
-    <svg
-      className="lb-tray-lock"
-      width="9"
-      height="9"
-      viewBox="0 0 10 10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      role="img"
-      aria-label="Locked"
-    >
-      <rect x="2" y="4.4" width="6" height="4.6" rx="1" />
-      <path d="M3.5 4.4V3.2a1.5 1.5 0 0 1 3 0v1.2" />
-    </svg>
-  )
-}
-
-/** Two overlapping sheets: how a sampled crossing says what it is. */
-/**
- * The mark on a frozen colour, drawn as the thing that was sampled: one sheet,
- * or sheets crossing.
- *
- * Both kinds sit in the same list as live slide colours, and a frozen colour
- * behaves differently (it has no slide to select and it survives a regenerate),
- * so the row has to say so. Drawing the count rather than the kind means the
- * glyph is the same idea in both cases and there is nothing extra to learn.
- */
-function SampleGlyph({ sheets }: { sheets: number }): ReactElement {
-  const crossed = sheets > 1
-  return (
-    <svg
-      className="lb-tray-lock"
-      width="9"
-      height="9"
-      viewBox="0 0 10 10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.1"
-      strokeLinejoin="round"
-      role="img"
-      aria-label={crossed ? `Sampled where ${sheets} slides overlap` : 'Sampled colour'}
-    >
-      {crossed ? (
-        <>
-          <rect x="1" y="1" width="5.2" height="5.2" rx="0.8" />
-          <rect x="3.8" y="3.8" width="5.2" height="5.2" rx="0.8" />
-        </>
-      ) : (
-        <rect x="2.4" y="2.4" width="5.2" height="5.2" rx="0.8" />
-      )}
-    </svg>
-  )
-}
-
 /**
  * A clipboard and a tick, in one box, crossfading.
- *
- * A clipboard rather than the usual two offset sheets, because two offset
- * sheets is already taken: it is the mark on a sampled crossing, sitting one
- * slot to the left in the same row. Two glyphs that differ only in their
- * offset, 6px apart at 11px tall, is a puzzle rather than a control.
  *
  * Both states stay mounted and the opacity swaps rather than the element being
  * replaced: a swap restarts the button's layout and the row twitches on the
@@ -266,13 +195,6 @@ export function PaletteTray(props: PaletteTrayProps): ReactElement | null {
               >
                 {color.hex.toUpperCase()}
               </button>
-            )}
-            {color.kind === 'mix' ? (
-              <SampleGlyph sheets={color.sheets} />
-            ) : color.locked ? (
-              <LockGlyph />
-            ) : (
-              <span className="lb-tray-lock-spacer" />
             )}
             <button
               type="button"
