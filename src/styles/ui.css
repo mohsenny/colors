@@ -578,7 +578,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 7px;
+  /* 6, not 7: the row carries one more control than it used to and the tray is
+     a corner object, not a panel. */
+  gap: 6px;
   height: 22px;
   max-height: 22px;
   padding: 0 4px;
@@ -590,8 +592,8 @@
   background: rgba(30, 34, 48, 0.045);
 }
 
-/* Clipping only matters while collapsing, and the live item must stay unclipped
-   so the "Copied" label can sit outside the tray. */
+/* Clipping is only for the collapse. A live row is never clipped: its focus
+   rings sit proud of the padding box. */
 .lb-tray-item.is-leaving {
   pointer-events: none;
   overflow: hidden;
@@ -624,7 +626,8 @@
   }
 }
 
-/* The half-pixel inner lip is the slides' own cue, at swatch scale. */
+/* The half-pixel inner lip is the slides' own cue, at swatch scale. It is a
+   chip and not a button: the copy control is the copy control. */
 .lb-tray-swatch {
   flex: none;
   width: 14px;
@@ -673,6 +676,15 @@
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
 }
 
+/*
+ * Copy, and unpin. Both 14px boxes at the right edge of the row.
+ *
+ * Copy is always visible. It is the reason a colour is in the tray at all, and
+ * a saved hex you cannot see how to take is a saved hex you have to
+ * hand-transcribe. Unpin stays on hover: it is destructive, secondary, and one
+ * wrong tap from losing the thing you saved.
+ */
+.lb-tray-copy,
 .lb-tray-unpin {
   display: grid;
   place-items: center;
@@ -681,8 +693,13 @@
   height: 14px;
   border-radius: var(--lb-r-pill, 999px);
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    opacity var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-tray-unpin {
   opacity: 0;
-  transition: opacity var(--lb-t-quick, 120ms) ease;
 }
 
 .lb-tray-item:hover .lb-tray-unpin,
@@ -690,28 +707,54 @@
   opacity: 1;
 }
 
+.lb-tray-copy:hover,
 .lb-tray-unpin:hover {
   color: var(--lb-ink, #1a1a1e);
   background: rgba(30, 34, 48, 0.07);
 }
 
-/* Sits just outside the tray so confirming a copy never shifts the layout. */
-.lb-tray-copied {
-  position: absolute;
-  top: 50%;
-  right: calc(100% + 6px);
-  transform: translateY(-50%);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--lb-t-quick, 120ms) ease;
+/* Taken. The one moment this row is allowed to be the darkest thing in the
+   tray, because it is answering a question the user just asked. */
+.lb-tray-copy[data-done='true'],
+.lb-tray-copy[data-done='true']:hover {
+  color: var(--lb-ink-strong, #101014);
+  background: none;
 }
 
-.lb-tray-copied[data-on='true'] {
+/*
+ * The crossfade. Both marks sit in the same 12px box, so neither moves the
+ * button and the tick lands exactly where the copy glyph was.
+ */
+.lb-tray-copy-mark,
+.lb-tray-copy-tick {
+  transform-origin: 50% 50%;
+  transition:
+    opacity 140ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform 140ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-tray-copy-tick {
+  opacity: 0;
+  transform: scale(0.7);
+}
+
+.lb-tray-copy-icon.is-done .lb-tray-copy-mark {
+  opacity: 0;
+  transform: scale(0.7);
+}
+
+.lb-tray-copy-icon.is-done .lb-tray-copy-tick {
   opacity: 1;
+  transform: scale(1);
+}
+
+/* The swap is information, not decoration, so it survives: only the scale goes. */
+@media (prefers-reduced-motion: reduce) {
+  .lb-tray-copy-mark,
+  .lb-tray-copy-tick {
+    transition-duration: 1ms;
+    transform: none !important;
+  }
 }
 
 /* ------------------------------------------------- small viewports (620px) */
@@ -770,9 +813,11 @@
     display: none;
   }
 
+  /* Wider than the column rows by exactly the copy button and its gap. */
   .lb-tray-item {
     max-height: none;
-    max-width: 118px;
+    max-width: 139px;
+    gap: 6px;
     animation-name: lb-tray-in-row;
   }
 
@@ -785,14 +830,6 @@
     opacity: 1;
   }
 
-  .lb-tray-copied {
-    top: auto;
-    right: auto;
-    left: 50%;
-    bottom: calc(100% + 4px);
-    transform: translateX(-50%);
-  }
-
   @keyframes lb-tray-in-row {
     from {
       opacity: 0;
@@ -803,7 +840,7 @@
     }
     to {
       opacity: 1;
-      max-width: 118px;
+      max-width: 139px;
       transform: translateY(0);
     }
   }
@@ -811,7 +848,7 @@
   @keyframes lb-tray-out-row {
     from {
       opacity: 1;
-      max-width: 118px;
+      max-width: 139px;
       transform: translateY(0);
     }
     to {

@@ -23,6 +23,10 @@ export interface PaletteTrayProps {
   onCopy(hex: string): void
 }
 
+/**
+ * How long the tick stays. Long enough to be certain it happened, short enough
+ * that the row is offering to copy again before you have thought about it.
+ */
 const COPIED_MS = 1100
 const LEAVE_MS = 240
 
@@ -108,6 +112,44 @@ function SampleGlyph({ sheets }: { sheets: number }): ReactElement {
   )
 }
 
+/**
+ * A clipboard and a tick, in one box, crossfading.
+ *
+ * A clipboard rather than the usual two offset sheets, because two offset
+ * sheets is already taken: it is the mark on a sampled crossing, sitting one
+ * slot to the left in the same row. Two glyphs that differ only in their
+ * offset, 6px apart at 11px tall, is a puzzle rather than a control.
+ *
+ * Both states stay mounted and the opacity swaps rather than the element being
+ * replaced: a swap restarts the button's layout and the row twitches on the
+ * frame it happens. It also lets the tick grow into place as the clipboard
+ * shrinks out of it, which is the part that reads as "taken" rather than as
+ * "a different icon is here now".
+ */
+function CopyIcon({ done }: { done: boolean }): ReactElement {
+  return (
+    <svg
+      className={`lb-tray-copy-icon${done ? ' is-done' : ''}`}
+      width="11"
+      height="11"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.1"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <g className="lb-tray-copy-mark">
+        <path d="M4.4 2.2H3.1a1.3 1.3 0 0 0-1.3 1.3v6a1.3 1.3 0 0 0 1.3 1.3h5.8a1.3 1.3 0 0 0 1.3-1.3v-6a1.3 1.3 0 0 0-1.3-1.3H7.6" />
+        <rect x="4.1" y="1" width="3.8" height="2.4" rx="0.9" />
+      </g>
+      <path className="lb-tray-copy-tick" d="M2.2 6.3 4.9 9l4.9-5.4" />
+    </svg>
+  )
+}
+
 function UnpinIcon(): ReactElement {
   return (
     <svg
@@ -181,6 +223,9 @@ export function PaletteTray(props: PaletteTrayProps): ReactElement | null {
 
   if (pinned.length === 0 && ghosts.length === 0) return null
 
+  /** Which row is currently showing a tick, if any. One at a time. */
+  const copied = flash === null ? null : flash.id
+
   const entries: Array<{ color: PinnedColor; leaving: boolean }> = pinned.map((color) => ({
     color,
     leaving: false,
@@ -203,16 +248,9 @@ export function PaletteTray(props: PaletteTrayProps): ReactElement | null {
             inert={leaving}
             style={{ '--lb-swatch': color.hex } as CSSProperties}
           >
-            <button
-              type="button"
-              className="lb-tray-swatch"
-              aria-label={`Copy ${color.hex}`}
-              onClick={() => {
-                onCopy(color.hex)
-                flashCount.current += 1
-                setFlash({ id: color.id, hex: color.hex, n: flashCount.current })
-              }}
-            />
+            {/* The chip is the colour, not a control. Copying is the copy button's
+                job and there is no second, invisible way to do it. */}
+            <span className="lb-tray-swatch" aria-hidden="true" />
             {color.kind === 'mix' ? (
               // Nothing to select: a sample is a value, and the sheets that
               // made it have drifted since. Even a one-sheet sample no longer
@@ -238,19 +276,29 @@ export function PaletteTray(props: PaletteTrayProps): ReactElement | null {
             )}
             <button
               type="button"
+              className="lb-tray-copy"
+              // The label does not change with the tick. A control that renames
+              // itself mid-press reads to a screen reader as a different
+              // control, and the confirmation is announced by the status line
+              // below instead, which is what a status line is for.
+              aria-label={`Copy ${color.hex}`}
+              data-done={copied === color.id}
+              onClick={() => {
+                onCopy(color.hex)
+                flashCount.current += 1
+                setFlash({ id: color.id, hex: color.hex, n: flashCount.current })
+              }}
+            >
+              <CopyIcon done={copied === color.id} />
+            </button>
+            <button
+              type="button"
               className="lb-tray-unpin"
               aria-label={`Unpin ${color.hex}`}
               onClick={() => onUnpin(color.id)}
             >
               <UnpinIcon />
             </button>
-            <span
-              className="lb-tray-copied"
-              data-on={flash !== null && flash.id === color.id}
-              aria-hidden="true"
-            >
-              Copied
-            </span>
           </li>
         ))}
       </ul>
