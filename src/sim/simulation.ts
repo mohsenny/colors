@@ -57,6 +57,7 @@ import { DEG, clamp, clampAbs, makeNoiseTables, smoothstep, vnoise, wrapPi } fro
 import { mixDye } from '../core/oklab'
 import { Rng, splitmix32 } from '../core/rng'
 import { clampSide, fitSides, sideBand } from '../core/size'
+import { swayOffset, swayRoom } from '../core/sway'
 import type { Dye, SimState, SlideState, Viewport } from '../core/types'
 
 /** Noise tables per slide: heading slow, heading slower, speed, rotation. */
@@ -296,13 +297,17 @@ export class Simulation {
       )
 
       const dye: Dye = { L: 0.82, C: 0.1, h: (i * 57) % 360, d: 0.8 }
+      // Born already swayed, so the first step is not a jump. At t = 0 the
+      // offset is whatever the slide's noise says, not zero.
+      const rotRest = layout.spread(TILT_DEG) * DEG
       slides.push({
         id: i,
         x,
         y,
         heading,
         speed0,
-        rot: layout.spread(TILT_DEG) * DEG,
+        rotRest,
+        rot: rotRest + swayOffset(i, 0, swayRoom(rotRest)),
         omegaRot: clampAbs(
           (layout.chance(0.5) ? 1 : -1) * (OMEGA_MIN_DEG + 0.85 * layout.next()) * DEG,
           OMEGA_MAX_DEG * DEG,
@@ -681,11 +686,21 @@ export class Simulation {
       s.x += Math.cos(s.heading) * v * dt
       s.y += Math.sin(s.heading) * v * dt
 
+      /*
+       * The resting lean integrates the spin, which is off, and the sway rides
+       * on top of it. Two separate things wearing one number before: the sway
+       * has to be added to a fixed centre, so an integrator writing to the same
+       * field would feed its own output back in and the bound would be a lie.
+       */
       const rotBreath = 0.7 + 0.6 * vnoise(rt.noise[3] as Float32Array, t / 17)
-      s.rot += s.omegaRot * rotBreath * omegaScale * dt
-      if (Math.abs(s.rot) > ROT_RESTORE_DEG * DEG) {
-        s.omegaRot = clampAbs(s.omegaRot - Math.sign(s.rot) * 0.05 * DEG * (60 * dt), OMEGA_MAX_DEG * DEG)
+      s.rotRest += s.omegaRot * rotBreath * omegaScale * dt
+      if (Math.abs(s.rotRest) > ROT_RESTORE_DEG * DEG) {
+        s.omegaRot = clampAbs(
+          s.omegaRot - Math.sign(s.rotRest) * 0.05 * DEG * (60 * dt),
+          OMEGA_MAX_DEG * DEG,
+        )
       }
+      s.rot = s.rotRest + swayOffset(s.id, t, swayRoom(s.rotRest))
 
       s.z += (s.zTarget - s.z) * (1 - Math.exp(-dt / DEPTH_EASE_TAU))
 
@@ -947,13 +962,17 @@ export class Simulation {
     )
 
     const dye: Dye = { L: 0.82, C: 0.1, h: (id * 57) % 360, d: 0.8 }
+    // Sampled at the clock the sheet is joining, so it arrives at the angle the
+    // sway already has for it rather than at the angle it had at t = 0.
+    const rotRest = layout.spread(TILT_DEG) * DEG
     const slide: SlideState = {
       id,
       x: bx,
       y: by,
       heading,
       speed0,
-      rot: layout.spread(TILT_DEG) * DEG,
+      rotRest,
+      rot: rotRest + swayOffset(id, this.state.t, swayRoom(rotRest)),
       omegaRot: clampAbs(
         (layout.chance(0.5) ? 1 : -1) * (OMEGA_MIN_DEG + 0.85 * layout.next()) * DEG,
         OMEGA_MAX_DEG * DEG,

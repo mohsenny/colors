@@ -191,6 +191,32 @@ export const DEPTH_EASE_TAU = 2.2
  */
 export const TILT_DEG = 5
 export const SPIN = false
+
+/**
+ * Sway. The lean is seeded once but it does not sit still: it wanders inside
+ * the TILT_DEG band, very slowly, and never out of it. See core/sway.ts.
+ *
+ * SWAY_DEG is the most any one sheet will travel from its resting lean, and it
+ * is smaller than the band on purpose: the band is where a sheet may be, and
+ * the sway is how far it drifts from where it was put. A sheet already leaning
+ * 4 degrees gets 1 degree of sway, not 2.2, because the band is the promise.
+ *
+ * The periods are the width of a noise cell, in seconds, and they are the part
+ * that needed measuring rather than reasoning about. At three minutes a cell the
+ * sway was real but pointless: a hundred seconds of watching moved most sheets
+ * less than a third of a degree, which is a feature you cannot tell from a bug
+ * in the seeding. At around a minute a cell a sheet covers a degree or two in
+ * the time you spend looking at one composition, and the peak rate stays near
+ * a tenth of a degree a second: half a pixel a second at the corner of a 400px
+ * sheet, which is the top of what still reads as still.
+ *
+ * Set SWAY_DEG to 0 to go back to a fixed lean.
+ */
+export const SWAY_DEG = 2.2
+export const SWAY_PERIOD_S = 70
+export const SWAY_PERIOD_SPREAD = [0.78, 1.34] as const
+export const SWAY_RIPPLE_S = 31
+export const SWAY_RIPPLE_W = 0.26
 /** Beyond this the slide is gently torqued back; it is a spring, not a wall. */
 export const ROT_RESTORE_DEG = 22
 export const OMEGA_MAX_DEG = SPIN ? 2 : 0

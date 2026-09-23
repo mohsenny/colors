@@ -51,8 +51,18 @@ export interface SlideState {
   heading: number
   /** Base speed in u/s, before the noise breath and depth factor. */
   speed0: number
-  /** Rotation in RADIANS, stored UNWRAPPED. Never store this wrapped. */
+  /**
+   * Rotation in RADIANS, stored UNWRAPPED. Never store this wrapped.
+   *
+   * Derived, not authoritative: it is `rotRest` plus the sway, and the step
+   * rewrites it every frame. Everything that needs an angle reads this one.
+   */
   rot: number
+  /**
+   * The lean the sheet was cut with, in radians. The centre the sway moves
+   * around, and the only part of the angle that is real state.
+   */
+  rotRest: number
   /** Rotational velocity, radians/s. */
   omegaRot: number
 

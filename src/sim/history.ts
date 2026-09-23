@@ -108,6 +108,10 @@ export class History {
       b[p + 28] = s.dyeBase.C
       b[p + 29] = s.dyeBase.h
       b[p + 30] = s.dyeBase.d
+      // Same argument as dyeBase, one lane over: `rot` is the resting lean plus
+      // a pure function of `t`, so the displayed angle rebuilds itself, but the
+      // lean is state and the spin integrates into it.
+      b[p + 31] = s.rotRest
       p += SLIDE_LANES
     }
 
@@ -167,6 +171,7 @@ export class History {
       s.dyeBase.C = b[p + 28] as number
       s.dyeBase.h = b[p + 29] as number
       s.dyeBase.d = b[p + 30] as number
+      s.rotRest = b[p + 31] as number
       p += SLIDE_LANES
     }
     return true

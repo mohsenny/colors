@@ -11,6 +11,7 @@ function slide(id: number): SlideState {
     heading: id,
     speed0: id,
     rot: id,
+    rotRest: id * 0.5,
     omegaRot: id,
     sizeFrac: 0.3,
     aspect: 1,
@@ -58,6 +59,7 @@ function stamp(state: SimState, tick: number): void {
     s.heading = v * 0.001
     s.speed0 = v * 0.0001
     s.rot = v * 0.002
+    s.rotRest = v * 0.0019
     s.omegaRot = v * 0.0003
     s.sizeFrac = 0.2 + (i % 5) * 0.05
     s.w = 0.1 + i * 0.01
@@ -89,6 +91,7 @@ function digest(state: SimState): string {
       s.heading,
       s.speed0,
       s.rot,
+      s.rotRest,
       s.omegaRot,
       s.sizeFrac,
       s.aspect,
