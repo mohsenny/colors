@@ -248,8 +248,16 @@ export const MODE_MS = 420
  * function of simulation time. Scrubbing reproduces it exactly, and a pause
  * stops it dead with everything else.
  */
-export const DRIFT_HOLD_S = 5.2
-export const DRIFT_TRANS_S = 3.1
+/*
+ * Eight seconds still, two seconds moving. It used to be 5.2 and 3.1, which is
+ * nearly as much time in transit as at rest, and a set of sheets that is always
+ * somewhere between two colours is hard to read a palette off: you keep waiting
+ * for it to arrive. The long hold is the readable state and the dissolve is the
+ * connective tissue, so the hold should dominate. Shortening the transition is
+ * safe because the excursion is bounded and small; it is a settle, not a jump.
+ */
+export const DRIFT_HOLD_S = 8
+export const DRIFT_TRANS_S = 2
 /** Per-slide spread on the two above, so no two slides share a cadence. */
 export const DRIFT_HOLD_SPREAD = [0.78, 1.5] as const
 export const DRIFT_TRANS_SPREAD = [0.85, 1.35] as const

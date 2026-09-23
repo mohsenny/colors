@@ -72,9 +72,14 @@ describe('autonomous colour drift', () => {
         total++
       }
     }
+    // Eight seconds still to two seconds moving, give or take each slide's own
+    // spread. The hold is the state you read a palette off; the dissolve is
+    // only how it gets from one to the next, and it should not be most of what
+    // you are looking at. The upper bound is the other failure: a set that
+    // holds 95% of the time is a static palette that occasionally glitches.
     const share = still / total
-    expect(share).toBeGreaterThan(0.45)
-    expect(share).toBeLessThan(0.75)
+    expect(share).toBeGreaterThan(0.7)
+    expect(share).toBeLessThan(0.9)
   })
 
   it('does not change the whole set at once', () => {
@@ -98,15 +103,40 @@ describe('autonomous colour drift', () => {
     expect(movingShare / samples).toBeLessThan(0.5)
   })
 
-  it('gives each slide its own cadence', () => {
-    const cycles = new Set<number>()
+  it('never couples two slides together', () => {
+    /*
+     * The property is that no PAIR turns over in lockstep, and the honest way
+     * to ask is to measure it: how much of a quarter of an hour do these two
+     * spend dissolving at the same time, against how much they would by
+     * chance if they had nothing to do with each other.
+     *
+     * This used to compare step indices at t=6000 and demand all eight differ,
+     * which is a proxy and a brittle one. Two slides can have periods a
+     * hundredth of a second apart and still never move together, because the
+     * phase offset is drawn separately; that is exactly what the closest pair
+     * here does. The old test called that a failure and would have had the
+     * cadence retuned to satisfy an assertion about nothing.
+     */
+    const moving: boolean[][] = []
     for (let id = 0; id < SLIDE_COUNT; id++) {
-      // The step index after a hundred minutes is the cycle length, read at a
-      // horizon long enough that two slides differing by a fraction of a second
-      // per cycle have visibly separated. Ten minutes was not: two slides an
-      // eyeblink apart landed on the same step and the set looked shared.
-      cycles.add(driftPhase(id, 6000).k)
+      const row: boolean[] = []
+      for (let t = 0; t < 900; t += 0.05) row.push(driftPhase(id, t).mix > 0)
+      moving.push(row)
     }
-    expect(cycles.size).toBe(SLIDE_COUNT)
+
+    let worst = 0
+    for (let i = 0; i < SLIDE_COUNT; i++) {
+      for (let j = i + 1; j < SLIDE_COUNT; j++) {
+        const a = moving[i] as boolean[]
+        const b = moving[j] as boolean[]
+        let both = 0
+        for (let n = 0; n < a.length; n++) if (a[n] && b[n]) both++
+        worst = Math.max(worst, both / a.length)
+      }
+    }
+    // Two slides locked together would sit near their own moving share, which
+    // is 13% to 25%. Independent pairs land near the product of the two, which
+    // is 2% to 6%. Anything past 12% is coupling.
+    expect(worst).toBeLessThan(0.12)
   })
 })
