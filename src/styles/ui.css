@@ -1,5 +1,5 @@
 /*
- * The floating chrome: wordmark, dock (play / timeline / regenerate / mode),
+ * The floating chrome: dock (play / timeline / regenerate / mode), legend,
  * palette tray.
  *
  * Everything here is subordinate to the slides. Rules of thumb applied
@@ -14,27 +14,11 @@
  * at 200 and never has to negotiate.
  */
 
-/* ---------------------------------------------------------------- wordmark */
-
-.lb-wordmark {
-  position: fixed;
-  top: calc(16px + env(safe-area-inset-top, 0px));
-  left: calc(18px + env(safe-area-inset-left, 0px));
-  z-index: 200;
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.185em;
-  text-transform: uppercase;
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-  user-select: none;
-  pointer-events: none;
-}
-
 /* ------------------------------------------------------------------ legend */
 
 /*
- * Bottom left, at the same inset as the wordmark top left, so the four corners
- * of the chrome sit on one margin.
+ * Bottom left, at the same inset as the tray top right, so the corners of the
+ * chrome sit on one margin.
  *
  * No panel behind it, unlike the dock and the tray. Those are controls and have
  * to be hittable, so they need a surface. This is a caption: giving it a card
@@ -383,9 +367,8 @@
   z-index: 1;
   padding: 4px 9px;
   border-radius: var(--lb-r-pill, 999px);
-  /* Museum-label micro-type: the same uppercase and tracking as the wordmark,
-     which is what ties the chrome together and keeps two ordinary words from
-     reading as a web toggle. */
+  /* Museum-label micro-type. The uppercase and the tracking are what tie the
+     chrome together and keep two ordinary words from reading as a web toggle. */
   font-size: 9.5px;
   font-weight: 500;
   letter-spacing: 0.11em;
@@ -547,7 +530,7 @@
  */
 .lb-tray {
   position: fixed;
-  /* The same 16px the wordmark sits at, so the two corners read as one line. */
+  /* The same 16px the legend sits at, so the corners read as one margin. */
   right: calc(16px + env(safe-area-inset-right, 0px));
   top: calc(16px + env(safe-area-inset-top, 0px));
   z-index: 200;
@@ -750,10 +733,6 @@
 /* Mirrors SMALL_VIEWPORT in src/core/constants.ts; a media query cannot read it. */
 
 @media (max-width: 619px) {
-  .lb-wordmark {
-    display: none;
-  }
-
   /* No room for it beside the dock, and every gesture in it is a mouse
      gesture. A touch user gets none of the three. */
   .lb-legend {

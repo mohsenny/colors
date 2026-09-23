@@ -4,7 +4,6 @@ import type { InstrumentSnapshot } from './app/instrument'
 import { Dock } from './ui/Dock'
 import { Legend } from './ui/Legend'
 import { PaletteTray } from './ui/PaletteTray'
-import { Wordmark } from './ui/Wordmark'
 
 /**
  * React owns the chrome and nothing else. The stage below is an empty div that
@@ -73,7 +72,6 @@ export default function App() {
   return (
     <>
       <div className="lb-stage" ref={stageRef} />
-      <Wordmark />
       {snapshot && instrument ? (
         <>
           <Legend />
