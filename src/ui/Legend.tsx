@@ -2,13 +2,13 @@ import type { ReactElement } from 'react'
 
 const ROWS: ReadonlyArray<{ key: string; gesture: string; effect: string }> = [
   { key: 'click', gesture: 'Click', effect: 'stop a sheet' },
-  { key: 'keep', gesture: 'Double-click', effect: 'take the colour' },
   { key: 'space', gesture: 'Space', effect: 'stop time' },
+  { key: 'keep', gesture: 'Double-click', effect: 'take the colour' },
 ]
 
 /**
- * Three lines in the bottom-left corner, opposite the wordmark, naming the only
- * three things that cannot be discovered by moving the mouse.
+ * Three lines in the bottom-left corner, naming the only three things that
+ * cannot be discovered by moving the mouse.
  *
  * They stay. An earlier version retired each line the first time you did the
  * thing it described, which is a clever idea and a bad one: the gestures are
