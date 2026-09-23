@@ -278,13 +278,24 @@
   border-color: var(--lb-mount-selected);
 }
 
+/*
+ * A picked-up sheet is shown by its own edge going darker, and nothing else is
+ * drawn around it. There used to be two more rings: a 1px shadow spread and a
+ * focus outline sitting 2px outside that, so a click produced three concentric
+ * lines, none of which went round the tab, because a spread and an outline both
+ * follow the border box and ignore an overflowing child.
+ *
+ * One token does the whole silhouette. `.lb-edge` and `.lb-tab::before` both
+ * read `--lb-card-edge`, so redefining it on the mount travels to both and the
+ * card keeps one continuous line in every state.
+ */
 .lb-frame:focus {
   outline: none;
 }
 
+.lb-frame.is-selected,
 .lb-frame:focus-visible {
-  outline: 1px solid var(--lb-graphite);
-  outline-offset: 2px;
+  --lb-card-edge: rgba(30, 34, 48, 0.3);
 }
 
 /* --- the cut edge ---------------------------------------------------------- */
@@ -312,6 +323,9 @@
   border: 1px solid var(--lb-card-edge);
   border-radius: var(--lb-radius-outer);
   pointer-events: none;
+  /* Matches the mount's own border-color transition, so picking a sheet up
+     darkens the card and its edge on the same beat. */
+  transition: border-color 110ms linear;
 }
 
 /* --- the tab -------------------------------------------------------------- */
@@ -366,6 +380,7 @@
   border-bottom: none;
   border-radius: var(--lb-tab-radius) var(--lb-tab-radius) 0 0;
   pointer-events: none;
+  transition: border-color 110ms linear;
 }
 
 .lb-hex {

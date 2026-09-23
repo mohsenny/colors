@@ -49,7 +49,6 @@ const SOFT_ALPHA_PER_MM = 0.0105
 const CONTACT_ALPHA_BASE = 0.1
 const CONTACT_ALPHA_PER_MM = 0.008
 const OUTER_LIP = '0 0 0 0.5px rgba(30,34,48,0.055)'
-const SELECT_RING = '0 0 0 1px rgba(26,30,44,0.18)'
 
 /** z is eased continuously; quantising it stops the shadow string being rebuilt
  *  on every frame for a change nobody can see. */
@@ -442,10 +441,9 @@ export class Stage {
 
       // --- shadows ----------------------------------------------------------
       const zKey = Math.round(clamp(slide.z, 0, 1) * Z_SHADOW_STEPS)
-      const shadowKey = zKey * 2 + (selected ? 1 : 0)
-      if (shadowKey !== p.shadowKey) {
-        p.shadowKey = shadowKey
-        els.frame.style.boxShadow = shadowStack(zKey / Z_SHADOW_STEPS, selected)
+      if (zKey !== p.shadowKey) {
+        p.shadowKey = zKey
+        els.frame.style.boxShadow = shadowStack(zKey / Z_SHADOW_STEPS)
       }
 
       // --- tab --------------------------------------------------------------
@@ -809,7 +807,14 @@ function depthRank(slides: SlideState[], slide: SlideState): number {
   return rank
 }
 
-function shadowStack(z: number, selected: boolean): string {
+/*
+ * Height only. Selection used to add a 1px ring here, which was a second
+ * border a hair outside the card's own: a box-shadow spread follows the border
+ * box, so it stopped where the mount stopped and cut straight across the base
+ * of the tab. Selection now darkens the card's one real edge instead, in CSS,
+ * and that line already goes round the tab.
+ */
+function shadowStack(z: number): string {
   const hmm = H_MM_BASE + H_MM_RANGE * z
   const softBlur = SOFT_BLUR_BASE + SOFT_BLUR_PER_MM * hmm
   const softOy = SOFT_OY_PER_MM * hmm
@@ -823,8 +828,6 @@ function shadowStack(z: number, selected: boolean): string {
   const contact =
     `${(contactOy * OX_OVER_OY).toFixed(2)}px ${contactOy.toFixed(2)}px ${contactBlur.toFixed(2)}px ` +
     `rgba(46,52,72,${contactA.toFixed(4)})`
-  return selected
-    ? `${OUTER_LIP}, ${SELECT_RING}, ${soft}, ${contact}`
-    : `${OUTER_LIP}, ${soft}, ${contact}`
+  return `${OUTER_LIP}, ${soft}, ${contact}`
 }
 
