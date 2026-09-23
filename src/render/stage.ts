@@ -226,6 +226,13 @@ export class Stage {
 
   private create(slide: SlideState, ordinal: number, entering = false): SlideRec {
     const frame = div(entering ? 'lb-frame is-entering' : 'lb-frame')
+    /*
+     * The card's cut edge. Declared before the tab on purpose: it has to paint
+     * underneath it so the tab's own background can hide the segment of the
+     * ring that runs across the tab's base. See `.lb-edge` in stage.css for why
+     * this is a real element rather than an outline or a pseudo-element.
+     */
+    const edge = div('lb-edge')
     const tab = div('lb-tab')
     const grip = div('lb-grip')
 
@@ -256,7 +263,7 @@ export class Stage {
     frame.setAttribute('aria-pressed', 'false')
 
     tab.append(hex, copy, lock, copied)
-    frame.append(tab, grip)
+    frame.append(edge, tab, grip)
     this.root.append(frame)
 
     return {

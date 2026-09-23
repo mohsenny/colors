@@ -20,6 +20,13 @@
   --lb-graphite: rgba(26, 30, 44, 0.18);
   --lb-lip: rgba(30, 34, 48, 0.055);
   --lb-tab-shadow: rgba(30, 34, 48, 0.1);
+  /*
+   * The cut edge of the card. One line around the whole silhouette, mount and
+   * tab together, and it has to be faint: a white card on a lit white surface
+   * is separated by its shadow, and this is only there so the shape still
+   * closes where the shadow is weakest.
+   */
+  --lb-card-edge: rgba(30, 34, 48, 0.13);
   /* Shadows are deliberately cooler than the surface: the signature of a lit box. */
   --lb-shadow-rgb: 46, 52, 72;
 }
@@ -30,6 +37,10 @@
   --lb-frame: 7px;
   --lb-tab-h: 18px;
   --lb-tab-proud: 14px;
+  /* How far the tab reaches down past the mount's outer edge. A function of the
+     other two only, so it does not move when the frame gets thinner on a phone:
+     the tab is measured from the edge of the card, not from the paint. */
+  --lb-tab-overlap: calc(var(--lb-tab-h) - var(--lb-tab-proud));
   --lb-tab-radius: 3px;
   --lb-radius-outer: 3px;
   --lb-radius-inner: 1.5px;
@@ -276,6 +287,33 @@
   outline-offset: 2px;
 }
 
+/* --- the cut edge ---------------------------------------------------------- */
+
+/*
+ * One hairline around the whole card: up the mount, around the tab, and back,
+ * with nothing drawn across the base of the tab. A folder tab is cut from the
+ * sheet it labels, so the outline that proves that is the outline of the
+ * silhouette, and a line under the tab would say the opposite.
+ *
+ * Three pieces make it one line. This element draws the mount's ring. The tab
+ * draws its own three sides in `.lb-tab::before`, stopping exactly at the
+ * mount's outer edge. And the tab's opaque background covers the segment of
+ * this ring that runs beneath it, which is what opens the base.
+ *
+ * It has to be a real element and not an outline or an `::after`: outlines are
+ * painted above every positioned descendant, and `::after` comes after the
+ * children in paint order. Either would draw the line back over the tab. A
+ * plain child declared before the tab paints underneath it.
+ */
+.lb-edge {
+  position: absolute;
+  /* The containing block is the padding box, so reach back out to the mount. */
+  inset: calc(-1 * var(--lb-frame));
+  border: 1px solid var(--lb-card-edge);
+  border-radius: var(--lb-radius-outer);
+  pointer-events: none;
+}
+
 /* --- the tab -------------------------------------------------------------- */
 
 /*
@@ -306,11 +344,28 @@
    * piece of card does not cast a shadow onto itself.
    */
   border-radius: var(--lb-tab-radius) var(--lb-tab-radius) 0 0;
-  /* Same card as the mount, so the same fibre over the same tone. */
+  /* Same card as the mount, so the same fibre over the same tone. The colour
+     is opaque enough to hide the mount's own edge line where it passes under,
+     which is what leaves the base of the tab open. */
   background-color: var(--lb-mount);
   background-image: var(--lb-fibre);
   background-size: 64px 64px;
   transition: width 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * The tab's three sides. It stops `--lb-tab-overlap` short of the bottom,
+ * which is exactly where the mount's outer edge runs, so the two verticals
+ * land on the mount's ring rather than a few pixels inside it.
+ */
+.lb-tab::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 var(--lb-tab-overlap) 0;
+  border: 1px solid var(--lb-card-edge);
+  border-bottom: none;
+  border-radius: var(--lb-tab-radius) var(--lb-tab-radius) 0 0;
+  pointer-events: none;
 }
 
 .lb-hex {
