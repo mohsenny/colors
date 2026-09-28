@@ -30,6 +30,21 @@ function effChroma(dye: Dye): number {
   return linearToOklch(r, g, b).C
 }
 
+/**
+ * Sheets thinner than the temperament's own density floor. That used to be an
+ * exact count of the quiet slots; since every roll also carries a field, which
+ * is thin on most temperaments, it now runs one high whenever the field is.
+ */
+function thinSlots(dyes: Dye[], t: Temperament): number {
+  return dyes.filter((d) => d.d < (t.d[0] as number)).length
+}
+
+/** The lightness the sheet actually shows, which is not `dye.L`. */
+function filmL(dye: Dye): number {
+  const [r, g, b] = filmLinear(dye)
+  return linearToOklch(r, g, b).L
+}
+
 function arcDist(a: number, b: number): number {
   const d = Math.abs(a - b) % 360
   return d > 180 ? 360 - d : d
@@ -115,7 +130,12 @@ describe('generatePalette over 300 seeds', () => {
     let withGel = 0
     for (const { dyes, t } of rolls) {
       const budget = quietBudget(6, NO_KEEP, t.quiet)
-      expect(dyes.filter((d) => d.d < t.d[0]).length).toBe(budget)
+      // Thinner than the ladder floor no longer means "quiet". The field is
+      // thin by construction on most temperaments, and it is a structural
+      // sheet rather than a spent quiet slot, so it is allowed for and not
+      // counted. The exact assertion moved to the gel, below.
+      expect(thinSlots(dyes, t)).toBeGreaterThanOrEqual(budget)
+      expect(thinSlots(dyes, t)).toBeLessThanOrEqual(budget + 1)
       // The gel is pinned to exactly NEUTRAL_C, which no drawn slide lands on.
       const gels = dyes.map((d, i) => [d, i] as const).filter(([d]) => d.C === NEUTRAL_C)
       expect(gels).toHaveLength(budget >= 1 ? 1 : 0)
@@ -327,7 +347,8 @@ describe('smaller viewports and odd input', () => {
       // two of four left half the screen colourless.
       const budget = quietBudget(4, [], t.quiet)
       expect(budget).toBeLessThanOrEqual(1)
-      expect(dyes.filter((d) => d.d < t.d[0]).length).toBe(budget)
+      expect(thinSlots(dyes, t)).toBeGreaterThanOrEqual(budget)
+      expect(thinSlots(dyes, t)).toBeLessThanOrEqual(budget + 1)
       if (paletteViolations(dyes, null, t).length === 0) {
         expect(dyes.filter((d) => effChroma(d) >= satFloor(t)).length).toBeGreaterThanOrEqual(1)
         clean++
@@ -346,7 +367,7 @@ describe('smaller viewports and odd input', () => {
         const { dyes, t } = rollWith(s * 29 + count, null, [], count, AREA.slice(0, count))
         expect(dyes).toHaveLength(count)
         expect(quietBudget(count, [], t.quiet)).toBe(0)
-        expect(dyes.filter((d) => d.d < t.d[0]).length).toBe(0)
+        expect(thinSlots(dyes, t)).toBeLessThanOrEqual(1)
         // Colour is asserted on the legal rolls only. A roll that found no
         // legal candidate returns the least bad of 56 rejects, and demanding
         // that a reject still meet the rule it was rejected for is asking the
@@ -557,13 +578,50 @@ describe('temperaments', () => {
   it('keeps each sitting inside its own lightness and density ladder', () => {
     // A temperament that leaks is a temperament that does not exist. The
     // tolerance is L_JITTER plus the area thinning, nothing more.
+    //
+    // The anchor and the field sit OUTSIDE the ladder on purpose: that is what
+    // they are for, and a set confined to the ladder is the flat set this rule
+    // used to guarantee. Which sheet is which cannot be recovered from the
+    // output (an ordinary sheet on the top rung sits inside the field's
+    // tolerance), so this asserts the invariant rather than the identity: at
+    // most two sheets leave the ladder, and any that does is inside a declared
+    // structural window.
+    const WINDOW = 0.07
     for (const { dyes, t } of sample) {
-      for (const d of dyes) {
-        expect(d.L).toBeGreaterThanOrEqual((t.l[0] as number) - 0.03)
-        expect(d.L).toBeLessThanOrEqual((t.l[t.l.length - 1] as number) + 0.03)
-        expect(d.d).toBeLessThanOrEqual(Math.min(t.d[1], BANDS.dMax) + 1e-9)
+      const lo = (t.l[0] as number) - 0.03
+      const hi = (t.l[t.l.length - 1] as number) + 0.03
+      const dHi = Math.min(Math.max(t.d[1], t.anchor[1]), BANDS.dMax)
+      const outside = dyes.filter((d) => d.L < lo || d.L > hi)
+      expect(outside.length).toBeLessThanOrEqual(2)
+      for (const d of outside) {
+        const structural =
+          Math.abs(d.L - t.anchor[0]) <= WINDOW || Math.abs(d.L - t.field[0]) <= WINDOW
+        expect(structural).toBe(true)
       }
+      for (const d of dyes) expect(d.d).toBeLessThanOrEqual(dHi + 1e-9)
     }
+  })
+
+  it('gives every sitting something to stand on and something to sit in', () => {
+    // The rule the flat-set complaint turned into. Measured on the FILM
+    // colours, because the dye ladder is close to a no-op at low density: at
+    // d 0.30 the whole range from L 0.25 to L 0.90 renders inside film L 0.89
+    // to 0.97, which is how a chalk roll used to span 0.037 and look like one
+    // colour eight times.
+    const thin: string[] = []
+    for (const t of TEMPERAMENTS) {
+      const mine = sample.filter((r) => r.t.name === t.name)
+      if (mine.length < 8) continue
+      const ranges = mine
+        .map((r) => {
+          const Ls = r.dyes.map(filmL)
+          return Math.max(...Ls) - Math.min(...Ls)
+        })
+        .sort((a, b) => a - b)
+      const med = ranges[Math.floor(ranges.length / 2)] as number
+      if (med < 0.3) thin.push(`${t.name} ${med.toFixed(3)}`)
+    }
+    expect(thin).toEqual([])
   })
 
   it('makes the sittings differ from each other, which is the whole point', () => {

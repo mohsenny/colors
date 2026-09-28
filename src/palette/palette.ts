@@ -109,8 +109,27 @@ const NEUTRAL_D = 0.55
 const WASH_D = 0.7
 const WASH_C = 1.3
 const ACCENT_C = 1.2
+/**
+ * The field's chroma compensation, the same idea as `WASH_C` and for the same
+ * reason: film chroma falls with density, so a sheet thin enough to read as
+ * the set's ground arrives near-grey unless it is asked for more. It buys
+ * less than it looks: the thinnest sheet's median film chroma goes 0.026 to
+ * 0.030 and the rolls whose ground is under 0.03 go 226 in 400 to 197. That
+ * is the right size. The field is the thing the set sits IN, so it wants a
+ * tint rather than a colour.
+ */
+const FIELD_C = 1.55
 
-const CANDIDATES = 56
+/**
+ * Tournament size. Doubled from 56 when the structural sheets landed: pinning
+ * two slots to the temperament's `anchor` and `field` narrows what any single
+ * candidate can be, and at 56 the winners were paying for their new lightness
+ * range in hue spacing. The tenth-percentile nearest pair on a lightbox roll
+ * went 0.053 to 0.058 and the typical tightest hue gap 37.7 to 38.6 degrees.
+ * 168 adds 0.001 more for another 6ms, so this is where the curve flattens.
+ * Costs 11ms, once, on Regenerate. Nothing is drawing while it runs.
+ */
+const CANDIDATES = 112
 const RELAX = 0.15
 const LOTTERY = [0.27, 0.22, 0.18, 0.14, 0.11, 0.08] as const
 
@@ -208,8 +227,20 @@ interface Temperament {
   readonly lamp: number
   /** Deliberately quiet slots, absolute: this replaces a function of the count. */
   readonly quiet: number
-  /** Does it force a lightness floor slot AND a lightness ceiling slot. */
-  readonly poles: boolean
+  /**
+   * The two structural sheets, as `[dye lightness, density]`.
+   *
+   * `anchor` is the one the set stands on and `field` is the one it sits in,
+   * and every roll gets both. They carry their own DENSITY, which is the whole
+   * reason they exist as a pair of numbers rather than as two rungs of `l`.
+   * Measured: at density 0.30 the entire dye ladder from L 0.25 to L 0.90
+   * renders between film L 0.89 and 0.97, so at chalk's densities a lightness
+   * rung is very nearly a no-op and a chalk roll came back spanning 0.037 of
+   * film lightness, which is eight sheets of the same colour. Density is the
+   * lever; lightness only looks like one.
+   */
+  readonly anchor: readonly [number, number]
+  readonly field: readonly [number, number]
   /** The hue skeletons it likes, by `Strategy.name`. */
   readonly strategies: readonly string[]
   /** Its own legality, merged over the defaults. See `limitsFor`. */
@@ -234,10 +265,11 @@ const TEMPERAMENTS: readonly Temperament[] = [
     // floor a WASH lands on after the 0.7 thinning, and drawing plain slides
     // from it would leave lightbox half transparent, which is the one thing
     // this entry exists not to do.
-    d: [0.74, 0.95],
+    d: [0.68, 0.95],
     lamp: 1.0,
     quiet: 2,
-    poles: true,
+    anchor: [0.35, 0.94],
+    field: [0.86, 0.4],
     strategies: ALL_STRATEGIES,
     limits: {},
     weights: {},
@@ -247,15 +279,20 @@ const TEMPERAMENTS: readonly Temperament[] = [
   {
     name: 'chalk',
     weight: 0.15,
-    l: [0.8, 0.86, 0.9],
+    l: [0.7, 0.8, 0.86, 0.9],
     c: [0.05, 0.08, 0.11],
-    d: [0.3, 0.5],
+    d: [0.3, 0.66],
     lamp: 1.0,
     // Zero because EVERYTHING here is quiet. Designating one slide as the calm
     // one is meaningless when no slide is loud, and spending a slot on a gel
     // would just remove the one thing the set still has, its hue.
     quiet: 0,
-    poles: false,
+    // A mid tone, not a black: chalk's anchor is the darkest thing a pale set
+    // can hold without stopping being pale. It still moves the roll from 0.037
+    // of film lightness to about 0.35, which is the difference between a set
+    // and a swatch of one colour.
+    anchor: [0.57, 0.94],
+    field: [0.9, 0.3],
     strategies: ['warm-cool', 'mono-foil', 'split-comp'],
     limits: {
       // 0.012, not the 0.085 a lightbox slide has to clear. Measured: the
@@ -268,8 +305,6 @@ const TEMPERAMENTS: readonly Temperament[] = [
       // lightbox one, so the general floor would reject every chalk set.
       sep: 0.012,
       flatC: 0,
-      lRangeLo: 0.02,
-      lStdevLo: 0.008,
       minGap: 14,
       novelty: 12,
       // Pale slides cross pale. Grading these crossings against a saturation
@@ -294,15 +329,17 @@ const TEMPERAMENTS: readonly Temperament[] = [
     weight: 0.15,
     l: [0.3, 0.38, 0.47],
     c: [0.16, 0.22, 0.28],
-    d: [0.93, 0.99],
+    d: [0.9, 0.99],
     lamp: 0.82,
     quiet: 1,
-    poles: true,
+    anchor: [0.25, 0.99],
+    // Ink's field is the sheet that cuts through it. A dark set needs one more
+    // than a pale one does, because eight deep sheets on a bright box is the
+    // complaint this whole pass exists to answer.
+    field: [0.84, 0.82],
     strategies: ['comp-accent', 'sweep-foil', 'warm-cool'],
     count: [4, 6],
     limits: {
-      lRangeHi: 0.55,
-      lStdevHi: 0.18,
       satC: 0.05,
       // Deep crossings go grey sooner. That is what this material does, not a
       // fault in the roll, so the bar moves rather than the palette failing.
@@ -321,7 +358,8 @@ const TEMPERAMENTS: readonly Temperament[] = [
     d: [0.5, 0.92],
     lamp: 0.95,
     quiet: 2,
-    poles: false,
+    anchor: [0.28, 0.88],
+    field: [0.88, 0.35],
     strategies: ['comp-accent', 'mono-foil'],
     limits: {
       // One loud sheet among quiet ones is the entire point, and an uneven
@@ -330,7 +368,6 @@ const TEMPERAMENTS: readonly Temperament[] = [
       flatC: 0,
       maxGap: 260,
       satC: 0.04,
-      lRangeLo: 0.05,
       greySat: 0.12,
       greyShare: 0.6,
       tripleSat: 0.02,
@@ -341,16 +378,15 @@ const TEMPERAMENTS: readonly Temperament[] = [
   {
     name: 'smoke',
     weight: 0.13,
-    l: [0.52, 0.6, 0.68],
+    l: [0.48, 0.58, 0.68],
     c: [0.06, 0.1, 0.14],
-    d: [0.62, 0.9],
+    d: [0.58, 0.92],
     lamp: 0.92,
     quiet: 1,
-    poles: false,
+    anchor: [0.38, 0.94],
+    field: [0.86, 0.52],
     strategies: ['spread', 'warm-cool', 'split-comp'],
     limits: {
-      lRangeLo: 0.02,
-      lStdevLo: 0.008,
       flatC: 0,
       satC: 0.03,
       novelty: 12,
@@ -366,10 +402,14 @@ const TEMPERAMENTS: readonly Temperament[] = [
     weight: 0.13,
     l: [0.66, 0.76, 0.84],
     c: [0.26, 0.3, 0.33],
-    d: [0.55, 0.88],
+    d: [0.5, 0.92],
     lamp: 1.0,
     quiet: 0,
-    poles: false,
+    anchor: [0.44, 0.94],
+    // Denser than the other fields. Acid has no quiet slot, so seven of its
+    // eight sheets have to clear satC 0.1, and a field thin enough to read as
+    // clear cannot: the one sheet of slack the rule allows is already spent.
+    field: [0.86, 0.55],
     strategies: ['triad', 'spread', 'split-comp'],
     limits: {
       // There is no gel, so the neutral requirement is switched off rather than
@@ -383,8 +423,6 @@ const TEMPERAMENTS: readonly Temperament[] = [
       // and being uniformly loud is the character, not the failure mode
       // chromaFlat guards against.
       flatC: 0,
-      lRangeLo: 0.04,
-      lStdevLo: 0.01,
     },
     weights: { presence: 2.0, meanPairSat: 2.2, chromaSpread: 0.2 },
   },
@@ -397,8 +435,14 @@ const TEMPERAMENTS: readonly Temperament[] = [
     d: [0.55, 0.95],
     lamp: 0.9,
     quiet: 1,
-    poles: true,
+    anchor: [0.3, 0.96],
+    field: [0.88, 0.32],
     strategies: ['mono-foil'],
+    // One hue family does not stretch to eight sheets: at that count a study
+    // roll failed minGap, tooClose and tooFewSaturated about once per roll,
+    // which are three readings of the same fact. Six is where it still reads
+    // as a ladder rather than as a crowd.
+    count: [4, 6],
     limits: {
       // It leans on LIGHTNESS separation instead of hue, so the wide ladder is
       // doing the work the hue gaps normally do and the hue rules stand down.
@@ -407,8 +451,6 @@ const TEMPERAMENTS: readonly Temperament[] = [
       sep: 0.03,
       flatC: 0,
       novelty: 10,
-      lRangeHi: 0.65,
-      lStdevHi: 0.22,
       greySat: 0.1,
       greyShare: 0.6,
     },
@@ -671,8 +713,33 @@ interface Analysis {
   sepNear: number[]
   minGap: number
   maxGap: number
+  /**
+   * Lightness, read off the FILM colours and not off the dyes.
+   *
+   * These used to be measured on `dye.L`, which is the number the generator
+   * asked for rather than the one the sheet shows, and the two are barely
+   * related: a sheet's film lightness is `1 - d(1 - dye)` per channel, so at a
+   * low density the dye ladder is almost entirely absorbed. Grading the dye
+   * meant the scorer believed a chalk roll spanned 0.10 of lightness when what
+   * reached the screen spanned 0.037.
+   */
   lRange: number
   lStdev: number
+  /**
+   * How far the darkest sheet falls below the set's median and how far the
+   * lightest rises above it. A range on its own can be one outlier against
+   * seven twins; a set needs something to stand on AND something to sit in,
+   * and these are the two halves asked separately.
+   */
+  anchorDrop: number
+  fieldLift: number
+}
+
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0
+  const s = [...xs].sort((a, b) => a - b)
+  const m = s.length >> 1
+  return s.length % 2 ? (s[m] as number) : ((s[m - 1] as number) + (s[m] as number)) / 2
 }
 
 function analyse(dyes: Dye[]): Analysis {
@@ -747,9 +814,10 @@ function analyse(dyes: Dye[]): Analysis {
     return best
   })
 
-  const Ls = dyes.map((d) => d.L)
+  const Ls = lch.map((o) => o.L)
   const mean = Ls.reduce((a, b) => a + b, 0) / Math.max(1, n)
   const variance = Ls.reduce((a, b) => a + (b - mean) * (b - mean), 0) / Math.max(1, n)
+  const mid = median(Ls)
 
   return {
     dyes,
@@ -762,8 +830,10 @@ function analyse(dyes: Dye[]): Analysis {
     sepNear,
     minGap,
     maxGap,
-    lRange: Math.max(...Ls) - Math.min(...Ls),
+    lRange: n === 0 ? 0 : Math.max(...Ls) - Math.min(...Ls),
     lStdev: Math.sqrt(variance),
+    anchorDrop: n === 0 ? 0 : mid - Math.min(...Ls),
+    fieldLift: n === 0 ? 0 : Math.max(...Ls) - mid,
   }
 }
 
@@ -776,6 +846,8 @@ interface Limits {
   lRangeHi: number
   lStdevLo: number
   lStdevHi: number
+  anchorDrop: number
+  fieldLift: number
   neutralC: number
   satC: number
   flatC: number
@@ -827,10 +899,18 @@ function limitsFor(
   const base: Limits = {
     minGap,
     maxGap,
-    lRangeLo: 0.1,
-    lRangeHi: 0.4,
-    lStdevLo: 0.038,
-    lStdevHi: 0.12,
+    // In film lightness, so these are not the numbers they were: 0.1 to 0.4 on
+    // the dye ladder is 0.04 to 0.15 on the screen. The pair also changed job.
+    // The old `lRangeHi` and `lStdevHi` were the real bound and the floors were
+    // nominal, which is a rule that says a set may not have contrast, and the
+    // sets it produced were eight tints of one lightness. Now the floors bind
+    // and the ceilings are only there to catch nonsense.
+    lRangeLo: 0.3,
+    lRangeHi: 0.85,
+    lStdevLo: 0.075,
+    lStdevHi: 0.4,
+    anchorDrop: 0.1,
+    fieldLift: 0.04,
     // Judged on the film colour, not the dye: a dye number is not comparable
     // across hues, and what the eye grades is the light coming off the slide.
     neutralC: 0.045,
@@ -899,6 +979,12 @@ function violationsOf(
     if (a.lStdev < limits.lStdevLo) out.push('lStdevLow')
     if (a.lStdev > limits.lStdevHi) out.push('lStdevHigh')
   }
+  // From three sheets up: with two, one of them IS the median and the pair of
+  // rules degenerates into the range rule above.
+  if (n >= 3) {
+    if (a.anchorDrop < limits.anchorDrop) out.push('noAnchor')
+    if (a.fieldLift < limits.fieldLift) out.push('noField')
+  }
   // Only palettes big enough to spend a slot on calm are required to have one,
   // and only when the pins left a slot to spend. Asking for a gel that
   // chooseRoles was never going to assign made every candidate report a
@@ -906,8 +992,13 @@ function violationsOf(
   const quiet = quietBudget(n, keep, wantQuiet)
   if (quiet >= 1 && Math.min(...a.effC) > limits.neutralC) out.push('noNeutral')
   // Every slide that is not deliberately quiet should carry colour, less one
-  // slot of slack so a single unlucky hue does not void an otherwise good roll.
-  const satNeeded = Math.max(1, n - quiet - 1)
+  // slot of slack so a single unlucky hue does not void an otherwise good roll,
+  // and less the field: it is thin by construction, so it cannot hold chroma,
+  // and a rule that demands it does is a rule against the field existing. That
+  // was measured, not assumed: before this slack an acid roll failed here about
+  // once per roll and fell through to the least-bad candidate, which quietly
+  // turns the whole tournament off.
+  const satNeeded = Math.max(1, n - quiet - 2)
   if (a.effC.filter((c) => c >= limits.satC).length < satNeeded) out.push('tooFewSaturated')
   // Six slides at the same saturation is a named failure mode, not a style.
   if (n >= 4 && stdev(a.effC) < limits.flatC) out.push('chromaFlat')
@@ -1056,8 +1147,17 @@ function scoreOf(a: Analysis, temperament: Temperament): number {
 
   const chromaSpread = clamp(stdev(a.effC) / 0.05, 0, 1)
 
-  // Peaks in the middle of the legal stdev window: some structure, not a staircase.
-  const lightnessShape = clamp(1 - Math.abs(a.lStdev - 0.07) / 0.07, 0, 1)
+  // Structure: something to stand on, something to sit in, and enough between
+  // them to be a set rather than a pair. This used to peak at one narrow stdev
+  // and fall to zero either side of it, which made "has contrast" and "has no
+  // contrast" score the same, and since flat sets are far commoner the scorer
+  // effectively selected for flatness. It now only ever rewards reaching.
+  const lightnessShape =
+    Math.min(
+      clamp(a.anchorDrop / 0.16, 0, 1),
+      clamp(a.fieldLift / 0.07, 0, 1),
+      clamp(a.lRange / 0.42, 0, 1),
+    )
 
   const clipPenalty = clamp(a.clipSum / 0.1, 0, 1)
 
@@ -1218,29 +1318,46 @@ function buildCandidate(
   const scale = rng.range(OFFSET_SCALE[0], OFFSET_SCALE[1])
   const offsets = rng.shuffle(offsetsFor(strategy, count).map((o) => o * scale))
 
+  // The ladder's window, which is the ORDINARY sheets' window. The structural
+  // pair gets its own, narrow, centred on where each was declared: widening
+  // this one to admit them let every middle sheet walk up to the field's
+  // lightness in pursuit of chroma, and an ink roll came back at a median film
+  // lightness of 0.75 instead of 0.56, which is ink that is not dark.
   const lLo = Math.max(BANDS.lMin, (t.l[0] as number) - L_JITTER)
   const lHi = Math.min(BANDS.lMax, (t.l[t.l.length - 1] as number) + L_JITTER)
+  const STRUCT_WINDOW = 0.06
 
-  // Lightness. A temperament with poles wants a floor slide and a ceiling
-  // slide, which is what gives a lightbox roll its shape; one without wants its
-  // whole set inside a narrower band, and forcing the extremes on it is exactly
-  // how a smoke set stops being smoke. The rungs are drawn flat: the old
-  // 22/52/26 skew over three rungs was a way of saying "middles are commoner"
-  // and it moves the mean lightness by 0.006, which the ladder itself now says
-  // far more loudly.
+  // Where the anchor and the field land. Both avoid the quiet roles, because
+  // the gel and the wash overwrite density outright and the two sheets that
+  // exist to own their density are the two that cannot afford to lose it.
+  // The order is shuffled over every index rather than over the eligible ones
+  // so the draw count does not depend on what the user pinned.
+  const order = rng.shuffle([...Array(Math.max(count, 1)).keys()])
+  let anchorAt = -1
+  let fieldAt = -1
+  if (count >= 2) {
+    for (const i of order) {
+      if (req.keep[i] || i === roles.neutral || i === roles.wash) continue
+      if (anchorAt < 0) anchorAt = i
+      else {
+        fieldAt = i
+        break
+      }
+    }
+  }
+
+  // The rungs are drawn flat: the old 22/52/26 skew over three rungs was a way
+  // of saying "middles are commoner" and it moves the mean lightness by 0.006,
+  // which the ladder itself now says far more loudly.
   const lBands: number[] = []
-  if (t.poles) lBands.push(t.l[0] as number, t.l[t.l.length - 1] as number)
   while (lBands.length < Math.max(count, 2)) lBands.push(rung(rng, t.l))
 
-  // Chroma. Under poles the two seeded slots also carry the set's real colour,
-  // the way they always did. Without poles every slot is drawn, which is what
-  // lets siren put one loud rung among quiet ones instead of two.
-  const cs: number[] = []
-  if (t.poles) {
-    const top = t.c[t.c.length - 1] as number
-    const next = t.c[Math.max(0, t.c.length - 2)] as number
-    cs.push(next, rng.next() < 0.55 ? top : next)
-  }
+  // Chroma. Two slots are seeded from the top of the ladder so a set always
+  // carries real colour somewhere; the rest are drawn, which is what lets
+  // siren put one loud rung among quiet ones instead of two.
+  const top = t.c[t.c.length - 1] as number
+  const next = t.c[Math.max(0, t.c.length - 2)] as number
+  const cs: number[] = [next, rng.next() < 0.55 ? top : next]
   while (cs.length < Math.max(count, 2)) cs.push(rung(rng, t.c))
 
   const slots = lBands.map((L, i) => ({ L, c: cs[i] as number }))
@@ -1261,7 +1378,8 @@ function buildCandidate(
 
     const areaNorm = clamp(req.areaNorm[i] ?? 0.5, 0, 1)
     const slot = slots[i] as { L: number; c: number }
-    let want = slot.L + rng.spread(L_JITTER)
+    const structural = i === anchorAt ? t.anchor : i === fieldAt ? t.field : null
+    let want = (structural ? structural[0] : slot.L) + rng.spread(L_JITTER)
     let targetC = Math.max(0.02, slot.c + rng.spread(C_JITTER))
     const h = wrap360(base + (offsets[i] as number) + rng.spread(H_JITTER))
     // Big slides stay thin. A large dense slide reads as coloured paper, not
@@ -1270,7 +1388,12 @@ function buildCandidate(
     // nothing about the sitting.
     const dLo = t.d[0]
     const dHi = t.d[1]
-    let d = rng.range(dLo, dHi) - 0.12 * areaNorm
+    // The draw happens either way, so the stream does not depend on which slot
+    // the anchor landed on. Structural sheets take half the area thinning: at
+    // full thinning an anchor that drew the largest slide came back 0.12
+    // lighter, which is most of the contrast it exists to provide.
+    const drawn = rng.range(dLo, dHi)
+    let d = structural ? structural[1] - 0.06 * areaNorm : drawn - 0.12 * areaNorm
 
     let neutral = false
     if (i === roles.neutral) {
@@ -1292,14 +1415,20 @@ function buildCandidate(
       if (i === roles.accent) targetC *= ACCENT_C
     } else {
       if (i === roles.accent) targetC *= ACCENT_C
-      d = clamp(d, dLo, dHi)
+      if (i === fieldAt) targetC *= FIELD_C
+      // A structural sheet keeps the density it was given. Clamping it back
+      // into the temperament's own range is exactly the move that made every
+      // roll flat: chalk's anchor would come back at 0.66 and vanish.
+      if (!structural) d = clamp(d, dLo, dHi)
     }
 
-    want = clamp(want, lLo, lHi)
+    const wLo = structural ? Math.max(BANDS.lMin, structural[0] - STRUCT_WINDOW) : lLo
+    const wHi = structural ? Math.min(BANDS.lMax, structural[0] + STRUCT_WINDOW) : lHi
+    want = clamp(want, wLo, wHi)
     targetC = Math.min(targetC, BANDS.cMax)
     // Lightness follows the hue, so the slot gets the chroma it asked for rather
     // than whatever sRGB happened to have left at an arbitrary lightness.
-    const L = neutral ? want : lightnessFor(h, targetC, want, lLo, lHi)
+    const L = neutral ? want : lightnessFor(h, targetC, want, wLo, wHi)
     const C = neutral ? NEUTRAL_C : clamp(Math.min(targetC, maxChroma(L, h, BANDS.cMax)), 0, BANDS.cMax)
     d = clamp(d, BANDS.dMin, BANDS.dMax)
 
