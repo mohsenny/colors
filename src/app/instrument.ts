@@ -113,7 +113,7 @@ export class Instrument {
     this.root = root
     this.viewport = measureViewport(root)
 
-    const seed = readSeedFromHash()
+    const seed = resolveSeed()
     this.paletteRng = new Rng(seed ^ 0x5bf03635)
     this.sim = new Simulation(seed, this.viewport)
     this.history = new History(this.viewport.slideCount)
@@ -655,13 +655,77 @@ export class Instrument {
   }
 }
 
-function readSeedFromHash(): number {
+/**
+ * Where this tab's own address is remembered, so a seed the instrument wrote
+ * can be told apart from one a person arrived with. `sessionStorage` is the
+ * right store rather than `history.state`: it survives a reload including a
+ * hard one, it is scoped to the tab so a link opened in a new tab is correctly
+ * read as someone else's, and it dies with the tab.
+ */
+const OWN_SEED_KEY = 'lb.own-seed'
+
+function ownSeed(): string | null {
+  try {
+    return window.sessionStorage.getItem(OWN_SEED_KEY)
+  } catch {
+    // Private browsing can refuse storage entirely. Without the marker every
+    // load looks shared, which reproduces the sitting: the old behaviour, and
+    // the safe direction to fail in, because an address that works is better
+    // than a reroll nobody asked for.
+    return null
+  }
+}
+
+/**
+ * A seed in the hash means one of two different things and the instrument has
+ * to act differently on each.
+ *
+ * Someone arriving with a link is asking for that exact sitting and gets it
+ * reproduced to the pixel. But the instrument also writes the seed into the
+ * hash itself so a sitting always has an address, and reading that back on
+ * reload made every refresh a replay: the same sheet sizes, the same
+ * positions, the same drift, for as long as the tab stayed open. That is the
+ * opposite of what a refresh means on a discovery instrument, where the whole
+ * value is another arrangement to look at. So a hash this tab wrote itself is
+ * spent on sight and a fresh sitting is rolled instead.
+ */
+/**
+ * The document's seed, decided once however many times the instrument is
+ * built. Memoising it is not an optimisation, it is the correctness of the
+ * rule above: resolving consumes the hash, and React's development double
+ * mount builds the instrument twice, so a per-construction decision would
+ * have the second mount roll straight past the address the first one honoured.
+ * One document, one sitting, one decision.
+ */
+let documentSeed: number | null = null
+
+function resolveSeed(): number {
+  if (documentSeed !== null) return documentSeed
   const match = /[#&]s=([0-9a-z]+)/i.exec(window.location.hash)
   if (match) {
-    const parsed = Number.parseInt(match[1] as string, 36)
-    if (Number.isFinite(parsed) && parsed > 0) return parsed >>> 0
+    const token = (match[1] as string).toLowerCase()
+    const parsed = Number.parseInt(token, 36)
+    if (ownSeed() !== token && Number.isFinite(parsed) && parsed > 0) {
+      // An address this tab has not seen before, so someone is asking for this
+      // exact sitting. Honour it, then spend it: the visitor's next refresh
+      // should move them on rather than trapping them in one arrangement,
+      // which is the same reason the instrument spends its own seeds.
+      documentSeed = parsed >>> 0
+      spendSeed(token)
+      return documentSeed
+    }
   }
-  return randomSeed()
+  documentSeed = randomSeed()
+  spendSeed(documentSeed.toString(36))
+  return documentSeed
+}
+
+function spendSeed(token: string): void {
+  try {
+    window.sessionStorage.setItem(OWN_SEED_KEY, token)
+  } catch {
+    // See ownSeed: storage can be unavailable and the fallback is to replay.
+  }
 }
 
 function writeSeedToHash(seed: number): void {
