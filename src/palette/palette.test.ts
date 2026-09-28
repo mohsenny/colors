@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { DENSITY_MAX, DENSITY_MIN, SLIDE_COUNT } from '../core/constants'
+import { DENSITY_MAX, SLIDE_COUNT } from '../core/constants'
 import { filmLinear, linearToOklch } from '../core/oklab'
 import { Rng } from '../core/rng'
 import type { Dye } from '../core/types'
+import type { Temperament } from './palette'
 import {
   BANDS,
   NEUTRAL_C,
+  TEMPERAMENTS,
   generatePalette,
   paletteViolations,
-  quietSlots,
+  pickTemperament,
+  quietBudget,
   scorePalette,
 } from './palette'
 
@@ -32,24 +35,48 @@ function arcDist(a: number, b: number): number {
   return d > 180 ? 360 - d : d
 }
 
-function roll(seed: number, previous: Dye[] | null = null, keep: (Dye | null)[] = NO_KEEP): Dye[] {
-  return generatePalette({
-    rng: new Rng((seed * 2654435761) >>> 0),
-    count: 6,
-    areaNorm: AREA,
-    keep,
-    previous,
-  })
+/**
+ * A roll and the temperament that produced it.
+ *
+ * Almost every assertion below had to become conditional on the temperament,
+ * because that is the change: there is no longer one standard a roll can be
+ * held to. The temperament is recoverable from the seed alone because it is
+ * the roll's first RNG draw, so a fresh Rng on the same seed names the sitting
+ * without the generator having to hand it back.
+ */
+interface Roll {
+  dyes: Dye[]
+  t: Temperament
+}
+
+function rollWith(
+  seed: number,
+  previous: Dye[] | null = null,
+  keep: (Dye | null)[] = NO_KEEP,
+  count = 6,
+  areaNorm: number[] = AREA,
+): Roll {
+  const s = (seed * 2654435761) >>> 0
+  return {
+    t: pickTemperament(new Rng(s), count),
+    dyes: generatePalette({ rng: new Rng(s), count, areaNorm, keep, previous }),
+  }
+}
+
+/** The film chroma a temperament calls "carrying colour". */
+function satFloor(t: Temperament): number {
+  return t.limits.satC ?? 0.085
 }
 
 describe('generatePalette over 300 seeds', () => {
-  const palettes: Dye[][] = []
+  const rolls: Roll[] = []
   let previous: Dye[] | null = null
   for (let s = 0; s < 300; s++) {
-    const next = roll(s, previous)
-    palettes.push(next)
-    previous = next
+    const next = rollWith(s, previous)
+    rolls.push(next)
+    previous = next.dyes
   }
+  const palettes = rolls.map((r) => r.dyes)
 
   it('always returns exactly six usable dyes', () => {
     for (const dyes of palettes) {
@@ -78,25 +105,37 @@ describe('generatePalette over 300 seeds', () => {
     }
   })
 
-  it('spends exactly as many slots on quiet as the palette size allows', () => {
+  it('spends exactly as many slots on quiet as its temperament asks for', () => {
+    // This used to count slides thinner than DENSITY_MIN and compare that to a
+    // function of the palette size. Neither half survives: the quiet count is
+    // the temperament's own, and a chalk slide is thinner than DENSITY_MIN
+    // without being quiet at all, so thinness is measured against the
+    // temperament's own density floor instead of a global one.
     const gelSlots = new Set<number>()
-    for (const dyes of palettes) {
-      // The gel and the wash are the only slides thinner than a plain slide can
-      // be, which makes density the reliable way to count them.
-      expect(dyes.filter((d) => d.d < DENSITY_MIN).length).toBe(quietSlots(6))
-      // Exactly one near-neutral gel, and it lands in the middle of the size
-      // ladder: slots 2 to 4 for this AREA, never on the largest or smallest.
-      const gels = dyes.map((d, i) => [d, i] as const).filter(([d]) => d.C <= NEUTRAL_C + 1e-9)
-      expect(gels).toHaveLength(1)
-      const slot = (gels[0] as readonly [Dye, number])[1]
-      expect(slot).toBeGreaterThanOrEqual(2)
-      expect(slot).toBeLessThanOrEqual(4)
-      gelSlots.add(slot)
-      // At least two slides carry real colour.
-      expect(dyes.filter((d) => effChroma(d) >= 0.085).length).toBeGreaterThanOrEqual(2)
+    let withGel = 0
+    for (const { dyes, t } of rolls) {
+      const budget = quietBudget(6, NO_KEEP, t.quiet)
+      expect(dyes.filter((d) => d.d < t.d[0]).length).toBe(budget)
+      // The gel is pinned to exactly NEUTRAL_C, which no drawn slide lands on.
+      const gels = dyes.map((d, i) => [d, i] as const).filter(([d]) => d.C === NEUTRAL_C)
+      expect(gels).toHaveLength(budget >= 1 ? 1 : 0)
+      if (gels.length === 1) {
+        // It lands in the middle of the size ladder: slots 2 to 4 for this
+        // AREA, never on the largest or smallest.
+        const slot = (gels[0] as readonly [Dye, number])[1]
+        expect(slot).toBeGreaterThanOrEqual(2)
+        expect(slot).toBeLessThanOrEqual(4)
+        gelSlots.add(slot)
+        withGel++
+      }
+      // Something in the set carries colour BY ITS OWN STANDARD. The old fixed
+      // 0.085 threshold is chalk's entire ladder, so asserting it globally
+      // would be asserting that chalk must not exist.
+      expect(dyes.filter((d) => effChroma(d) >= satFloor(t)).length).toBeGreaterThanOrEqual(1)
     }
-    // And it moves. The same slot going grey on every reroll is the predictable
-    // symmetry the brief rules out.
+    // And the gel moves. The same slot going grey on every reroll is the
+    // predictable symmetry the brief rules out.
+    expect(withGel).toBeGreaterThan(50)
     expect(gelSlots.size).toBe(3)
   })
 
@@ -107,14 +146,15 @@ describe('generatePalette over 300 seeds', () => {
     // lightness at half weight so a staircase of one hue cannot pass.
     const AREAS = Array.from({ length: SLIDE_COUNT }, (_, i) => 1 - (i * 0.76) / SLIDE_COUNT)
     const nearest: number[] = []
-    for (let s = 0; s < 200; s++) {
-      const dyes = generatePalette({
-        rng: new Rng((s * 2654435761 + 7) >>> 0),
-        count: SLIDE_COUNT,
-        areaNorm: AREAS,
-        keep: Array.from({ length: SLIDE_COUNT }, () => null),
-        previous: null,
-      })
+    const everyNearest: number[] = []
+    for (let s = 0; s < 300; s++) {
+      const { dyes, t } = rollWith(
+        s * 31 + 7,
+        null,
+        Array.from({ length: SLIDE_COUNT }, () => null),
+        SLIDE_COUNT,
+        AREAS,
+      )
       const pts = dyes.map((d) => {
         const [r, g, b] = filmLinear(d)
         const o = linearToOklch(r, g, b)
@@ -129,40 +169,81 @@ describe('generatePalette over 300 seeds', () => {
           worst = Math.min(worst, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]))
         }
       }
-      nearest.push(worst)
+      everyNearest.push(worst)
+      // The numbers below were measured on the lightbox character and belong
+      // to it. A chalk roll's median nearest pair is 0.017 and a siren roll
+      // holds two or three deliberately quiet colours: those are the material
+      // rather than a fault, and each is held to its own floor by the
+      // constraint itself. A roll that found no legal candidate is the least
+      // bad of 56 rejects and promises only the universal floor. Everything
+      // excluded here is still graded by `everyNearest`.
+      const legal = paletteViolations(dyes, null, t).length === 0
+      if (legal && t.name === 'lightbox') nearest.push(worst)
     }
     nearest.sort((a, b) => a - b)
+    everyNearest.sort((a, b) => a - b)
     // The floor holds outright, and the tenth percentile sits well clear of it:
     // the scorer is supposed to pull the whole distribution up, not just clip
     // the tail. Before this existed the tenth percentile was 0.047 and a sixth
     // of all rolls contained a pair under 0.05.
     expect(nearest[0] as number).toBeGreaterThan(0.04)
     expect(nearest[Math.floor(nearest.length * 0.1)] as number).toBeGreaterThan(0.055)
+    // And no temperament may opt out of two slides being two slides.
+    expect(everyNearest[0] as number).toBeGreaterThan(0.006)
   })
 
-  it('satisfies the hard constraints in at least 85% of rolls', () => {
+  it('satisfies the hard constraints of its own temperament in at least 85% of rolls', () => {
+    // Graded against the temperament that produced the roll. Against a single
+    // fixed rubric this test measures the wrong thing twice over: an ink set
+    // fails chalk's standard and a chalk set fails ink's, and both are good.
     let clean = 0
     let prev: Dye[] | null = null
-    for (const dyes of palettes) {
-      if (paletteViolations(dyes, prev).length === 0) clean++
+    for (const { dyes, t } of rolls) {
+      if (paletteViolations(dyes, prev, t).length === 0) clean++
       prev = dyes
     }
-    expect(clean / palettes.length).toBeGreaterThanOrEqual(0.85)
+    expect(clean / rolls.length).toBeGreaterThanOrEqual(0.85)
   })
 
   it('produces a novel palette every time', () => {
+    // The per-roll floor is the loosest temperament's novelty rule rather than
+    // the old flat 20 degrees: a study leans on lightness instead of hue, so
+    // demanding a big hue move from it would be demanding it stop being a
+    // study. The median still has to stay wide, which is the real claim.
+    const shifts: number[] = []
     for (let i = 1; i < palettes.length; i++) {
       const a = palettes[i - 1] as Dye[]
       const b = palettes[i] as Dye[]
       expect(b).not.toEqual(a)
       let shift = 0
       for (let s = 0; s < 6; s++) shift += arcDist((a[s] as Dye).h, (b[s] as Dye).h)
-      expect(shift / 6).toBeGreaterThanOrEqual(20)
+      shifts.push(shift / 6)
+      expect(shift / 6).toBeGreaterThan(5)
     }
+    shifts.sort((x, y) => x - y)
+    expect(shifts[Math.floor(shifts.length / 2)] as number).toBeGreaterThan(40)
   })
 
   it('spends real chroma rather than returning six near-neutrals', () => {
-    for (const dyes of palettes) expect(scorePalette(dyes)).toBeGreaterThan(0.5)
+    for (const { dyes, t } of rolls) expect(scorePalette(dyes, t)).toBeGreaterThan(0.5)
+  })
+
+  it('varies the sitting itself, not only the key it is played in', () => {
+    // The measurement this whole change answers. Before temperaments the
+    // between-roll spread of mean film lightness was 0.016 against a
+    // within-roll spread of 0.071: every roll was the same chord in a
+    // different key. The temperament is drawn once and shared by every sheet,
+    // which is the only structure that can move the first number.
+    const means = palettes.map((dyes) => {
+      const ls = dyes.map((d) => {
+        const [r, g, b] = filmLinear(d)
+        return linearToOklch(r, g, b).L
+      })
+      return ls.reduce((a, b) => a + b, 0) / ls.length
+    })
+    const mean = means.reduce((a, b) => a + b, 0) / means.length
+    const sd = Math.sqrt(means.reduce((a, b) => a + (b - mean) ** 2, 0) / means.length)
+    expect(sd).toBeGreaterThan(0.04)
   })
 })
 
@@ -195,19 +276,24 @@ describe('locked slots', () => {
     // The quiet roles are spent out of the free slots, so an uncapped budget
     // made the single regenerable slide the gel every time: pressing Regenerate
     // produced the same near-grey on every press, which reads as a dead button.
-    const rng = new Rng(777)
-    const base = generatePalette({ rng, count: 6, areaNorm: AREA, keep: NO_KEEP, previous: null })
+    const base = generatePalette({
+      rng: new Rng(777),
+      count: 6,
+      areaNorm: AREA,
+      keep: NO_KEEP,
+      previous: null,
+    })
     for (const freeSlot of [0, 1, 2, 3, 4, 5]) {
       const keep = base.map((d, i) => (i === freeSlot ? null : d))
       const seen = new Set<string>()
       for (let r = 0; r < 12; r++) {
-        const out = generatePalette({ rng, count: 6, areaNorm: AREA, keep, previous: base })
-        const dye = out[freeSlot] as Dye
-        // Neither of the two quiet roles: not the near-neutral gel, and not
-        // the thinned wash. Dye chroma is the right scale here because that is
-        // what the gel is pinned to, hue-independent.
-        expect(dye.C).toBeGreaterThanOrEqual(0.06)
-        expect(dye.d).toBeGreaterThanOrEqual(DENSITY_MIN)
+        const { dyes, t } = rollWith(freeSlot * 97 + r, base, keep)
+        const dye = dyes[freeSlot] as Dye
+        // Neither of the two quiet roles: not the gel, which is pinned to
+        // exactly NEUTRAL_C, and not the thinned wash, which is the only
+        // slide that can sit below its own temperament's density floor.
+        expect(dye.C).not.toBe(NEUTRAL_C)
+        expect(dye.d).toBeGreaterThanOrEqual(t.d[0])
         seen.add(`${Math.round(dye.h)}`)
       }
       // And it is not the same colour every press.
@@ -233,40 +319,42 @@ describe('locked slots', () => {
 describe('smaller viewports and odd input', () => {
   it('scales down to four slots', () => {
     let clean = 0
+    const AREAS = [1, 0.7, 0.45, 0.3]
     for (let s = 0; s < 120; s++) {
-      const dyes = generatePalette({
-        rng: new Rng((s * 7919 + 3) >>> 0),
-        count: 4,
-        areaNorm: [1, 0.7, 0.45, 0.3],
-        keep: [],
-        previous: null,
-      })
+      const { dyes, t } = rollWith(s * 13 + 3, null, [], 4, AREAS)
       expect(dyes).toHaveLength(4)
-      expect(dyes.filter((d) => d.d < DENSITY_MIN).length).toBe(quietSlots(4))
-      expect(dyes.filter((d) => effChroma(d) >= 0.085).length).toBeGreaterThanOrEqual(2)
-      if (paletteViolations(dyes, null).length === 0) clean++
+      // One quiet slot at most on a phone whatever the temperament asks for:
+      // two of four left half the screen colourless.
+      const budget = quietBudget(4, [], t.quiet)
+      expect(budget).toBeLessThanOrEqual(1)
+      expect(dyes.filter((d) => d.d < t.d[0]).length).toBe(budget)
+      if (paletteViolations(dyes, null, t).length === 0) {
+        expect(dyes.filter((d) => effChroma(d) >= satFloor(t)).length).toBeGreaterThanOrEqual(1)
+        clean++
+      }
     }
     expect(clean / 120).toBeGreaterThanOrEqual(0.85)
   })
 
   it('still finds a legal palette at two and three slots', () => {
     // A two or three slide palette has no slot to spare on a quiet one, so every
-    // slide has to carry colour and no gel is required.
+    // slide has to carry colour and no gel is required, whatever the
+    // temperament would have liked.
     for (const count of [2, 3]) {
       let clean = 0
       for (let s = 0; s < 200; s++) {
-        const dyes = generatePalette({
-          rng: new Rng((s * 7919 + count) >>> 0),
-          count,
-          areaNorm: AREA.slice(0, count),
-          keep: [],
-          previous: null,
-        })
+        const { dyes, t } = rollWith(s * 29 + count, null, [], count, AREA.slice(0, count))
         expect(dyes).toHaveLength(count)
-        expect(quietSlots(count)).toBe(0)
-        expect(dyes.filter((d) => d.d < DENSITY_MIN).length).toBe(0)
-        expect(dyes.filter((d) => effChroma(d) >= 0.085).length).toBeGreaterThanOrEqual(1)
-        if (paletteViolations(dyes, null).length === 0) clean++
+        expect(quietBudget(count, [], t.quiet)).toBe(0)
+        expect(dyes.filter((d) => d.d < t.d[0]).length).toBe(0)
+        // Colour is asserted on the legal rolls only. A roll that found no
+        // legal candidate returns the least bad of 56 rejects, and demanding
+        // that a reject still meet the rule it was rejected for is asking the
+        // fallback to be unnecessary.
+        if (paletteViolations(dyes, null, t).length === 0) {
+          expect(dyes.filter((d) => effChroma(d) >= satFloor(t)).length).toBeGreaterThanOrEqual(1)
+          clean++
+        }
       }
       expect(clean / 200).toBeGreaterThanOrEqual(0.85)
     }
@@ -292,17 +380,15 @@ describe('hue separation at the real slide count', () => {
   // is a consequence of the count. Adding two slides once silently narrowed the
   // families and nobody noticed until it was on screen.
   const AREAS = Array.from({ length: SLIDE_COUNT }, (_, i) => 1 - (i * 0.76) / SLIDE_COUNT)
+  // Only the temperaments that leave the hue rules alone. A study is one hue
+  // family by construction and chalk asks for a tighter one, so both would
+  // fail a test whose subject is "the set should not be four shades of one
+  // hue" while being exactly the sets that should. What the test still has to
+  // catch, an ordinary roll quietly collapsing into a family, lives here.
   const rolls: Dye[][] = []
-  for (let s = 0; s < 200; s++) {
-    rolls.push(
-      generatePalette({
-        rng: new Rng((s * 2246822519 + 11) >>> 0),
-        count: SLIDE_COUNT,
-        areaNorm: AREAS,
-        keep: [],
-        previous: null,
-      }),
-    )
+  for (let s = 0; s < 400; s++) {
+    const r = rollWith(s * 13 + 11, null, [], SLIDE_COUNT, AREAS)
+    if (r.t.limits.minGap === undefined) rolls.push(r.dyes)
   }
 
   /** Every slide's distance to its nearest hue neighbour. */
@@ -409,6 +495,111 @@ describe('the constraint and score functions themselves', () => {
   it('treats an empty palette as inert rather than an error', () => {
     expect(scorePalette([])).toBe(0)
     expect(paletteViolations([], null)).toEqual([])
+  })
+})
+
+describe('temperaments', () => {
+  /** Mean lightness of the light coming off the set. */
+  function meanFilmL(dyes: Dye[]): number {
+    const ls = dyes.map((d) => {
+      const [r, g, b] = filmLinear(d)
+      return linearToOklch(r, g, b).L
+    })
+    return ls.reduce((a, b) => a + b, 0) / ls.length
+  }
+
+  const sample: Roll[] = []
+  for (let s = 0; s < 700; s++) sample.push(rollWith(s * 7 + 1))
+
+  it('can all come up', () => {
+    // The most likely bug in this change is a temperament that can never be
+    // selected: nothing else in the code would notice, and the instrument
+    // would quietly keep the character it already had.
+    const counts = new Map<string, number>()
+    for (const { t } of sample) counts.set(t.name, (counts.get(t.name) ?? 0) + 1)
+    const missing = TEMPERAMENTS.filter((t) => (counts.get(t.name) ?? 0) < 20).map((t) => t.name)
+    expect(missing).toEqual([])
+    // And each one comes up at roughly its declared weight, so a table edit
+    // means what it says. Within 5 points of the weight over 700 rolls.
+    const off = TEMPERAMENTS.filter(
+      (t) => Math.abs((counts.get(t.name) ?? 0) / sample.length - t.weight) > 0.05,
+    ).map((t) => t.name)
+    expect(off).toEqual([])
+  })
+
+  it('can all come up at the slide count the app actually uses', () => {
+    // SLIDE_COUNT is 8 and ink asks for four to six, so a count preference
+    // that excluded rather than demoted would have made a seventh of the
+    // table unreachable in the real instrument while every test at six slides
+    // went on passing.
+    const counts = new Map<string, number>()
+    for (let s = 0; s < 600; s++) {
+      const t = pickTemperament(new Rng((s * 2654435761 + 5) >>> 0), SLIDE_COUNT)
+      counts.set(t.name, (counts.get(t.name) ?? 0) + 1)
+    }
+    const missing = TEMPERAMENTS.filter((t) => (counts.get(t.name) ?? 0) < 10).map((t) => t.name)
+    expect(missing).toEqual([])
+  })
+
+  it('can all produce a palette that is legal by their own standard', () => {
+    // The second most likely bug: a temperament whose ladders and whose limits
+    // were written by hand and disagree with each other, so every candidate
+    // fails and the roll falls through to the least-bad of 56 rejects.
+    const failing: string[] = []
+    for (const t of TEMPERAMENTS) {
+      const mine = sample.filter((r) => r.t.name === t.name)
+      const clean = mine.filter((r) => paletteViolations(r.dyes, null, r.t).length === 0).length
+      if (clean / mine.length < 0.6) failing.push(`${t.name} ${clean}/${mine.length}`)
+    }
+    expect(failing).toEqual([])
+  })
+
+  it('keeps each sitting inside its own lightness and density ladder', () => {
+    // A temperament that leaks is a temperament that does not exist. The
+    // tolerance is L_JITTER plus the area thinning, nothing more.
+    for (const { dyes, t } of sample) {
+      for (const d of dyes) {
+        expect(d.L).toBeGreaterThanOrEqual((t.l[0] as number) - 0.03)
+        expect(d.L).toBeLessThanOrEqual((t.l[t.l.length - 1] as number) + 0.03)
+        expect(d.d).toBeLessThanOrEqual(Math.min(t.d[1], BANDS.dMax) + 1e-9)
+      }
+    }
+  })
+
+  it('makes the sittings differ from each other, which is the whole point', () => {
+    const byName = new Map<string, number[]>()
+    for (const { dyes, t } of sample) {
+      const list = byName.get(t.name) ?? []
+      list.push(meanFilmL(dyes))
+      byName.set(t.name, list)
+    }
+    const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length
+    // Chalk against ink is the widest pair in the table, and if these two land
+    // in the same place the ladders are not reaching the glass.
+    expect(mean(byName.get('chalk') as number[])).toBeGreaterThan(
+      mean(byName.get('ink') as number[]) + 0.2,
+    )
+  })
+
+  it('does not tilt the hue histogram', () => {
+    // Hue uniformity is the one axis that already worked, so no temperament
+    // carries a hue window or a warm/cool bias and this is the guard that says
+    // so. 12 bins of 30 degrees over every slide of every roll, each within a
+    // quarter of flat.
+    const bins = new Array<number>(12).fill(0)
+    let total = 0
+    for (const { dyes } of sample) {
+      for (const d of dyes) {
+        const bin = Math.min(11, Math.floor((((d.h % 360) + 360) % 360) / 30))
+        bins[bin] = (bins[bin] as number) + 1
+        total++
+      }
+    }
+    const flat = total / 12
+    for (const b of bins) {
+      expect(b).toBeGreaterThan(flat * 0.75)
+      expect(b).toBeLessThan(flat * 1.25)
+    }
   })
 })
 
