@@ -101,6 +101,88 @@ describe('the field the tubes take their colour from', () => {
     expect(out[0]).toBeLessThanOrEqual(1)
   })
 
+  it('gives a lone sheet its own area and nothing else', () => {
+    const out: [number, number, number] = [0, 0, 0]
+    const shares = new Float64Array(4)
+    integrateField(levelsOf(region(0b01, 250, BLACK)), 1000, out, shares)
+    expect(shares[0]).toBeCloseTo(0.25, 12)
+    expect(shares[1]).toBe(0)
+  })
+
+  it('splits the crossing equally and never past the covered fraction', () => {
+    // Two sheets of 100 crossing by 40. Each keeps its 60 of open sheet and
+    // takes half of the 40, so each is 80 of 1000. Handing the crossing to a
+    // topmost sheet would make one of them 100 and the other 60, and there is
+    // no topmost sheet in this renderer to ask.
+    const out: [number, number, number] = [0, 0, 0]
+    const shares = new Float64Array(4)
+    const levels = levelsOf(
+      region(0b01, 100, BLACK),
+      region(0b10, 100, BLACK),
+      region(0b11, 40, BLACK),
+    )
+    const covered = integrateField(levels, 1000, out, shares)
+    expect(shares[0]).toBeCloseTo(0.08, 12)
+    expect(shares[1]).toBeCloseTo(0.08, 12)
+    expect((shares[0] as number) + (shares[1] as number)).toBeCloseTo(covered, 12)
+  })
+
+  it('dilutes every sheet as another one joins, while the total climbs', () => {
+    // The reading the tab is for, and the one thing credit-1/k guarantees that
+    // "the topmost sheet owns the region" does not. Two sheets of 300 in a
+    // room of 1000 crossing by 150, then a third crossing each of them by 150
+    // with all three sharing 60.
+    const out: [number, number, number] = [0, 0, 0]
+    const two = new Float64Array(4)
+    const coveredTwo = integrateField(
+      levelsOf(region(0b001, 300, BLACK), region(0b010, 300, BLACK), region(0b011, 150, BLACK)),
+      1000,
+      out,
+      two,
+    )
+    const three = new Float64Array(4)
+    const coveredThree = integrateField(
+      levelsOf(
+        region(0b001, 300, BLACK),
+        region(0b010, 300, BLACK),
+        region(0b100, 300, BLACK),
+        region(0b011, 150, BLACK),
+        region(0b101, 150, BLACK),
+        region(0b110, 150, BLACK),
+        region(0b111, 60, BLACK),
+      ),
+      1000,
+      out,
+      three,
+    )
+    // 150 of open sheet plus half of the 150 crossing, of 1000.
+    expect(two[0]).toBeCloseTo(0.225, 12)
+    expect(coveredTwo).toBeCloseTo(0.45, 12)
+    // 60 open, half of each of two crossings, a third of the core.
+    expect(three[0]).toBeCloseTo(0.17, 12)
+    expect(three[0]).toBeLessThan(two[0] as number)
+    expect(three[1]).toBeLessThan(two[1] as number)
+    expect(coveredThree).toBeGreaterThan(coveredTwo)
+    const sum = (three[0] as number) + (three[1] as number) + (three[2] as number)
+    expect(sum).toBeCloseTo(coveredThree, 12)
+  })
+
+  it('zeroes a stale share rather than leaving it on the tab', () => {
+    const out: [number, number, number] = [0, 0, 0]
+    const shares = new Float64Array(4)
+    shares[2] = 0.42
+    integrateField(levelsOf(region(0b01, 250, BLACK)), 1000, out, shares)
+    expect(shares[2]).toBe(0)
+  })
+
+  it('gives every sheet zero when there is no lit surface left', () => {
+    const out: [number, number, number] = [0, 0, 0]
+    const shares = new Float64Array(4)
+    integrateField(levelsOf(region(0b01, 250, BLACK), region(0b10, 250, BLACK)), 0, out, shares)
+    expect(shares[0]).toBe(0)
+    expect(shares[1]).toBe(0)
+  })
+
   it('is fully covered and fully coloured when the sheets fill the surface', () => {
     const out: [number, number, number] = [0, 0, 0]
     const covered = integrateField(levelsOf(region(0b01, 1000, BLACK)), 1000, out)

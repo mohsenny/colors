@@ -32,11 +32,8 @@ import {
   ROT_RESTORE_DEG,
   SIZE_FRAC_MAX,
   SIZE_FRAC_MIN,
-  SIZE_FRAC_ONE,
-  SIZE_FRAC_ONE_SMALL,
   SLIDE_ASPECT,
   SLIDE_ASPECT_SPREAD,
-  SMALL_VIEWPORT,
   SOFT_CATCH_CHANCE,
   SOFT_CATCH_FACTOR,
   SOFT_CATCH_RECOVER,
@@ -60,7 +57,7 @@ import type { LitRect } from '../core/lit'
 import { DEG, clamp, clampAbs, makeNoiseTables, smoothstep, vnoise, wrapPi } from '../core/noise'
 import { mixDye } from '../core/oklab'
 import { Rng, splitmix32 } from '../core/rng'
-import { clampSide, fitSides, sideBand } from '../core/size'
+import { clampSide, fitSides, sideBand, stockSizeFrac } from '../core/size'
 import { swayOffset, swayRoom } from '../core/sway'
 import type { Dye, SimState, SlideState, Viewport } from '../core/types'
 
@@ -459,20 +456,10 @@ export class Simulation {
 
   // --- geometry -------------------------------------------------------------
 
-  /**
-   * The size a sheet is cut to before anybody resizes it, as a fraction of the
-   * short edge. The px band decides and the fraction follows: on a phone the
-   * plain fraction lands under the readable floor, and on a very large monitor
-   * a 30% sheet would cover most of the box.
-   *
-   * A function of the screen only. It used to shrink as sheets were added,
-   * which cannot survive a count that changes while the instrument is running.
-   */
+  /** See `stockSizeFrac`: the cut size moved to core/size.ts when the stage
+   *  needed it too, and there may only ever be one of it. */
   private stockSize(): number {
-    const vp = this.viewport
-    const frac = vp.short < SMALL_VIEWPORT ? SIZE_FRAC_ONE_SMALL : SIZE_FRAC_ONE
-    const px = clampSide(frac * vp.short, sideBand(vp.short))
-    return clamp(px / vp.short, SIZE_FRAC_MIN, SIZE_FRAC_MAX)
+    return stockSizeFrac(this.viewport.short)
   }
 
   private dimensions(sizeFrac: number, aspect: number): { w: number; h: number } {
@@ -667,6 +654,12 @@ export class Simulation {
       // what stops it changing colour.
       if (s.held) {
         this.colourStep(s, dt, t)
+        // Containment is not kinematics. A wall that moves can arrive at a
+        // sheet the user is holding, and a held sheet that kept its ground
+        // would be drawn underneath the paper, which is the one place a sheet
+        // may never be. Silent, like every other horizontal correction, and a
+        // no-op whenever the room is not moving in on it.
+        this.depenetrate(s, lit)
         continue
       }
 

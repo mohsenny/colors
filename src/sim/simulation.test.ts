@@ -275,6 +275,25 @@ describe('crowding', () => {
     expect(worstOffCentre).toBeLessThan(1 / VP.height)
   })
 
+  it('does not slide the paper over a sheet the user is holding', () => {
+    // The gesture keeps the selection, so the room can close on a sheet that
+    // has stopped dead. Holding stops the kinematics, not the containment: a
+    // held sheet left where it stood would be drawn underneath the paper.
+    const sim = new Simulation(777, VP)
+    const leftmost = sim.state.slides.reduce((a, s) => (s.x < a.x ? s : a))
+    sim.setHeld(leftmost.id)
+    const ticks = Math.round(40 / DT)
+    let worst = 0
+    for (let i = 0; i < ticks; i++) {
+      sim.state.crowd = (0.5 * i) / (ticks - 1)
+      sim.step(false)
+      const lit = litRect(sim.state.aspect, sim.state.crowd)
+      const b = unionBox(leftmost, VP)
+      worst = Math.max(worst, lit.x0 - b.left)
+    }
+    expect(worst).toBeLessThan(1 / VP.height)
+  })
+
   it('stops the field once it is packed', () => {
     const sim = new Simulation(777, VP)
     sim.state.crowd = 0.8

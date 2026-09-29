@@ -141,6 +141,8 @@ export class Instrument {
       onResizeEnd: () => this.notify(),
       onMove: (id, x, y) => this.moveSlide(id, x, y),
       onMoveEnd: () => this.notify(),
+      onCrowd: (crowd) => this.crowdTo(crowd),
+      onCrowdEnd: () => this.notify(),
       onPinMix: (ids, hex) => this.pinMix(ids, hex),
     })
     this.stage.sync(this.sim.state.slides)
@@ -261,13 +263,35 @@ export class Instrument {
   }
 
   /**
-   * How far the paper is in, 0 to 1. Takes effect on the next frame.
+   * How far the paper is in, 0 to 1. Live during the drag, taking effect on
+   * the next frame.
    *
-   * No notify and no snapshot: this is pointer-rate, and the one rule the
-   * loop has is that React never renders per frame.
+   * No notify and no snapshot on the moving part: this is pointer-rate, and
+   * the one rule the loop has is that React never renders per frame. The route
+   * is the one hover takes, a field read by the next rAF.
    */
-  setCrowd(v: number): void {
-    this.crowd = v < 0 ? 0 : v > 1 ? 1 : v
+  private crowdTo(crowd: number): void {
+    // An edit of simulation state, so it lands at the live edge like a move.
+    this.commitBranch()
+    /*
+     * And it starts the clock again. No steps run while paused or scrubbing,
+     * so a wall moved in those modes would sweep across sheets that cannot get
+     * out of its way and finish drawn underneath the paper: getting out of the
+     * way is something the step does. Refusing the gesture instead would make
+     * a direct manipulation feel broken, and containing without stepping would
+     * be a second resolver to keep in agreement with the first. Pushing the
+     * wall of the room in is as clear a statement as there is that the user
+     * wants the room live.
+     *
+     * The one notify of the whole gesture, and only on the transition: the
+     * dock's play button has just become wrong and nothing else can tell it.
+     */
+    if (this.playback !== 'live') {
+      this.playback = 'live'
+      this.accumulator = 0
+      this.notify()
+    }
+    this.crowd = crowd < 0 ? 0 : crowd > 1 ? 1 : crowd
   }
 
   private easeMode(dt: number): void {

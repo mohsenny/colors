@@ -27,7 +27,7 @@
  * seam can appear between neighbouring regions.
  */
 
-import { CORNER_INNER } from '../core/constants'
+import { CORNER_INNER, SLIDE_COUNT_MAX } from '../core/constants'
 import { litRect } from '../core/lit'
 import { encode, filmLinear } from '../core/oklab'
 import { blendModes, filmStat, filmToRyb, mixFilm, stackLight } from '../core/pigment'
@@ -118,13 +118,25 @@ export interface FieldRegion {
  * supersets. Deepest level first, so every superset is resolved before the
  * subsets that need it are read.
  *
- * Writes into `out`, returns the covered fraction, allocates nothing.
+ * The same disjoint areas answer the other question the tabs ask: what share
+ * of the surface is this one sheet's doing. Credit is 1/k, each disjoint
+ * region's area split equally among the k sheets covering it, which is the
+ * only split that is order free. There is no topmost sheet in this renderer to
+ * hand the whole region to, the shares sum to the covered fraction rather than
+ * past 100%, and a sheet's number falls when another sheet crosses it while
+ * the total climbs, which is the reading the tabs are for. Written into
+ * `shares` by sheet index, the same bit positions the masks are built from.
+ *
+ * Writes into `out` and `shares`, returns the covered fraction, allocates
+ * nothing.
  */
 export function integrateField(
   levels: readonly (readonly FieldRegion[])[],
   litArea: number,
   out: [number, number, number],
+  shares?: Float64Array | number[],
 ): number {
+  if (shares) for (let i = 0; i < shares.length; i++) shares[i] = 0
   let rSum = 0
   let gSum = 0
   let bSum = 0
@@ -147,6 +159,17 @@ export function integrateField(
       if (exclusive < 0) exclusive = 0
       s.exclusive = exclusive
       covered += exclusive
+      if (shares && exclusive > 0) {
+        // Walks the set bits rather than every sheet, because the deep levels
+        // are where the region count is and their sets are the small ones.
+        let bits = 0
+        for (let m = s.mask; m; m &= m - 1) bits++
+        const credit = exclusive / bits
+        for (let m = s.mask; m; m &= m - 1) {
+          const i2 = 31 - Math.clz32(m & -m)
+          if (i2 < shares.length) shares[i2] = (shares[i2] as number) + credit
+        }
+      }
       rSum += exclusive * (s.linear[0] as number)
       gSum += exclusive * (s.linear[1] as number)
       bSum += exclusive * (s.linear[2] as number)
@@ -163,6 +186,10 @@ export function integrateField(
   out[0] = rSum * k
   out[1] = gSum * k
   out[2] = bSum * k
+  // Against the lit area, so a share is a share of the room the sheet is
+  // actually in. A room of zero width gives every sheet zero, which is true
+  // and is the only finite answer.
+  if (shares) for (let i = 0; i < shares.length; i++) shares[i] = (shares[i] as number) * k
   return litArea > 0 ? covered / litArea : 0
 }
 
@@ -237,6 +264,17 @@ export class Painter {
    */
   readonly field: [number, number, number] = [1, 1, 1]
   coverage = 0
+  /**
+   * Each sheet's share of the lit surface, by sheet index, as of the last
+   * draw. Allocated once at the largest legal count and written in place.
+   */
+  private readonly shares = new Float64Array(SLIDE_COUNT_MAX)
+  /**
+   * Slides that are live but have no lit area: clipped away by the paper, or
+   * shrunk past a pixel. Their share is zero rather than missing, which is a
+   * different answer from a slide that is not on the stage at all.
+   */
+  private readonly dark: number[] = []
   /** The blend mix of the last draw, so a sample answers for what is on screen. */
   private lastMix = 0
   /** Left edge of the lit area at the last draw, in stage px. Paper's width. */
@@ -304,6 +342,9 @@ export class Painter {
     const sheets = this.collect(state, opts)
     const n = sheets.length
     if (n === 0) {
+      // Nothing to integrate, but the shares from the last draw are no longer
+      // true of anything: a stale number on a tab is worse than a zero.
+      this.shares.fill(0)
       if (clipped) ctx.restore()
       return
     }
@@ -376,6 +417,7 @@ export class Painter {
       this.levels,
       (vp.width - this.litX0) * vp.height,
       this.field,
+      this.shares,
     )
   }
 
@@ -387,6 +429,7 @@ export class Painter {
     const slides = state.slides
     const sheets = this.sheets
     sheets.length = 0
+    this.dark.length = 0
 
     const live = new Set<number>()
     for (let i = 0; i < slides.length; i++) {
@@ -395,7 +438,10 @@ export class Painter {
       live.add(slide.id)
       const hw = Math.max(0, (slide.w * vh) / 2 - vp.frame)
       const hh = Math.max(0, (slide.h * vh) / 2 - vp.frame)
-      if (hw < 0.5 || hh < 0.5) continue
+      if (hw < 0.5 || hh < 0.5) {
+        this.dark.push(slide.id)
+        continue
+      }
       const c = this.colours(slide)
       const cx = slide.x * vh
       const cy = slide.y * vh
@@ -418,7 +464,10 @@ export class Painter {
       let poly = [x0, y0, x1, y1, x2, y2, x3, y3]
       if (this.litX0 > 0) {
         poly = clipHalf(poly, -1, 0, -this.litX0)
-        if (poly.length < 6) continue
+        if (poly.length < 6) {
+          this.dark.push(slide.id)
+          continue
+        }
       }
       sheets.push({
         id: slide.id,
@@ -459,6 +508,31 @@ export class Painter {
     }
     this.cache.set(slide.id, next)
     return next
+  }
+
+  /**
+   * One sheet's share of the lit surface, 0 to 1, or null if the last draw
+   * knew nothing about that id.
+   *
+   * Null and zero are different answers and the tab reads them differently. A
+   * sheet entirely under the paper shows its mount and its tab over the paper
+   * with no colour left inside it, and zero is what it is contributing, so it
+   * says so. Null means the painter never saw the slide (the first frame, a
+   * missing 2d context), and the tab keeps its hex rather than inventing a
+   * number.
+   *
+   * A linear scan of at most twelve, called once per slide per frame: the map
+   * that would replace it costs a per-frame rebuild to save 144 comparisons.
+   */
+  shareOf(id: number): number | null {
+    const sheets = this.sheets
+    for (let i = 0; i < sheets.length; i++) {
+      if ((sheets[i] as Sheet).id === id) {
+        return i < this.shares.length ? (this.shares[i] as number) : null
+      }
+    }
+    for (let i = 0; i < this.dark.length; i++) if (this.dark[i] === id) return 0
+    return null
   }
 
   /**

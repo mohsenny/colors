@@ -7,9 +7,12 @@
 import {
   SIZE_FRAC_MAX,
   SIZE_FRAC_MIN,
+  SIZE_FRAC_ONE,
+  SIZE_FRAC_ONE_SMALL,
   SIZE_PX_MAX,
   SIZE_PX_MIN,
   SIZE_PX_MIN_CAP_FRAC,
+  SMALL_VIEWPORT,
 } from './constants'
 
 export interface SideBand {
@@ -49,6 +52,27 @@ export function sideBand(short: number): SideBand {
 export function clampSide(px: number, band: SideBand): number {
   if (!Number.isFinite(px)) return band.min
   return Math.min(band.max, Math.max(band.min, px))
+}
+
+/**
+ * The size a sheet is cut to before anybody resizes it, as a fraction of the
+ * short edge. The px band decides and the fraction follows: on a phone the
+ * plain fraction lands under the readable floor, and on a very large monitor a
+ * 30% sheet would cover most of the box.
+ *
+ * A function of the screen only, never of the count: a sheet arriving must not
+ * resize the eleven already on the glass.
+ *
+ * It lives here rather than in the simulation because the stage needs the same
+ * number: the strip of lit surface that takes hold of the paper is one stock
+ * sheet wide, and a target that drifted from the thing it is sized after would
+ * be a target nobody could learn.
+ */
+export function stockSizeFrac(short: number): number {
+  const frac = short < SMALL_VIEWPORT ? SIZE_FRAC_ONE_SMALL : SIZE_FRAC_ONE
+  const px = clampSide(frac * short, sideBand(short))
+  const f = px / short
+  return f < SIZE_FRAC_MIN ? SIZE_FRAC_MIN : f > SIZE_FRAC_MAX ? SIZE_FRAC_MAX : f
 }
 
 /**

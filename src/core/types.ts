@@ -183,9 +183,9 @@ export interface RenderOptions {
   warmth: number
   /**
    * How much of the field's own colour the tubes take, 0 to 1. At 0 the lamps
-   * are exactly what they have always been. Driven from `crowd` by the
-   * Instrument, on a straight line for now: the packing-fraction curve that
-   * replaces it is the next step.
+   * are exactly what they have always been. The Instrument drives it off the
+   * packing, as one minus the same damp the sheets are slowed by, so the room
+   * changing colour and the field stopping are one state change.
    */
   castStrength?: number
 }
@@ -207,6 +207,15 @@ export interface StageHandlers {
   onMove(id: number, x: number, y: number): void
   /** Raised once when a move drag ends. */
   onMoveEnd(): void
+  /**
+   * Live during a drag on the lit surface beside the paper: how much of the
+   * width the paper has taken, 0 to 1. A fraction and not px, so the room keeps
+   * its proportion through a window resize. Pointer rate, like `onMove`, so
+   * nothing on this path may reach React.
+   */
+  onCrowd(crowd: number): void
+  /** Raised once when a crowd drag ends. */
+  onCrowdEnd(): void
   /**
    * Double-click on the film: save the colour that point is currently showing.
    * `ids` are the slides stacked there, `hex` what they come to. One sheet or

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { containAxis, litArea, litRect } from './lit'
+import { containAxis, crowdFromDrag, inPaperGrab, litArea, litEdgePx, litRect } from './lit'
+import { stockSizeFrac } from './size'
 
 const A = 1440 / 900
 
@@ -46,6 +47,54 @@ describe('litArea', () => {
     expect(litArea(litRect(A, 0.5))).toBeCloseTo(A / 2, 12)
     expect(litArea(litRect(A, 1))).toBe(0)
     expect(litArea(litRect(A, 3))).toBe(0)
+  })
+})
+
+describe('the crowd gesture', () => {
+  // 1440x900: the leading edge is at crowd * 1440, and the strip that grabs it
+  // is one stock sheet, 0.27 * 900.
+  const reach = stockSizeFrac(900) * 900
+
+  it('reaches one stock sheet in from the edge and no further', () => {
+    expect(reach).toBeCloseTo(243, 9)
+    const edge = litEdgePx(litRect(A, 0), 900)
+    expect(inPaperGrab(0, edge, reach)).toBe(true)
+    expect(inPaperGrab(242, edge, reach)).toBe(true)
+    expect(inPaperGrab(244, edge, reach)).toBe(false)
+    expect(inPaperGrab(720, edge, reach)).toBe(false)
+  })
+
+  it('travels with the paper, so the handle is always the lit edge', () => {
+    const edge = litEdgePx(litRect(A, 0.25), 900)
+    expect(edge).toBeCloseTo(360, 9)
+    // Behind the edge is paper, which is not a surface anything can be pressed
+    // on: the gesture starts on lit surface at every crowd value.
+    expect(inPaperGrab(200, edge, reach)).toBe(false)
+    expect(inPaperGrab(400, edge, reach)).toBe(true)
+    expect(inPaperGrab(700, edge, reach)).toBe(false)
+  })
+
+  it('moves the paper exactly as far as the hand', () => {
+    expect(crowdFromDrag(0, 360, 1440)).toBeCloseTo(0.25, 12)
+    expect(crowdFromDrag(0.25, 360, 1440)).toBeCloseTo(0.5, 12)
+    // Backwards takes it out again, and a drag that ends where it started
+    // leaves the room exactly as it was rather than one epsilon off.
+    expect(crowdFromDrag(0.5, -720, 1440)).toBeCloseTo(0, 12)
+    expect(crowdFromDrag(0.31, 0, 1440)).toBe(0.31)
+  })
+
+  it('cannot invert the room however far the hand goes', () => {
+    expect(crowdFromDrag(0.5, 9000, 1440)).toBe(1)
+    expect(crowdFromDrag(0.5, -9000, 1440)).toBe(0)
+    // A viewport measured as zero must not hand NaN to the walls.
+    expect(crowdFromDrag(0.4, 100, 0)).toBe(0.4)
+  })
+
+  it('keeps the proportion through a resize, not the pixels', () => {
+    // The same 10% of the width on both screens, which is what makes crowd a
+    // fraction rather than a paper width in px.
+    expect(crowdFromDrag(0.2, 144, 1440)).toBeCloseTo(0.3, 12)
+    expect(crowdFromDrag(0.2, 80, 800)).toBeCloseTo(0.3, 12)
   })
 })
 

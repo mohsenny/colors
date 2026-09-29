@@ -425,6 +425,7 @@
 }
 
 .lb-hex {
+  position: relative;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10.5px;
   line-height: 1;
@@ -442,6 +443,35 @@
 .lb-frame.is-selected .lb-hex {
   color: var(--lb-ink-900);
   font-weight: 600;
+}
+
+/*
+ * The tab measures one of two things, and which one is a function of how
+ * packed the room is. render/stage.ts writes `--lb-share-t` once on the stage
+ * root, because the packing is a property of the room and not of any sheet.
+ *
+ * The hex stays in flow and keeps owning the width, so the tab is the same
+ * width and the text sits in the same place in both states and all the way
+ * across: a readout that shifted as it crossed would read as two labels taking
+ * turns rather than one measurement changing units. The fallback of 0 is the
+ * whole of the crowd 0 behaviour, which is why the property is not declared on
+ * `.lb-stage` with the rest of them.
+ *
+ * No transition on either. The crossfade is driven by the hand, and a
+ * transition on top of a pointer-rate value lags it by its own duration.
+ */
+.lb-hex-t {
+  display: block;
+  opacity: calc(1 - var(--lb-share-t, 0));
+}
+
+.lb-share {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: var(--lb-share-t, 0);
+  pointer-events: none;
 }
 
 .lb-copy,

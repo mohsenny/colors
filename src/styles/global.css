@@ -140,6 +140,10 @@ svg {
   -webkit-user-select: none;
   overscroll-behavior: none;
   -webkit-touch-callout: none;
+  /* A touch that drags the paper in is horizontal, which is the one direction
+     the browser claims for itself: without this the first 10px of the gesture
+     go to a scroll or a back-navigation and the pointer stream stops there. */
+  touch-action: none;
 }
 
 /* One focus treatment for the whole app. Pointer users never see it; keyboard

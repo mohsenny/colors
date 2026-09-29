@@ -39,6 +39,42 @@ export function litArea(r: LitRect): number {
 }
 
 /**
+ * The leading edge of the lit area in CSS px, measured from the left of the
+ * stage. Off the rect rather than off `width * crowd`, so the renderer and the
+ * gesture cannot disagree with the walls about where the room starts.
+ */
+export function litEdgePx(r: LitRect, vh: number): number {
+  return r.x0 * vh
+}
+
+/**
+ * Is a press at `xPx` on the strip of lit surface that takes hold of the paper?
+ *
+ * One stock sheet wide and measured inward from the leading edge, so the target
+ * scales with the screen (243px at 1440x900) and is always the width of the
+ * thing it is about to crowd. Not the paper itself: the paper takes no pointer,
+ * and a gesture that started on it would be unreachable at crowd 0, which is
+ * the only state the instrument is ever in when nobody has tried it yet.
+ */
+export function inPaperGrab(xPx: number, edgePx: number, reachPx: number): boolean {
+  return xPx >= edgePx && xPx <= edgePx + reachPx
+}
+
+/**
+ * Where a crowd drag has got to: the crowd at the press, plus the travel since.
+ *
+ * Relative to the press and not absolute, so the paper never jumps to the
+ * pointer on the first move. In fractions of the width rather than px, because
+ * a window resized mid-sitting must keep the same proportion of room rather
+ * than the same number of pixels of paper.
+ */
+export function crowdFromDrag(crowdAtPress: number, dxPx: number, widthPx: number): number {
+  if (!(widthPx > 0)) return crowdAtPress
+  const v = crowdAtPress + dxPx / widthPx
+  return v < 0 ? 0 : v > 1 ? 1 : v
+}
+
+/**
  * How far a span of half-extent `h` centred on `c` has to move to sit inside
  * [lo, hi]. Zero when it already does.
  *

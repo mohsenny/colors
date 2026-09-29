@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { SIZE_FRAC_MAX, SIZE_FRAC_MIN, SIZE_PX_MAX, SIZE_PX_MIN } from './constants'
-import { clampSide, fitSides, sideBand } from './size'
+import { SIZE_FRAC_MAX, SIZE_FRAC_MIN, SIZE_FRAC_ONE, SIZE_PX_MAX, SIZE_PX_MIN } from './constants'
+import { clampSide, fitSides, sideBand, stockSizeFrac } from './size'
 
 describe('sideBand', () => {
   it('gives a laptop the absolute floor', () => {
@@ -38,6 +38,30 @@ describe('clampSide', () => {
     expect(clampSide(10, band)).toBe(band.min)
     expect(clampSide(9999, band)).toBe(band.max)
     expect(clampSide(300, band)).toBe(300)
+  })
+})
+
+describe('stockSizeFrac', () => {
+  it('is the plain fraction on a laptop', () => {
+    expect(stockSizeFrac(900)).toBeCloseTo(SIZE_FRAC_ONE, 12)
+    expect(stockSizeFrac(900) * 900).toBeCloseTo(243, 9)
+  })
+
+  it('takes the readable floor on a small screen', () => {
+    // A phone is below SMALL_VIEWPORT, so it asks for the larger fraction, and
+    // the band is what decides in the end.
+    const short = 360
+    const px = stockSizeFrac(short) * short
+    expect(px).toBeGreaterThanOrEqual(sideBand(short).min - 1e-9)
+    expect(px).toBeLessThanOrEqual(sideBand(short).max + 1e-9)
+  })
+
+  it('stays inside the legal band at every screen size', () => {
+    for (let short = 240; short <= 3000; short += 29) {
+      const f = stockSizeFrac(short)
+      expect(f).toBeGreaterThanOrEqual(SIZE_FRAC_MIN)
+      expect(f).toBeLessThanOrEqual(SIZE_FRAC_MAX)
+    }
   })
 })
 

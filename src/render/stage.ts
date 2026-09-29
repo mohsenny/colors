@@ -12,9 +12,9 @@ import {
 } from '../core/constants'
 import { lampsAt } from '../core/lamps'
 import type { Cast, Lamp } from '../core/lamps'
-import { litRect } from '../core/lit'
+import { crowdFromDrag, inPaperGrab, litEdgePx, litRect } from '../core/lit'
 import { filmHex } from '../core/oklab'
-import { clampSide, sideBand } from '../core/size'
+import { clampSide, sideBand, stockSizeFrac } from '../core/size'
 import type { RenderOptions, SimState, SlideState, StageHandlers, Viewport } from '../core/types'
 import { Painter } from './paint'
 
@@ -53,7 +53,7 @@ const Z_PAPER = 5
  * most of what says an object arrived rather than the lamp going flat.
  */
 function paperWidth(crowd: number, aspect: number, vh: number): number {
-  return Math.round(litRect(aspect, crowd).x0 * vh)
+  return Math.round(litEdgePx(litRect(aspect, crowd), vh))
 }
 
 /** Shadow model (design notes 1.5). Alpha falls as blur grows; that inversion
@@ -92,6 +92,15 @@ const COPIED_MS = 1100
  */
 const MOVE_DEADZONE = 3.5
 
+/**
+ * The same tremor, but the crowd gesture pays more for a false positive: a
+ * press on bare surface that never travels is a deselect, and a press that
+ * travels is the wall of the room moving. Wider than MOVE_DEADZONE because a
+ * sheet nudged two pixels is nothing and a room nudged two pixels is a state
+ * change under every sheet on the glass.
+ */
+const CROWD_DEADZONE = 6
+
 /** Keyboard resize increments, as a fraction of the viewport short edge. */
 const KEY_RESIZE_STEP = 0.005
 const KEY_RESIZE_STEP_COARSE = 0.02
@@ -104,10 +113,31 @@ const LOCK_SVG =
   '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
   '<rect x="2.1" y="5.4" width="7.8" height="5.4" rx="1.3"/><path d="M4.1 5.4V3.9a1.9 1.9 0 0 1 3.8 0v1.5"/></svg>'
 
+/**
+ * The crossfade between the hex and the share, quantised before it is written.
+ *
+ * Fifty steps over the whole gesture: an opacity step of 0.02 on 10.5px text is
+ * invisible, and this is a custom property on the stage root, so every write
+ * invalidates the style of every tab on the surface. The four tube colours are
+ * quantised to bytes for the same reason a few lines above.
+ */
+const SHARE_FADE_STEPS = 50
+
+/**
+ * How far past the rounding boundary the percent has to go before the tab is
+ * rewritten, in percentage points. A sheet drifting around 21.4999 crosses
+ * round-to-nearest several times a second and would rewrite the text node each
+ * time for a number that never visibly changes. 0.6 costs a tenth of a point of
+ * lag at the switch and makes the reading stable.
+ */
+const SHARE_HYSTERESIS = 0.6
+
 interface SlideEls {
   frame: HTMLDivElement
   tab: HTMLDivElement
-  hex: HTMLSpanElement
+  /** The hex itself. Owns the width of the pair: the share centres over it. */
+  hexText: HTMLSpanElement
+  share: HTMLSpanElement
   copy: HTMLButtonElement
   lock: HTMLButtonElement
   copied: HTMLSpanElement
@@ -130,6 +160,10 @@ interface Prev {
   tabW: number
   tabLeft: number
   hex: string
+  /** Last whole percent shown, -1 before the first one. Held for the band. */
+  share: number
+  /** Last text written into the share span, hysteresis already applied. */
+  shareText: string
   label: string
   locked: boolean
   selected: boolean
@@ -146,12 +180,15 @@ interface SlideRec {
 }
 
 interface DragState {
+  /** -1 on a crowd drag: the thing in hand is the room, not a sheet. */
   id: number
   pointerId: number
   target: Element
-  kind: 'resize' | 'move'
+  kind: 'resize' | 'move' | 'crowd'
   /** Unused by resize since the grip went two-axis; kept for the move path. */
   grabRatio: number
+  /** Crowd only: how far the paper was in when the pointer went down. */
+  crowd0: number
   /**
    * Move: pointer-to-centre offset in u, taken once at the grab. Resize:
    * pointer-to-corner offset in px, in the slide's own axes. Either way it is
@@ -162,7 +199,7 @@ interface DragState {
   /** Where the pointer went down, in client px, for the dead zone below. */
   startX: number
   startY: number
-  /** Move only: false until the pointer has travelled past the dead zone. */
+  /** Move and crowd: false until the pointer has left the dead zone. */
   armed: boolean
 }
 
@@ -184,6 +221,18 @@ export class Stage {
   private readonly paper: HTMLDivElement
   /** Last paper width written, in whole px. -1 so the first frame writes. */
   private paperPx = -1
+  /**
+   * The hex-to-share crossfade as last written. Seeded to the value the
+   * stylesheet already falls back to, so an instrument nobody has crowded
+   * never writes the property at all.
+   */
+  private shareFade = 0
+  /**
+   * Crowd as the simulation last had it. Read off the state rather than kept
+   * as the gesture's own number, so a scrub or a replay that moves the paper
+   * leaves the next press grabbing the edge that is actually on screen.
+   */
+  private crowdNow = 0
 
   private viewport: Viewport | null = null
   /** The cast, low-passed, linear sRGB. White until a field says otherwise. */
@@ -271,8 +320,25 @@ export class Stage {
     const tab = div('lb-tab')
     const grip = div('lb-grip')
 
+    /*
+     * The hex and the share are two children of one box rather than two states
+     * of one text node, because they have to cross over: at any packing in the
+     * middle of the gesture both are on screen at once. The hex is the one in
+     * flow, so it keeps owning the width of the pair, and the share is laid
+     * over it. TAB_W is unchanged and so is every tab: see constants.ts:40-45
+     * for what widening the tab did to the hex the last time it was tried.
+     */
     const hex = document.createElement('span')
     hex.className = 'lb-hex'
+    const hexText = document.createElement('span')
+    hexText.className = 'lb-hex-t'
+    const share = document.createElement('span')
+    share.className = 'lb-share'
+    // The hex is the accessible name's job (see the aria-label below) and a
+    // share that changes several times a second would be re-announced each
+    // time, so this is decoration as far as a screen reader is concerned.
+    share.setAttribute('aria-hidden', 'true')
+    hex.append(hexText, share)
 
     const copy = document.createElement('button')
     copy.type = 'button'
@@ -302,7 +368,7 @@ export class Stage {
     this.root.append(frame)
 
     return {
-      els: { frame, tab, hex, copy, lock, copied, grip },
+      els: { frame, tab, hexText, share, copy, lock, copied, grip },
       state: slide,
       ordinal,
       copiedTimer: 0,
@@ -321,6 +387,8 @@ export class Stage {
         tabW: -1,
         tabLeft: -1,
         hex: '',
+        share: -1,
+        shareText: '',
         label: '',
         locked: false,
         selected: false,
@@ -424,6 +492,8 @@ export class Stage {
     this.painter.draw(state, opts)
     this.writeLamps(state.t, opts.warmth, this.castFor(state.t, opts))
 
+    this.crowdNow = state.crowd
+
     // The paper. Width only: a zero-width element still draws its right-hand
     // hairline, so the class is what takes it off the surface entirely and is
     // why crowd 0 is byte identical to an instrument that had never heard of
@@ -433,6 +503,21 @@ export class Stage {
       if (paperPx > 0 !== this.paperPx > 0) this.paper.classList.toggle('is-in', paperPx > 0)
       this.paperPx = paperPx
       this.paper.style.width = `${paperPx}px`
+    }
+
+    /*
+     * How far the tabs have crossed from the hex to the share. The packing,
+     * exactly: the same number the tubes take their cast from, so the room
+     * changing colour and the tabs changing what they measure are one state
+     * change rather than two that nearly agree. It is a function of phi and
+     * of nothing else, so it is the same for every sheet and is written once
+     * on the root for all of them to inherit.
+     */
+    const packed = clamp(opts.castStrength ?? 0, 0, 1)
+    const fade = Math.round(packed * SHARE_FADE_STEPS) / SHARE_FADE_STEPS
+    if (fade !== this.shareFade) {
+      this.shareFade = fade
+      this.root.style.setProperty('--lb-share-t', fade.toFixed(2))
     }
 
     const slides = state.slides
@@ -552,8 +637,33 @@ export class Stage {
         const hex = filmHex(dye)
         if (hex !== p.hex) {
           p.hex = hex
-          els.hex.textContent = hex
+          els.hexText.textContent = hex
           els.copy.setAttribute('aria-label', `Copy ${hex}`)
+        }
+      }
+
+      /*
+       * The share, which replaces the hex while the paper is in. Outside the
+       * dye guard on purpose: this number moves with the room and not with the
+       * colour, and a sheet whose dye never changes is exactly the sheet whose
+       * share is changing fastest.
+       */
+      if (packed > 0) {
+        const share = this.painter.shareOf(slide.id)
+        // A miss still writes, because the crossfade is global and the gap is
+        // per sheet: leaving the text alone would fade the tab to a blank box
+        // rather than to the fallback. The fallback is the hex it already has.
+        let text = p.hex
+        if (share !== null) {
+          const pct = clamp(share * 100, 0, 100)
+          if (p.share < 0 || Math.abs(pct - p.share) >= SHARE_HYSTERESIS) {
+            p.share = Math.round(pct)
+          }
+          text = `${p.share}%`
+        }
+        if (text !== p.shareText) {
+          p.shareText = text
+          els.share.textContent = text
         }
       }
 
@@ -617,6 +727,7 @@ export class Stage {
         target: grip,
         kind: 'resize',
         grabRatio: 0,
+        crowd0: 0,
         grabDX: (rec.state.w * vh) / 2 - lx,
         grabDY: (rec.state.h * vh) / 2 - ly,
         startX: e.clientX,
@@ -643,12 +754,57 @@ export class Stage {
     }
 
     const rec = this.recFromEvent(e)
+    const vp = this.viewport
+
+    /*
+     * Bare surface beside the paper: the room's own handle.
+     *
+     * Armed here but deliberately NOT acted on, and in particular the
+     * selection is left alone. A press on bare lightbox means deselect, and
+     * that meaning has to survive: if the pointer never leaves the dead zone
+     * this falls back to the plain bare-surface press and deselects on
+     * pointerup, exactly as it did before there was any paper. Only travel
+     * makes it a crowd drag, and a crowd drag keeps the selection, because
+     * resizing the room is not a statement about which sheet you are reading.
+     */
+    if (!rec && vp) {
+      const rect = this.root.getBoundingClientRect()
+      const edge = litEdgePx(litRect(vp.aspect, this.crowdNow), vp.height)
+      if (inPaperGrab(e.clientX - rect.left, edge, stockSizeFrac(vp.short) * vp.short)) {
+        this.originX = rect.left
+        this.originY = rect.top
+        this.drag = {
+          id: -1,
+          pointerId: e.pointerId,
+          target: this.root,
+          kind: 'crowd',
+          grabRatio: 0,
+          crowd0: this.crowdNow,
+          grabDX: 0,
+          grabDY: 0,
+          startX: e.clientX,
+          startY: e.clientY,
+          armed: false,
+        }
+        try {
+          // On the ROOT, not on the event's target. The Dock is a z-index 200
+          // sibling of the stage rather than a descendant of it, so without
+          // capture the gesture dies the moment the hand crosses the dock and
+          // lostpointercapture never fires to end it.
+          this.root.setPointerCapture(e.pointerId)
+        } catch {
+          // Refused if the pointer has already gone; the bubbled events still work.
+        }
+        e.preventDefault()
+        return
+      }
+    }
+
     // Select first: that is what stops the slide, and a stopped slide is what
     // makes the grab offset below hold for the rest of the drag.
     this.handlers.onSelect(rec ? rec.state.id : null)
     if (!rec) return
 
-    const vp = this.viewport
     const frame = target.closest('.lb-frame')
     if (!vp || !(frame instanceof HTMLElement)) return
     const rect = this.root.getBoundingClientRect()
@@ -660,6 +816,7 @@ export class Stage {
       target: frame,
       kind: 'move',
       grabRatio: 0,
+      crowd0: 0,
       grabDX: rec.state.x - (e.clientX - this.originX) / vp.height,
       grabDY: rec.state.y - (e.clientY - this.originY) / vp.height,
       startX: e.clientX,
@@ -683,9 +840,20 @@ export class Stage {
     const drag = this.drag
     if (drag) {
       if (e.pointerId !== drag.pointerId) return
-      const rec = this.recs.get(drag.id)
       const vp = this.viewport
-      if (!rec || !vp) return
+      if (!vp) return
+      if (drag.kind === 'crowd') {
+        if (!drag.armed) {
+          if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CROWD_DEADZONE) return
+          drag.armed = true
+        }
+        // Horizontal travel only. The paper has one degree of freedom and a
+        // hand pushing something sideways does not travel in a straight line.
+        this.handlers.onCrowd(crowdFromDrag(drag.crowd0, e.clientX - drag.startX, vp.width))
+        return
+      }
+      const rec = this.recs.get(drag.id)
+      if (!rec) return
       if (drag.kind === 'move') {
         if (!drag.armed) {
           if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < MOVE_DEADZONE) return
@@ -737,8 +905,22 @@ export class Stage {
     if (drag.target instanceof HTMLElement && drag.target.hasPointerCapture(drag.pointerId)) {
       drag.target.releasePointerCapture(drag.pointerId)
     }
-    if (drag.kind === 'move') this.handlers.onMoveEnd()
-    else this.handlers.onResizeEnd()
+    // Three kinds, three endings, written as a switch: the if/else this
+    // replaced ended a crowd drag by committing a resize to slide -1.
+    switch (drag.kind) {
+      case 'move':
+        this.handlers.onMoveEnd()
+        return
+      case 'resize':
+        this.handlers.onResizeEnd()
+        return
+      case 'crowd':
+        // Never armed means the hand never moved, so this press was a click on
+        // bare lightbox after all and the deselect it owes is paid here.
+        if (drag.armed) this.handlers.onCrowdEnd()
+        else this.handlers.onSelect(null)
+        return
+    }
   }
 
   private onPointerLeave = (): void => {
