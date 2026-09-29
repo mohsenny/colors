@@ -1,4 +1,5 @@
 import {
+  CAST_TAU,
   CORNER_INNER,
   CORNER_OUTER,
   H_MM_BASE,
@@ -10,7 +11,7 @@ import {
   TAB_W,
 } from '../core/constants'
 import { lampsAt } from '../core/lamps'
-import type { Lamp } from '../core/lamps'
+import type { Cast, Lamp } from '../core/lamps'
 import { filmHex } from '../core/oklab'
 import { clampSide, sideBand } from '../core/size'
 import type { RenderOptions, SimState, SlideState, StageHandlers, Viewport } from '../core/types'
@@ -162,6 +163,9 @@ export class Stage {
   private readonly painter: Painter
 
   private viewport: Viewport | null = null
+  /** The cast, low-passed, linear sRGB. White until a field says otherwise. */
+  private readonly castHeld: [number, number, number] = [1, 1, 1]
+  private castT = 0
   private drag: DragState | null = null
   private hoveredId: number | null = null
   private framePx = -1
@@ -331,8 +335,8 @@ export class Stage {
    * colour only changes a couple of times a second, and a style write on a
    * full-viewport element is not something to do 60 times a second for nothing.
    */
-  private writeLamps(t: number, warmth: number): void {
-    const lamps = lampsAt(t, warmth)
+  private writeLamps(t: number, warmth: number, cast: Cast | undefined): void {
+    const lamps = lampsAt(t, warmth, cast)
     for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i] as Lamp
       const key = `${l.r} ${l.g} ${l.b}|${l.gain.toFixed(3)}`
@@ -341,6 +345,33 @@ export class Stage {
       this.root.style.setProperty(`--lb-tube-${i + 1}`, `${l.r} ${l.g} ${l.b}`)
       this.root.style.setProperty(`--lb-tube-${i + 1}-i`, l.gain.toFixed(3))
     }
+  }
+
+  /**
+   * The cast the tubes get this frame. Low-passed, because the field follows
+   * the sheets and the sheets move at sheet speed: the lamps are the slowest
+   * thing on screen by an order of magnitude and the cast must not be what
+   * changes that. Held in linear sRGB, which is where the average was taken.
+   */
+  private castFor(t: number, opts: RenderOptions): Cast | undefined {
+    // Simulation time, so a scrub takes the cast with it. It stands still
+    // while paused, which would strand the cast if a sheet were dragged then,
+    // so a stalled clock still gets one frame's worth of settling.
+    const raw = t - this.castT
+    this.castT = t
+    const dt = raw > 0 && raw < 0.25 ? raw : 1 / 60
+
+    const f = this.painter.field
+    const a = this.castHeld
+    const k = 1 - Math.exp(-dt / CAST_TAU)
+    a[0] += ((f[0] as number) - a[0]) * k
+    a[1] += ((f[1] as number) - a[1]) * k
+    a[2] += ((f[2] as number) - a[2]) * k
+
+    // Tracked even at zero so turning the cast on picks up the field that is
+    // already there instead of swinging in from white.
+    const strength = opts.castStrength ?? 0
+    return strength > 0 ? { linear: a, strength } : undefined
   }
 
   private write(state: SimState, opts: RenderOptions): void {
@@ -355,8 +386,10 @@ export class Stage {
       this.root.classList.toggle('is-reduced', opts.reducedMotion)
     }
 
-    this.writeLamps(state.t, opts.warmth)
+    // The painter first, then the lamps: the cast is the field the painter
+    // just measured, so the other order hands the tubes the previous frame.
     this.painter.draw(state, opts)
+    this.writeLamps(state.t, opts.warmth, this.castFor(state.t, opts))
 
     const slides = state.slides
     const vh = vp.height

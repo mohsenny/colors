@@ -11,6 +11,7 @@ import { PaletteTray } from './ui/PaletteTray'
  */
 export default function App() {
   const stageRef = useRef<HTMLDivElement>(null)
+  const castRef = useRef(0)
   // State, not a ref: the chrome below renders from it, and a ref read during
   // render is a value React has no way to re-render for.
   const [instrument, setInstrument] = useState<Instrument | null>(null)
@@ -61,6 +62,18 @@ export default function App() {
           return
         case 'Escape':
           instrument.select(null)
+          return
+        // Temporary, for looking at the cast on its own before Crowding
+        // drives it. Bracket keys because nothing else uses them.
+        case 'BracketLeft':
+          if (typing) return
+          castRef.current = Math.max(0, castRef.current - 0.1)
+          instrument.setCastStrength(castRef.current)
+          return
+        case 'BracketRight':
+          if (typing) return
+          castRef.current = Math.min(1, castRef.current + 0.1)
+          instrument.setCastStrength(castRef.current)
           return
         default:
       }

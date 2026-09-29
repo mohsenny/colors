@@ -18,6 +18,9 @@
  */
 
 import {
+  CAST_C_MAX,
+  CAST_GAIN,
+  CAST_GEL_L,
   TUBE_COOL,
   TUBE_COUNT,
   TUBE_FAST_S,
@@ -26,6 +29,7 @@ import {
   TUBE_WARM,
   TUBE_WARMTH_BIAS,
 } from './constants'
+import { decode, encode, gamutMap, linearToOklch } from './oklab'
 import { hash01 } from './rng'
 
 export interface Lamp {
@@ -49,10 +53,11 @@ const TAU = Math.PI * 2
  * so a tube pushed all the way warm still moves, just over a shorter arc, and
  * never clips flat against the end of the range.
  */
-export function lampsAt(t: number, warmth = 0): Lamp[] {
+export function lampsAt(t: number, warmth = 0, cast?: Cast): Lamp[] {
   const bias = clampUnit(warmth) * TUBE_WARMTH_BIAS
   const centre = 0.5 + 0.5 * bias
   const swing = 0.5 * (1 - Math.abs(bias))
+  const gel = gelFor(cast)
 
   const out: Lamp[] = []
   for (let i = 0; i < TUBE_COUNT; i++) {
@@ -68,9 +73,19 @@ export function lampsAt(t: number, warmth = 0): Lamp[] {
 
     // Renormalised to full brightness: see TUBE_WARM. The interpolation decides
     // the tube's colour, never how bright it is, which is what `gain` is for.
-    const r = lerp(TUBE_WARM[0], TUBE_COOL[0], temp)
-    const g = lerp(TUBE_WARM[1], TUBE_COOL[1], temp)
-    const b = lerp(TUBE_WARM[2], TUBE_COOL[2], temp)
+    let r = lerp(TUBE_WARM[0], TUBE_COOL[0], temp)
+    let g = lerp(TUBE_WARM[1], TUBE_COOL[1], temp)
+    let b = lerp(TUBE_WARM[2], TUBE_COOL[2], temp)
+
+    // The gel goes on in linear light, before the renormalisation, because
+    // that renormalisation is what makes it survive: it takes the brightness
+    // the gel absorbed straight back out and leaves only the colour behind.
+    if (gel) {
+      r = 255 * encode(decode(r / 255) * gel[0])
+      g = 255 * encode(decode(g / 255) * gel[1])
+      b = 255 * encode(decode(b / 255) * gel[2])
+    }
+
     const k = 255 / Math.max(r, g, b)
 
     out.push({
@@ -83,6 +98,40 @@ export function lampsAt(t: number, warmth = 0): Lamp[] {
     })
   }
   return out
+}
+
+/**
+ * The colour the sheets are making, area-weighted over the whole lit surface,
+ * in linear sRGB, plus how much of it to admit. `strength` 0 is today exactly.
+ */
+export interface Cast {
+  linear: readonly [number, number, number]
+  strength: number
+}
+
+/**
+ * The gel, as a linear multiplier peaking at 1.
+ *
+ * Only the field's hue and chroma are used. Its lightness is thrown away and
+ * replaced with `CAST_GEL_L`, because the field's own lightness is not a
+ * property of the gel: a dark field and a pale one of the same hue put the
+ * same colour of light through a tube, and only the tube says how bright it
+ * is. Normalising to peak 1 is the same idea one step later.
+ */
+function gelFor(cast: Cast | undefined): [number, number, number] | null {
+  if (!cast) return null
+  const s = cast.strength < 0 ? 0 : cast.strength > 1 ? 1 : cast.strength
+  if (s <= 0) return null
+
+  const [lr, lg, lb] = cast.linear
+  const field = linearToOklch(lr, lg, lb)
+  const C = Math.min(field.C * CAST_GAIN, CAST_C_MAX) * s
+  if (C <= 0) return null
+
+  const fit = gamutMap(CAST_GEL_L, C, field.h)
+  const peak = Math.max(fit.r, fit.g, fit.b)
+  if (!(peak > 0)) return null
+  return [fit.r / peak, fit.g / peak, fit.b / peak]
 }
 
 function clampUnit(v: number): number {

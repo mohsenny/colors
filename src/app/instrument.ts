@@ -103,6 +103,7 @@ export class Instrument {
    */
   private countOverride: number | null = null
   private warmth = 0
+  private castStrength = 0
 
   private listeners = new Set<() => void>()
   private snapshot: InstrumentSnapshot
@@ -224,7 +225,17 @@ export class Instrument {
       hoveredId: this.hoveredId,
       reducedMotion: this.reducedMotion,
       warmth: this.warmth,
+      castStrength: this.castStrength,
     })
+  }
+
+  /**
+   * Temporary. Crowding will drive this from how packed the field is; until
+   * that exists it is on a key so the mechanism can be judged on its own.
+   * Not React state and not in the snapshot, deliberately.
+   */
+  setCastStrength(v: number): void {
+    this.castStrength = v < 0 ? 0 : v > 1 ? 1 : v
   }
 
   private easeMode(dt: number): void {

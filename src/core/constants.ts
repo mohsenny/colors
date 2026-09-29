@@ -348,6 +348,54 @@ export const TUBE_GAIN = 0.075
  */
 export const TUBE_WARMTH_BIAS = 0.34
 
+/**
+ * The cast: the tubes taking their colour from the field the sheets are making.
+ *
+ * Built as a GEL, not as a tint. The obvious construction is to nudge the
+ * tube's own colour toward the field's hue and renormalise, and it does
+ * nothing at all: a tube sits at L 0.986, where sRGB holds a maximum chroma of
+ * 0.0069 at red and 0.0066 at blue, so a cap of 0.02 and a cap of 0.09 both
+ * come back 255,248,247. Identical bytes. Renormalising to full brightness is
+ * exactly the step that kills it.
+ *
+ * So the cast is built at a lightness where the gamut has room, normalised to
+ * peak 1, and multiplied into the tube channel-wise. That is what laying a gel
+ * over a fluorescent tube is, and the existing `k = 255 / max` carries the
+ * brightness back afterwards, so every tube is still at full brightness and
+ * `gain` is still the only thing that says otherwise.
+ *
+ * The gel's construction lightness is the strength control, and it is the one
+ * number here worth looking at rather than deriving. Measured channel spreads
+ * at cast chroma 0.06: L 0.999 gives 19 to 21, which is today to the byte.
+ * L 0.97 gives 6 to 56. L 0.90 gives 34 to 80. L 0.78 gives 53 to 89, which is
+ * a nightclub. Today's entire warm-to-cool range is 29, so 0.90 is about two
+ * and a half times the whole existing warmth control.
+ */
+export const CAST_GEL_L = 0.9
+/**
+ * Where the gel is built, sRGB holds at most 0.052 of chroma at hue 30 and
+ * 0.049 at hue 260, so this sits right at the wall for the two weakest hues
+ * and is about as hue-fair as one absolute number gets. It is a safety rail
+ * for a deliberately monochrome roll, not the strength control.
+ */
+export const CAST_C_MAX = 0.05
+/**
+ * A real field is far less colourful than it looks. Area-weighted against the
+ * bare lit surface over 40 eight-sheet rolls: mean chroma 0.0047 at a third
+ * covered, 0.0088 at 60%, 0.0141 at 85%. Against a cap of 0.05 that is nothing,
+ * so the field's chroma is amplified before it is capped. The hue is never
+ * touched: this decides how much of the field's colour reaches the tube, not
+ * which colour it is.
+ */
+export const CAST_GAIN = 6
+/**
+ * Seconds for the cast to follow the field. The lamps are the slowest thing on
+ * screen on purpose and the cast must not make them the fastest, but it also
+ * cannot lag a deliberate drag so far that the room is answering the previous
+ * question. It also keeps the byte-quantised style write off the 60Hz path.
+ */
+export const CAST_TAU = 1.2
+
 // --- reduced motion -----------------------------------------------------------
 /** Global speed multiplier when the user asked for less movement. */
 export const REDUCED_SPEED = 0.16

@@ -81,6 +81,88 @@ interface Cached {
 interface Region {
   poly: number[]
   set: number[]
+  /** Area of the intersection of `set`, world px². Not the visible area. */
+  area: number
+  /** `set` as bits, so a superset test is one AND. Bounded by SLIDE_COUNT_MAX. */
+  mask: number
+  /** The region's own colour, linear sRGB, lifted. Written by the fill pass. */
+  linear: [number, number, number]
+  /** Area covered by exactly this set and no more. Written by integrateField. */
+  exclusive: number
+}
+
+/** What `integrateField` needs of a region. The Painter's `Region` is one. */
+export interface FieldRegion {
+  area: number
+  mask: number
+  linear: readonly [number, number, number]
+  exclusive: number
+}
+
+/**
+ * The colour of the whole lit surface, area-weighted, in linear sRGB.
+ *
+ * Partitive mixing: what the eye does at a distance, and the honest
+ * counterpart to the transmittance product the sheets themselves are built
+ * on. It is not a mean of the dyes. Bare lit surface counts as white and
+ * counts by its area, so a nearly empty box is nearly white, which is the
+ * reason the cast strengthens on its own as the field fills up.
+ *
+ * The regions the walk produces are NOT disjoint. A region for a set S is the
+ * full intersection of S, and every region for a superset of S lies inside
+ * it, so summing them directly counts an overlap once for every subset of the
+ * sheets covering it. Each region's exclusive area therefore comes out by
+ * Mobius inversion over the lattice the walk has already enumerated: the area
+ * covered by exactly S is A(S) less the exclusive areas of all its strict
+ * supersets. Deepest level first, so every superset is resolved before the
+ * subsets that need it are read.
+ *
+ * Writes into `out`, returns the covered fraction, allocates nothing.
+ */
+export function integrateField(
+  levels: readonly (readonly FieldRegion[])[],
+  litArea: number,
+  out: [number, number, number],
+): number {
+  let rSum = 0
+  let gSum = 0
+  let bSum = 0
+  let covered = 0
+
+  for (let depth = levels.length - 1; depth >= 0; depth--) {
+    const here = levels[depth] as readonly FieldRegion[]
+    for (let i = 0; i < here.length; i++) {
+      const s = here[i] as FieldRegion
+      let exclusive = s.area
+      for (let d2 = depth + 1; d2 < levels.length; d2++) {
+        const deeper = levels[d2] as readonly FieldRegion[]
+        for (let j = 0; j < deeper.length; j++) {
+          const t = deeper[j] as FieldRegion
+          if ((t.mask & s.mask) === s.mask) exclusive -= t.exclusive
+        }
+      }
+      // Clamped because the walk prunes subtrees under MIN_AREA, so a missing
+      // deep region can leave its parent a fraction of a pixel negative.
+      if (exclusive < 0) exclusive = 0
+      s.exclusive = exclusive
+      covered += exclusive
+      rSum += exclusive * (s.linear[0] as number)
+      gSum += exclusive * (s.linear[1] as number)
+      bSum += exclusive * (s.linear[2] as number)
+    }
+  }
+
+  const bare = litArea - covered
+  if (bare > 0) {
+    rSum += bare
+    gSum += bare
+    bSum += bare
+  }
+  const k = litArea > 0 ? 1 / litArea : 0
+  out[0] = rSum * k
+  out[1] = gSum * k
+  out[2] = bSum * k
+  return litArea > 0 ? covered / litArea : 0
 }
 
 function shoelace(p: readonly number[]): number {
@@ -147,6 +229,13 @@ export class Painter {
   private readonly sheets: Sheet[] = []
   private readonly levels: Region[][] = []
   private dpr = 1
+  /**
+   * The colour of the whole lit surface as of the last draw, linear sRGB, and
+   * how much of it the sheets cover. Read by the Stage, which gels the tubes
+   * with it. Mutated in place: nothing here allocates per frame.
+   */
+  readonly field: [number, number, number] = [1, 1, 1]
+  coverage = 0
   /** The blend mix of the last draw, so a sample answers for what is on screen. */
   private lastMix = 0
   private cssW = 0
@@ -195,22 +284,38 @@ export class Painter {
     // --- find every region ----------------------------------------------------
     const levels = this.levels
     for (let i = 0; i < levels.length; i++) (levels[i] as Region[]).length = 0
-    const push = (depth: number, poly: number[], set: number[]): void => {
+    const push = (depth: number, poly: number[], set: number[], area: number): void => {
       while (levels.length <= depth) levels.push([])
-      ;(levels[depth] as Region[]).push({ poly, set })
+      let mask = 0
+      for (let i = 0; i < set.length; i++) mask |= 1 << (set[i] as number)
+      ;(levels[depth] as Region[]).push({
+        poly,
+        set,
+        area,
+        mask,
+        linear: [0, 0, 0],
+        exclusive: 0,
+      })
     }
 
-    const walk = (poly: number[], set: number[], next: number): void => {
-      push(set.length - 1, poly, set.slice())
+    const walk = (poly: number[], set: number[], next: number, area: number): void => {
+      push(set.length - 1, poly, set.slice(), area)
       for (let j = next; j < n; j++) {
         const clipped = clipToSheet(poly, sheets[j] as Sheet)
-        if (clipped.length < 6 || shoelace(clipped) < MIN_AREA) continue
+        if (clipped.length < 6) continue
+        // Already needed to decide whether the region exists at all, so
+        // keeping it is free and it is the only area measured in the frame.
+        const a = shoelace(clipped)
+        if (a < MIN_AREA) continue
         set.push(j)
-        walk(clipped, set, j + 1)
+        walk(clipped, set, j + 1, a)
         set.pop()
       }
     }
-    for (let i = 0; i < n; i++) walk((sheets[i] as Sheet).poly, [i], i + 1)
+    for (let i = 0; i < n; i++) {
+      const s = sheets[i] as Sheet
+      walk(s.poly, [i], i + 1, shoelace(s.poly))
+    }
 
     // --- fill, thinnest stack first ------------------------------------------
     const mix = state.modeMix < 0 ? 0 : state.modeMix > 1 ? 1 : state.modeMix
@@ -219,7 +324,9 @@ export class Painter {
       const regions = levels[depth] as Region[]
       for (let r = 0; r < regions.length; r++) {
         const region = regions[r] as Region
-        ctx.fillStyle = this.colourFor(region.set, sheets, mix)
+        const lin = this.linearFor(region.set, sheets, mix)
+        region.linear = lin
+        ctx.fillStyle = `rgb(${byte(lin[0])},${byte(lin[1])},${byte(lin[2])})`
         if (depth === 0) {
           const s = sheets[region.set[0] as number] as Sheet
           this.pathRounded(ctx, s)
@@ -232,6 +339,8 @@ export class Painter {
 
     // --- per-sheet material ---------------------------------------------------
     for (let i = 0; i < n; i++) this.material(ctx, sheets[i] as Sheet)
+
+    this.coverage = integrateField(this.levels, vp.width * vp.height, this.field)
   }
 
   // --- pieces ----------------------------------------------------------------
@@ -340,13 +449,24 @@ export class Painter {
     }
   }
 
-  private colourFor(set: readonly number[], sheets: readonly Sheet[], mix: number): string {
-    const [r, g, b] = this.rgbFor(set, sheets, mix)
-    return `rgb(${r},${g},${b})`
-  }
-
   /** The mixed colour of a set of sheets, as three bytes. */
   private rgbFor(
+    set: readonly number[],
+    sheets: readonly Sheet[],
+    mix: number,
+  ): [number, number, number] {
+    const out = this.linearFor(set, sheets, mix)
+    return [byte(out[0]), byte(out[1]), byte(out[2])]
+  }
+
+  /**
+   * The same colour one step earlier, in linear sRGB and already lifted.
+   *
+   * Split out because the field average has to be summed in linear light: a
+   * mean of encoded bytes is a mean of the wrong quantity, and the error is
+   * worst at the pale end, which is where a lightbox spends all of its time.
+   */
+  private linearFor(
     set: readonly number[],
     sheets: readonly Sheet[],
     mix: number,
@@ -370,9 +490,9 @@ export class Painter {
     // stacking order, which the mix itself never does.
     const lift = LIFT_PER_Z * (zSum / set.length)
     return [
-      byte(out[0] + (1 - out[0]) * lift),
-      byte(out[1] + (1 - out[1]) * lift),
-      byte(out[2] + (1 - out[2]) * lift),
+      out[0] + (1 - out[0]) * lift,
+      out[1] + (1 - out[1]) * lift,
+      out[2] + (1 - out[2]) * lift,
     ]
   }
 

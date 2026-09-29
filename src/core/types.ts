@@ -173,6 +173,13 @@ export interface RenderOptions {
   reducedMotion: boolean
   /** Lamp colour bias, -1 warm to +1 cool. */
   warmth: number
+  /**
+   * How much of the field's own colour the tubes take, 0 to 1. At 0 the lamps
+   * are exactly what they have always been. Not wired to a control yet: this
+   * is the mechanism Crowding rests on, and it is being looked at on its own
+   * before anything is built on top of it.
+   */
+  castStrength?: number
 }
 
 /** Callbacks the stage raises. All are user intent, never animation. */
