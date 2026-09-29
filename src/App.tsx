@@ -11,7 +11,7 @@ import { PaletteTray } from './ui/PaletteTray'
  */
 export default function App() {
   const stageRef = useRef<HTMLDivElement>(null)
-  const castRef = useRef(0)
+  const crowdRef = useRef(0)
   // State, not a ref: the chrome below renders from it, and a ref read during
   // render is a value React has no way to re-render for.
   const [instrument, setInstrument] = useState<Instrument | null>(null)
@@ -63,17 +63,18 @@ export default function App() {
         case 'Escape':
           instrument.select(null)
           return
-        // Temporary, for looking at the cast on its own before Crowding
-        // drives it. Bracket keys because nothing else uses them.
+        // Temporary, standing in for the drag on the left edge until that
+        // gesture exists. A ref and not state: crowd never goes through
+        // React, and these keys must use the same route the pointer will.
         case 'BracketLeft':
           if (typing) return
-          castRef.current = Math.max(0, castRef.current - 0.1)
-          instrument.setCastStrength(castRef.current)
+          crowdRef.current = Math.max(0, crowdRef.current - 0.1)
+          instrument.setCrowd(crowdRef.current)
           return
         case 'BracketRight':
           if (typing) return
-          castRef.current = Math.min(1, castRef.current + 0.1)
-          instrument.setCastStrength(castRef.current)
+          crowdRef.current = Math.min(1, crowdRef.current + 0.1)
+          instrument.setCrowd(crowdRef.current)
           return
         default:
       }

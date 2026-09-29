@@ -28,6 +28,7 @@
  */
 
 import { CORNER_INNER } from '../core/constants'
+import { litRect } from '../core/lit'
 import { encode, filmLinear } from '../core/oklab'
 import { blendModes, filmStat, filmToRyb, mixFilm, stackLight } from '../core/pigment'
 import type { Ryb, SheetStat } from '../core/pigment'
@@ -238,6 +239,8 @@ export class Painter {
   coverage = 0
   /** The blend mix of the last draw, so a sample answers for what is on screen. */
   private lastMix = 0
+  /** Left edge of the lit area at the last draw, in stage px. Paper's width. */
+  private litX0 = 0
   private cssW = 0
   private cssH = 0
 
@@ -277,9 +280,33 @@ export class Painter {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
     ctx.clearRect(0, 0, vp.width, vp.height)
 
+    // The lit area, in the stage pixels this canvas is drawn in. Held on the
+    // painter because `sampleAt` has to refuse the same region between draws.
+    const lit = litRect(state.aspect, state.crowd)
+    this.litX0 = lit.x0 * vp.height
+
+    /*
+     * Everything is clipped to the lit area, not just the region polys below.
+     * The mount is only 95.5% white, so paint left under the paper would come
+     * through it at 4.5%: a saturated sheet reads as three or four bytes of
+     * colour bleeding into a surface that is supposed to be blank card. The
+     * polys are clipped as well because the field integral measures them, and
+     * the clip is a raster operation the arithmetic cannot see.
+     */
+    const clipped = this.litX0 > 0
+    if (clipped) {
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(this.litX0, 0, vp.width - this.litX0, vp.height)
+      ctx.clip()
+    }
+
     const sheets = this.collect(state, opts)
     const n = sheets.length
-    if (n === 0) return
+    if (n === 0) {
+      if (clipped) ctx.restore()
+      return
+    }
 
     // --- find every region ----------------------------------------------------
     const levels = this.levels
@@ -340,7 +367,16 @@ export class Painter {
     // --- per-sheet material ---------------------------------------------------
     for (let i = 0; i < n; i++) this.material(ctx, sheets[i] as Sheet)
 
-    this.coverage = integrateField(this.levels, vp.width * vp.height, this.field)
+    if (clipped) ctx.restore()
+
+    // Against the LIT area, not the viewport. Surface under paper is not bare
+    // white waiting to be covered, it is not surface: counting it would keep
+    // the field pale exactly as the room gets small and the crowding starts.
+    this.coverage = integrateField(
+      this.levels,
+      (vp.width - this.litX0) * vp.height,
+      this.field,
+    )
   }
 
   // --- pieces ----------------------------------------------------------------
@@ -373,9 +409,20 @@ export class Painter {
       const [x1, y1] = corner(1, -1)
       const [x2, y2] = corner(1, 1)
       const [x3, y3] = corner(-1, 1)
+      // Clipped to the lit area before the walk, because the walk's areas are
+      // what the field is integrated over. Nothing clipped sheets to anything
+      // before crowding: it worked only because the simulation kept them in
+      // the box, and paper is the first thing that overlaps a sheet without
+      // moving it. Left untouched when no paper is in, so the frame allocates
+      // exactly what it always did.
+      let poly = [x0, y0, x1, y1, x2, y2, x3, y3]
+      if (this.litX0 > 0) {
+        poly = clipHalf(poly, -1, 0, -this.litX0)
+        if (poly.length < 6) continue
+      }
       sheets.push({
         id: slide.id,
-        poly: [x0, y0, x1, y1, x2, y2, x3, y3],
+        poly,
         cx,
         cy,
         hw,
@@ -429,6 +476,10 @@ export class Painter {
    * `x`/`y` are stage pixels, the same space the canvas is drawn in.
    */
   sampleAt(x: number, y: number): { ids: number[]; hex: string } | null {
+    // Under the paper there is no film to sample, only card. The sheets are
+    // still there in the simulation, so without this the gesture would return
+    // a colour from a part of the box the user cannot see.
+    if (x < this.litX0) return null
     const sheets = this.sheets
     const set: number[] = []
     for (let i = 0; i < sheets.length; i++) {

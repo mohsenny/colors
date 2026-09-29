@@ -25,6 +25,8 @@ import {
   LONELY_GAIN_DEG,
   OMEGA_MAX_DEG,
   OMEGA_MIN_DEG,
+  PACK_LOOSE,
+  PACK_PACKED,
   REDUCED_OMEGA,
   REDUCED_SPEED,
   ROT_RESTORE_DEG,
@@ -53,6 +55,8 @@ import {
   WANDER_GAIN_DEG,
 } from '../core/constants'
 import { driftDye } from '../core/drift'
+import { containAxis, litArea, litRect } from '../core/lit'
+import type { LitRect } from '../core/lit'
 import { DEG, clamp, clampAbs, makeNoiseTables, smoothstep, vnoise, wrapPi } from '../core/noise'
 import { mixDye } from '../core/oklab'
 import { Rng, splitmix32 } from '../core/rng'
@@ -77,6 +81,16 @@ const PROBE_SECONDS = 4
 const PROBE_DT = 1 / 30
 const MAX_SEED_ATTEMPTS = 24
 
+/**
+ * How far inside the lit area a sheet is first placed, in u. Nothing is born
+ * touching a wall: a sheet that opens in contact bounces on its first tick,
+ * which spends six draws before the composition has been looked at once.
+ * The two numbers differ because they always have: the seed ring is placed
+ * before anything else exists and a new sheet is dropped into a gap.
+ */
+const SEED_INSET = 0.06
+const CUT_INSET = 0.04
+
 interface SlideRuntime {
   noise: Float32Array[]
   rng: Rng
@@ -99,6 +113,61 @@ interface Origin {
 interface Candidate {
   slides: SlideState[]
   origin: Origin
+}
+
+/** What the packing arithmetic needs of a sheet. A SlideState is one. */
+export interface Packable {
+  w: number
+  h: number
+}
+
+/**
+ * Packing fraction: how much sheet there is for the room to hold, as a
+ * fraction of the lit floor. Not covered area. Two sheets stacked cover what
+ * one of them does, so covered area stops rising exactly when the field starts
+ * to jam, which is the half of the gesture that has to be measurable.
+ */
+export function packingFraction(slides: readonly Packable[], litArea: number): number {
+  let area = 0
+  for (let i = 0; i < slides.length; i++) {
+    const s = slides[i] as Packable
+    area += s.w * s.h
+  }
+  // A room of zero width holds nothing: the packing is infinite and the band
+  // below reads it as fully packed. A bare divide would return NaN here and
+  // NaN silently poisons every term it is multiplied into.
+  return litArea > 0 ? area / litArea : Number.POSITIVE_INFINITY
+}
+
+/**
+ * The one crowding scalar. 1 while the field is loose and moving as it always
+ * has, 0 once it is packed and holding still. Everything crowding does to the
+ * motion is this number: speed, steering, the home leash and the sway.
+ *
+ * The band is anchored at the packing the room ALREADY HAD rather than at two
+ * absolute walls, and that is the whole reason this takes two arguments. Twelve
+ * sheets in a square window rest at phi 0.875 with no paper in, so absolute
+ * walls would open that instrument already frozen. Anchored, the question the
+ * band asks is how much tighter the room is than the one the sheets were dealt,
+ * which is what the gesture is for. A field that was already dense reaches
+ * Packed on less paper, which is correct and is the only thing the count
+ * control now changes about crowding.
+ */
+export function packDamp(phi: number, phiOpen: number): number {
+  const lo = Math.max(PACK_LOOSE, phiOpen)
+  return 1 - smoothstep(lo, lo + (PACK_PACKED - PACK_LOOSE), phi)
+}
+
+/**
+ * Both of the above, from exactly the three things the history ring restores.
+ * One entry point, so the renderer's cast and the simulation's motion can never
+ * disagree about how packed the field is: they are the same number.
+ */
+export function crowdDamp(slides: readonly Packable[], aspect: number, crowd: number): number {
+  return packDamp(
+    packingFraction(slides, litArea(litRect(aspect, crowd))),
+    packingFraction(slides, litArea(litRect(aspect, 0))),
+  )
 }
 
 function substream(master: number, id: number): Rng {
@@ -143,7 +212,7 @@ export class Simulation {
     this.master = seed >>> 0
     this.viewport = viewport
     this.tabProudU = TAB_PROUD / viewport.height
-    this.state = { t: 0, aspect: viewport.aspect, modeMix: 0, paletteEpoch: 0, slides: [] }
+    this.state = { t: 0, aspect: viewport.aspect, modeMix: 0, paletteEpoch: 0, crowd: 0, slides: [] }
     this.buildLayout(viewport.slideCount)
   }
 
@@ -211,6 +280,10 @@ export class Simulation {
   private seedSlides(layout: Rng, count: number): Candidate {
     const vp = this.viewport
     const A = vp.aspect
+    // The empty room, never the crowded one. A window resize that changes the
+    // slide count re-seeds, and re-seeding against paper that is currently in
+    // would bake a gesture the user is still making into the opening layout.
+    const lit = litRect(A, 0)
 
     const radii = layout.shuffle(PLACEMENT_RADII.slice(0, count))
 
@@ -259,8 +332,8 @@ export class Simulation {
         const r = (radii[i] as number) * ((w + h) / 2 + meanSizeU) * 0.5
         x = origin.x + Math.cos(theta) * r * (A > 1 ? A * 0.72 : 1)
         y = origin.y + Math.sin(theta) * r
-        const cx = clamp(x, 0.06 + w / 2, A - 0.06 - w / 2)
-        const cy = clamp(y, 0.06 + h / 2, 0.94 - h / 2)
+        const cx = clamp(x, lit.x0 + SEED_INSET + w / 2, lit.x1 - SEED_INSET - w / 2)
+        const cy = clamp(y, lit.y0 + SEED_INSET + h / 2, lit.y1 - SEED_INSET - h / 2)
         if (Math.hypot(cx - x, cy - y) < 0.08) {
           x = cx
           y = cy
@@ -350,6 +423,10 @@ export class Simulation {
       aspect: this.viewport.aspect,
       modeMix: 0,
       paletteEpoch: 0,
+      // Explicitly the empty room, matching seedSlides. Probing a candidate
+      // against walls the paper has moved would score the layout the user
+      // cannot see yet and reject it for crowding it never has to survive.
+      crowd: 0,
       slides: candidate.slides.map((s) => ({
         ...s,
         cd: [...s.cd] as SlideState['cd'],
@@ -552,10 +629,26 @@ export class Simulation {
     st.t += dt
     const t = st.t
     const A = st.aspect
+    // Once per advance, so every sheet in this step agrees about where the room
+    // ends. The caller holds `crowd` constant across the substeps.
+    const lit = litRect(A, st.crowd)
     const slides = st.slides
     const occ = this.occupancyOf(slides)
 
-    const speedScale = reduced ? REDUCED_SPEED : 1
+    /*
+     * Crowding and reduced motion compose here and nowhere else, so there is
+     * one number that says how much this field is moving.
+     *
+     * Reduced motion does not cap the gesture and the three states do exist
+     * there, but they are read almost entirely through the cast: REDUCED_SPEED
+     * has already taken 84% of the travel, so the difference between Loose and
+     * Packed is a sixth of a difference that was small to begin with. That is
+     * the right way round. The gesture is direct manipulation and answering it
+     * is not optional, and the thing it eventually does is hold still, which
+     * is the one outcome a reduced-motion preference can never object to.
+     */
+    const damp = crowdDamp(slides, A, st.crowd)
+    const speedScale = (reduced ? REDUCED_SPEED : 1) * damp
     const omegaScale = reduced ? REDUCED_OMEGA : 1
 
     for (let i = 0; i < slides.length; i++) {
@@ -599,7 +692,13 @@ export class Simulation {
         // axis dwell went from 5% to 13% on one seed. The lead turns the
         // approach into a spiral, in the same direction the slide's home orbits.
         const lead = Math.atan2(dhy, dhx) + (s.id % 2 === 0 ? HOME_LEAD : -HOME_LEAD)
-        steer += HOME_GAIN_DEG * pull * turnSign(s.heading, lead)
+        // Faded out by the packing, and this one has to be faded relative to
+        // the other terms rather than just slowed with them. `homeOf` puts
+        // every home on an ellipse inscribed in the FULL box, so once the
+        // paper is halfway in most homes are underneath it and the leash is
+        // steering the whole set into the paper: a row of sheets pressed
+        // against the edge, which is exactly what Jostling must not look like.
+        steer += HOME_GAIN_DEG * pull * damp * turnSign(s.heading, lead)
       }
 
       // Contact clock. Rises while touching anything at all, unwinds faster than
@@ -667,7 +766,12 @@ export class Simulation {
         steer += AXIS_ESCAPE_GAIN_DEG * (1 - Math.abs(axisGap) / axisWindow) * away
       }
 
-      s.heading += clampAbs(steer, STEER_CLAMP_DEG) * DEG * dt
+      // Damped after the clamp, not before it: the clamp is the budget for how
+      // hard a sheet may turn and the packing is how much of that budget it
+      // still has. Without this the heading keeps integrating at v = 0, so a
+      // Packed sheet spends the whole gesture silently spinning a bearing
+      // nothing can see and leaves on an arbitrary one when the paper goes.
+      s.heading += clampAbs(steer, STEER_CLAMP_DEG) * damp * DEG * dt
 
       // --- soft catch recovery ---
       if (s.catchUntil > 0) {
@@ -700,13 +804,20 @@ export class Simulation {
           OMEGA_MAX_DEG * DEG,
         )
       }
-      s.rot = s.rotRest + swayOffset(s.id, t, swayRoom(s.rotRest))
+      // The held lean. A packed sheet has no room left to sway in, so the
+      // damping goes into the ROOM and not into the output: the offset stays
+      // bounded by construction and stays a pure function of (id, t, room),
+      // which is what keeps it free of state, free of a history lane and exact
+      // across a scrub. Damping the output instead would need a clamp
+      // somewhere, and a clamp at this speed is a flat spot that lasts half a
+      // minute (see core/sway.ts).
+      s.rot = s.rotRest + swayOffset(s.id, t, swayRoom(s.rotRest) * damp)
 
       s.z += (s.zTarget - s.z) * (1 - Math.exp(-dt / DEPTH_EASE_TAU))
 
       for (let k = 0; k < 4; k++) s.cd[k] = Math.max(0, (s.cd[k] as number) - dt)
 
-      this.resolveWalls(s, rt, t, A)
+      this.resolveWalls(s, rt, t, lit)
       s.rngState = rt.rng.state
 
       this.colourStep(s, dt, t)
@@ -774,24 +885,36 @@ export class Simulation {
    * Exactly six draws are consumed per contact, including one that is sometimes
    * discarded, so a test can assert the stream position from the bounce count.
    */
-  private resolveWalls(s: SlideState, rt: SlideRuntime, t: number, A: number): void {
+  private resolveWalls(s: SlideState, rt: SlideRuntime, t: number, lit: LitRect): void {
     const eps = 0.5 / this.viewport.height
     for (let pass = 0; pass < 2; pass++) {
       const b = this.bounds(s)
+      const dx = containAxis(b.cx, b.hx, lit.x0, lit.x1)
+      const dy = containAxis(b.cy, b.hy, lit.y0, lit.y1)
+
+      /*
+       * Two horizontal corrections are not bounces, and both go the silent way.
+       *
+       * The paper's edge is a wall that moves, and a sheet resting against a
+       * moving wall is in contact on every tick: the bounce path would fire six
+       * draws every BOUNCE_COOLDOWN for the whole length of the gesture, which
+       * is the one thing a plain tick may never do. A room narrower than the
+       * sheet is the other: that correction is a centring, and it has no
+       * normal to reflect off at all.
+       */
+      if (dx !== 0 && (lit.x1 - lit.x0 < 2 * b.hx || (lit.x0 > 0 && dx > 0))) {
+        s.x += dx
+        continue
+      }
+
       let wall = -1
       let push = 0
-      if (b.cx - b.hx < 0) {
-        wall = 0
-        push = -(b.cx - b.hx)
-      } else if (b.cx + b.hx > A) {
-        wall = 1
-        push = A - (b.cx + b.hx)
-      } else if (b.cy - b.hy < 0) {
-        wall = 2
-        push = -(b.cy - b.hy)
-      } else if (b.cy + b.hy > 1) {
-        wall = 3
-        push = 1 - (b.cy + b.hy)
+      if (dx !== 0) {
+        wall = dx > 0 ? 0 : 1
+        push = dx
+      } else if (dy !== 0) {
+        wall = dy > 0 ? 2 : 3
+        push = dy
       }
       if (wall < 0) return
 
@@ -901,7 +1024,13 @@ export class Simulation {
    * heading that takes it towards company rather than into a corner.
    */
   private cutSheet(id: number, layout: Rng): SlideState {
-    const A = this.state.aspect
+    // The room as it stands, paper and all. A sheet added while the field is
+    // crowded belongs in the part of the box that is still lit.
+    const lit = this.lit()
+    const litW = lit.x1 - lit.x0
+    const litH = lit.y1 - lit.y0
+    const midX = (lit.x0 + lit.x1) / 2
+    const midY = (lit.y0 + lit.y1) / 2
     const sizeFrac = this.stockSize()
     const slideAspect = SLIDE_ASPECT * (1 + layout.spread(SLIDE_ASPECT_SPREAD))
     const { w, h } = this.dimensions(sizeFrac, slideAspect)
@@ -911,13 +1040,21 @@ export class Simulation {
     // the first place. So it looks for a gap: candidates are scored on how much
     // they overlap, with a small pull towards the middle so the sheet does not
     // arrive in a corner and spend ten seconds crossing the empty box.
-    let bx = A / 2
-    let by = 0.5
+    let bx = midX
+    let by = midY
     let best = Infinity
     for (let k = 0; k < 40; k++) {
-      const x = clamp(layout.next() * A, 0.04 + w / 2, A - 0.04 - w / 2)
-      const y = clamp(layout.next(), 0.04 + h / 2, 0.96 - h / 2)
-      let cost = 0.35 * Math.hypot((x - A / 2) / (A / 2), (y - 0.5) / 0.5)
+      const x = clamp(
+        lit.x0 + layout.next() * litW,
+        lit.x0 + CUT_INSET + w / 2,
+        lit.x1 - CUT_INSET - w / 2,
+      )
+      const y = clamp(
+        lit.y0 + layout.next() * litH,
+        lit.y0 + CUT_INSET + h / 2,
+        lit.y1 - CUT_INSET - h / 2,
+      )
+      let cost = 0.35 * Math.hypot((x - midX) / (litW / 2), (y - midY) / (litH / 2))
       for (const o of this.state.slides) {
         cost += clamp(1 - Math.hypot(x - o.x, y - o.y) / (radius + this.proxyRadius(o)), 0, 1)
       }
@@ -942,7 +1079,7 @@ export class Simulation {
     }
     const bearing = nearest
       ? Math.atan2(nearest.y - by, nearest.x - bx)
-      : Math.atan2(0.5 - by, A / 2 - bx)
+      : Math.atan2(midY - by, midX - bx)
     let heading = bearing
     for (let tries = 0; tries < 8; tries++) {
       heading = bearing + (layout.chance(0.5) ? 1 : -1) * (24 + 42 * layout.next()) * DEG
@@ -999,7 +1136,7 @@ export class Simulation {
       locked: false,
       held: false,
     }
-    this.depenetrate(slide, A)
+    this.depenetrate(slide, lit)
     return slide
   }
 
@@ -1041,35 +1178,30 @@ export class Simulation {
 
     const scale = vp.aspect / prev.aspect
     this.state.aspect = vp.aspect
+    const lit = this.lit()
     for (const s of this.state.slides) {
       s.x *= scale
       const dim = this.dimensions(s.sizeFrac, s.aspect)
       s.w = dim.w
       s.h = dim.h
-      this.depenetrate(s, vp.aspect)
+      this.depenetrate(s, lit)
     }
   }
 
-  private depenetrate(s: SlideState, A: number): void {
+  private depenetrate(s: SlideState, lit: LitRect): void {
     for (let pass = 0; pass < 3; pass++) {
       const b = this.bounds(s)
-      let moved = false
-      if (b.cx - b.hx < 0) {
-        s.x += -(b.cx - b.hx)
-        moved = true
-      } else if (b.cx + b.hx > A) {
-        s.x += A - (b.cx + b.hx)
-        moved = true
-      }
-      if (b.cy - b.hy < 0) {
-        s.y += -(b.cy - b.hy)
-        moved = true
-      } else if (b.cy + b.hy > 1) {
-        s.y += 1 - (b.cy + b.hy)
-        moved = true
-      }
-      if (!moved) return
+      const dx = containAxis(b.cx, b.hx, lit.x0, lit.x1)
+      const dy = containAxis(b.cy, b.hy, lit.y0, lit.y1)
+      if (dx === 0 && dy === 0) return
+      s.x += dx
+      s.y += dy
     }
+  }
+
+  /** The room as it stands. Every mutation contains against this one rect. */
+  private lit(): LitRect {
+    return litRect(this.state.aspect, this.state.crowd)
   }
 
   /**
@@ -1081,7 +1213,7 @@ export class Simulation {
     if (!s) return
     s.x = x
     s.y = y
-    this.depenetrate(s, this.state.aspect)
+    this.depenetrate(s, this.lit())
   }
 
   /** Stop a slide where it stands, or let it go again. */
@@ -1109,7 +1241,7 @@ export class Simulation {
     s.sizeFrac = clamp(Math.sqrt(wPx * hPx) / vp.short, SIZE_FRAC_MIN, SIZE_FRAC_MAX)
     s.w = wPx / vp.height
     s.h = hPx / vp.height
-    this.depenetrate(s, this.state.aspect)
+    this.depenetrate(s, this.lit())
   }
 
   /** Resize about the slide's own aspect, which is what the size band means. */

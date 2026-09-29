@@ -43,6 +43,7 @@ function makeState(): SimState {
     aspect: 1.6,
     modeMix: 0,
     paletteEpoch: 0,
+    crowd: 0,
     slides: Array.from({ length: SLIDE_COUNT }, (_, i) => slide(i)),
   }
 }
@@ -52,6 +53,9 @@ function stamp(state: SimState, tick: number): void {
   state.t = tick * 0.016
   state.modeMix = (tick % 100) / 100
   state.paletteEpoch = Math.floor(tick / 50)
+  // Global lane p+4. The ring has to carry the room's width, or a scrub taken
+  // during a crowd gesture replays a wide field's positions into a narrow box.
+  state.crowd = (tick % 37) / 37
   state.slides.forEach((s, i) => {
     const v = tick * 10 + i
     s.x = v
@@ -85,6 +89,7 @@ function digest(state: SimState): string {
     state.aspect,
     state.modeMix,
     state.paletteEpoch,
+    state.crowd,
     state.slides.map((s) => [
       s.x,
       s.y,

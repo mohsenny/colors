@@ -396,6 +396,29 @@ export const CAST_GAIN = 6
  */
 export const CAST_TAU = 1.2
 
+// --- crowding -----------------------------------------------------------------
+/**
+ * Where the field stops being loose, and where it is packed. Both are PACKING
+ * FRACTION: total sheet area over lit area, never covered-area percent. Covered
+ * percent saturates while there is still floor left, because two sheets on top
+ * of each other cover what one of them does.
+ *
+ * Both measured. Sheet size is a function of the viewport only, so a resting
+ * eight-sheet field sits at phi 0.25 at 21:9, 0.328 at 16:9, 0.364 at 16:10 and
+ * 0.437 at 4:3, and the count control moves that fourfold. 0.50 is therefore
+ * the first edge a default field crosses only because the paper took floor
+ * away. The upper edge is the jamming number: randomly oriented equal squares
+ * stop being able to rearrange somewhere around an area fraction of 0.75 to
+ * 0.85, and it sits at the top of that range because these sheets are allowed
+ * to overlap and spend most of their time doing it.
+ *
+ * The pair is a band WIDTH and not two absolute walls. Twelve sheets in a
+ * square window rest at 0.875 with no paper in at all, and reading that as
+ * packed would freeze an instrument nobody had touched. See `packDamp`.
+ */
+export const PACK_LOOSE = 0.5
+export const PACK_PACKED = 0.85
+
 // --- reduced motion -----------------------------------------------------------
 /** Global speed multiplier when the user asked for less movement. */
 export const REDUCED_SPEED = 0.16

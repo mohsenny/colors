@@ -5,6 +5,8 @@ import {
   DT,
   HISTORY_FRAMES,
   OMEGA_MAX_DEG,
+  PACK_LOOSE,
+  PACK_PACKED,
   ROT_RESTORE_DEG,
   SLIDE_COUNT,
   SLIDE_COUNT_MAX,
@@ -13,11 +15,12 @@ import {
   SPEED_MIN,
   TAB_PROUD,
 } from '../core/constants'
+import { litRect } from '../core/lit'
 import { DEG, wrapPi } from '../core/noise'
 import { sideBand } from '../core/size'
 import type { Dye, SimState, SlideState, Viewport } from '../core/types'
 import { History } from './history'
-import { Simulation } from './simulation'
+import { Simulation, crowdDamp, packDamp, packingFraction } from './simulation'
 
 const VP: Viewport = {
   width: 1440,
@@ -97,6 +100,27 @@ describe('determinism', () => {
     expect(changes).toBeGreaterThan(0)
     expect(changes).toBeLessThan(200)
   })
+
+  it('still never draws on a plain tick while the paper is in', () => {
+    // The edge that moves is the one that would break this: a sheet resting
+    // against it is in contact every tick, and a bounce there would spend six
+    // draws per cooldown for the whole gesture. Measured at 26 to 35 changes
+    // over these seeds, slightly under the open room because the left edge
+    // stopped bouncing at all.
+    for (const crowd of [0.45, 0.6, 0.995]) {
+      const sim = new Simulation(4242, VP)
+      sim.state.crowd = crowd
+      let changes = 0
+      let before = sim.state.slides.map((s) => s.rngState)
+      for (let i = 0; i < 60 * 60; i++) {
+        sim.step(false)
+        const after = sim.state.slides.map((s) => s.rngState)
+        for (let k = 0; k < after.length; k++) if (after[k] !== before[k]) changes++
+        before = after
+      }
+      expect(changes).toBeLessThan(200)
+    }
+  })
 })
 
 describe('containment', () => {
@@ -127,6 +151,160 @@ describe('containment', () => {
       }
     }
     expect(worst).toBeLessThan(1 / PORTRAIT.height)
+  })
+
+  it('keeps everything to the right of the paper', () => {
+    const sim = new Simulation(777, VP)
+    sim.state.crowd = 0.45
+    const steps = Math.round(120 / DT)
+    let worst = 0
+    for (let i = 0; i < steps; i++) {
+      sim.step(false)
+      const lit = litRect(sim.state.aspect, sim.state.crowd)
+      for (const s of sim.state.slides) {
+        const b = unionBox(s, VP)
+        worst = Math.max(worst, lit.x0 - b.left, -b.top, b.right - lit.x1, b.bottom - 1)
+      }
+    }
+    expect(worst).toBeLessThan(1 / VP.height)
+  })
+
+  it('centres sheets in a room too narrow to hold them', () => {
+    // Half a per cent of the width left lit is far past anything the gesture
+    // will reach, and it is the case that breaks a resolver that pushes: the
+    // two edges cannot both be satisfied, so the answer has to be the middle.
+    const sim = new Simulation(31337, VP)
+    sim.state.crowd = 0.995
+    run(sim, 10)
+    const lit = litRect(sim.state.aspect, sim.state.crowd)
+    const mid = (lit.x0 + lit.x1) / 2
+    for (const s of sim.state.slides) {
+      const b = unionBox(s, VP)
+      expect(Math.abs((b.left + b.right) / 2 - mid)).toBeLessThan(1 / VP.height)
+    }
+  })
+})
+
+describe('crowding', () => {
+  /** A resting eight-sheet field, as `stockSize` cuts it at 16:10. */
+  const REST = Array.from({ length: 8 }, () => ({ w: 0.27, h: 0.27 }))
+
+  it('measures packing as sheet area over lit area', () => {
+    expect(packingFraction([], VP.aspect)).toBe(0)
+    // The measured resting number the band was tuned against.
+    expect(packingFraction(REST, VP.aspect)).toBeCloseTo(0.3645, 4)
+    // Taking half the floor away doubles it. Nothing here resizes a sheet.
+    expect(packingFraction(REST, VP.aspect / 2)).toBeCloseTo(0.729, 3)
+    // A room of zero width is fully packed, not NaN.
+    expect(packingFraction(REST, 0)).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it('damps from one to zero across the band and never the other way', () => {
+    const open = 0.364
+    expect(packDamp(open, open)).toBe(1)
+    expect(packDamp(PACK_LOOSE, open)).toBe(1)
+    expect(packDamp(PACK_PACKED, open)).toBe(0)
+    expect(packDamp(Number.POSITIVE_INFINITY, open)).toBe(0)
+    expect(packDamp(0.675, open)).toBeCloseTo(0.5, 6)
+    let previous = 1
+    for (let phi = 0; phi <= 1.2; phi += 0.01) {
+      const d = packDamp(phi, open)
+      expect(d).toBeLessThanOrEqual(previous + 1e-12)
+      expect(d).toBeGreaterThanOrEqual(0)
+      previous = d
+    }
+  })
+
+  it('opens undamped however many sheets were dealt', () => {
+    // Twelve sheets in a square window rest at phi 0.875, past the upper band
+    // edge. Absolute walls would freeze an instrument nobody had touched.
+    const twelve = Array.from({ length: 12 }, () => ({ w: 0.27, h: 0.27 }))
+    expect(packDamp(0.875, 0.875)).toBe(1)
+    for (const aspect of [21 / 9, 16 / 10, 4 / 3, 1]) {
+      expect(crowdDamp(twelve, aspect, 0)).toBe(1)
+      expect(crowdDamp(REST, aspect, 0)).toBe(1)
+    }
+    // And a field that was already dense reaches Packed on less paper.
+    expect(crowdDamp(twelve, 1, 0.3)).toBeLessThan(crowdDamp(REST, 1, 0.3))
+  })
+
+  it('still never draws on a plain tick through a whole crowd sweep', () => {
+    // The sweep is the case the fixed values in the determinism suite cannot
+    // reach: an edge that is moving under a sheet on every single tick.
+    const sim = new Simulation(4242, VP)
+    const ticks = 60 * 60
+    let changes = 0
+    let before = sim.state.slides.map((s) => s.rngState)
+    for (let i = 0; i < ticks; i++) {
+      // In over half a minute and back out again, which is slower than a hand.
+      sim.state.crowd = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / ticks)
+      sim.step(false)
+      const after = sim.state.slides.map((s) => s.rngState)
+      for (let k = 0; k < after.length; k++) if (after[k] !== before[k]) changes++
+      before = after
+    }
+    expect(changes).toBeLessThan(200)
+  })
+
+  it('holds containment at every crowd value on the way in', () => {
+    const sim = new Simulation(777, VP)
+    const ticks = Math.round(120 / DT)
+    let worst = 0
+    let worstOffCentre = 0
+    for (let i = 0; i < ticks; i++) {
+      sim.state.crowd = i / (ticks - 1)
+      sim.step(false)
+      const lit = litRect(sim.state.aspect, sim.state.crowd)
+      const room = lit.x1 - lit.x0
+      for (const s of sim.state.slides) {
+        const b = unionBox(s, VP)
+        worst = Math.max(worst, -b.top, b.bottom - 1)
+        if (b.right - b.left <= room) {
+          worst = Math.max(worst, lit.x0 - b.left, b.right - lit.x1)
+        } else {
+          // Past the point where the room can hold a sheet the promise is the
+          // other one: centred, because no position satisfies both edges.
+          worstOffCentre = Math.max(
+            worstOffCentre,
+            Math.abs((b.left + b.right) / 2 - (lit.x0 + lit.x1) / 2),
+          )
+        }
+      }
+    }
+    expect(worst).toBeLessThan(1 / VP.height)
+    expect(worstOffCentre).toBeLessThan(1 / VP.height)
+  })
+
+  it('stops the field once it is packed', () => {
+    const sim = new Simulation(777, VP)
+    sim.state.crowd = 0.8
+    // Long enough for the paper to have pushed everything off the floor it
+    // took. The depenetration is not damped: containment is not a preference.
+    run(sim, 3)
+    expect(crowdDamp(sim.state.slides, sim.state.aspect, sim.state.crowd)).toBe(0)
+    let worst = 0
+    for (let second = 0; second < 10; second++) {
+      const before = sim.state.slides.map((s) => ({ x: s.x, y: s.y }))
+      run(sim, 1)
+      sim.state.slides.forEach((s, i) => {
+        const p = before[i] as { x: number; y: number }
+        worst = Math.max(worst, Math.hypot(s.x - p.x, s.y - p.y))
+      })
+    }
+    // Half a pixel a second is the threshold the sway was tuned against: below
+    // it nothing on screen reads as moving.
+    expect(worst * VP.height).toBeLessThan(0.5)
+  })
+
+  it('holds the lean it was cut with rather than clamping the sway', () => {
+    const sim = new Simulation(31337, VP)
+    sim.state.crowd = 0.8
+    run(sim, 3)
+    for (const s of sim.state.slides) {
+      // Room times zero is zero, so the offset is zero: no flat spot, no
+      // clamp, and the sheet is back on exactly the lean it was cut with.
+      expect(s.rot).toBeCloseTo(s.rotRest, 12)
+    }
   })
 })
 

@@ -12,6 +12,7 @@ import {
 } from '../core/constants'
 import { lampsAt } from '../core/lamps'
 import type { Cast, Lamp } from '../core/lamps'
+import { litRect } from '../core/lit'
 import { filmHex } from '../core/oklab'
 import { clampSide, sideBand } from '../core/size'
 import type { RenderOptions, SimState, SlideState, StageHandlers, Viewport } from '../core/types'
@@ -35,6 +36,25 @@ export type StageAllHandlers = StageHandlers & StageHoverHandler
 
 /** Mounts start above the surface and the interior canvas, which own 1 and 2. */
 const Z_BASE = 10
+
+/**
+ * The paper, between the interior canvas and the mounts. It has to be over the
+ * paint, because it covers sheets rather than sliding under them, and under the
+ * mounts because a mount it covered would lose its shadow and its tab and stop
+ * being an object. It never takes a pointer: the gesture that moves it starts
+ * on bare lit surface.
+ */
+const Z_PAPER = 5
+
+/**
+ * The leading edge rounds to a whole pixel. A hairline on a fractional
+ * boundary antialiases to two rows of grey, and on a covering that composites
+ * to roughly (255,255,255) over a surface of roughly (245,246,247) the edge is
+ * most of what says an object arrived rather than the lamp going flat.
+ */
+function paperWidth(crowd: number, aspect: number, vh: number): number {
+  return Math.round(litRect(aspect, crowd).x0 * vh)
+}
 
 /** Shadow model (design notes 1.5). Alpha falls as blur grows; that inversion
  *  is what reads as a physical object a few millimetres above a lit surface. */
@@ -161,6 +181,9 @@ export class Stage {
   private readonly handlers: StageAllHandlers
   private readonly recs = new Map<number, SlideRec>()
   private readonly painter: Painter
+  private readonly paper: HTMLDivElement
+  /** Last paper width written, in whole px. -1 so the first frame writes. */
+  private paperPx = -1
 
   private viewport: Viewport | null = null
   /** The cast, low-passed, linear sRGB. White until a field says otherwise. */
@@ -181,6 +204,15 @@ export class Stage {
     this.handlers = handlers
     root.classList.add('lb-stage')
     this.painter = new Painter(root)
+
+    this.paper = div('lb-paper')
+    this.paper.setAttribute('aria-hidden', 'true')
+    // Reused verbatim from the mounts. The paper is the same card as they are,
+    // lying on the surface rather than a few millimetres above it, so it takes
+    // the middle of the depth range and nothing about the shadow is retuned.
+    this.paper.style.boxShadow = shadowStack(0.5)
+    this.paper.style.zIndex = String(Z_PAPER)
+    root.append(this.paper)
 
     const s = root.style
     s.setProperty('--lb-tab-h', `${TAB_H}px`)
@@ -315,6 +347,7 @@ export class Stage {
     root.removeEventListener('keydown', this.onKeyDown)
     for (const rec of this.recs.values()) this.dispose(rec)
     this.recs.clear()
+    this.paper.remove()
     this.painter.destroy()
     this.drag = null
   }
@@ -390,6 +423,17 @@ export class Stage {
     // just measured, so the other order hands the tubes the previous frame.
     this.painter.draw(state, opts)
     this.writeLamps(state.t, opts.warmth, this.castFor(state.t, opts))
+
+    // The paper. Width only: a zero-width element still draws its right-hand
+    // hairline, so the class is what takes it off the surface entirely and is
+    // why crowd 0 is byte identical to an instrument that had never heard of
+    // paper.
+    const paperPx = paperWidth(state.crowd, state.aspect, vp.height)
+    if (paperPx !== this.paperPx) {
+      if (paperPx > 0 !== this.paperPx > 0) this.paper.classList.toggle('is-in', paperPx > 0)
+      this.paperPx = paperPx
+      this.paper.style.width = `${paperPx}px`
+    }
 
     const slides = state.slides
     const vh = vp.height

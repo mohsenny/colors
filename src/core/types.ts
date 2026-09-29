@@ -144,6 +144,14 @@ export interface SimState {
   modeMix: number
   /** Increments on every palette roll. Lets the UI notice colour changes. */
   paletteEpoch: number
+  /**
+   * How much of the width the paper has taken, 0 to 1, measured from the left
+   * edge. Simulation state rather than render state: it is what the walls are,
+   * so a scrub that replayed sheet positions without it would draw a wide
+   * field's composition inside a narrow room and put half of it under paper.
+   * See `litRect`.
+   */
+  crowd: number
   slides: SlideState[]
 }
 
@@ -175,9 +183,9 @@ export interface RenderOptions {
   warmth: number
   /**
    * How much of the field's own colour the tubes take, 0 to 1. At 0 the lamps
-   * are exactly what they have always been. Not wired to a control yet: this
-   * is the mechanism Crowding rests on, and it is being looked at on its own
-   * before anything is built on top of it.
+   * are exactly what they have always been. Driven from `crowd` by the
+   * Instrument, on a straight line for now: the packing-fraction curve that
+   * replaces it is the next step.
    */
   castStrength?: number
 }

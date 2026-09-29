@@ -5,7 +5,7 @@ import type { BlendMode, Dye, SlideState, Viewport } from '../core/types'
 import { generatePalette } from '../palette/palette'
 import { Stage } from '../render/stage'
 import { History } from '../sim/history'
-import { Simulation } from '../sim/simulation'
+import { Simulation, crowdDamp } from '../sim/simulation'
 import { measureViewport, viewportSignificant } from './viewport'
 
 export interface PinnedEntry {
@@ -103,7 +103,15 @@ export class Instrument {
    */
   private countOverride: number | null = null
   private warmth = 0
-  private castStrength = 0
+  /**
+   * How far the paper has come in, 0 to 1, as the pointer last left it.
+   *
+   * A plain field and deliberately not React state: this is driven by a drag,
+   * so it changes at pointer rate, and a snapshot per move would put a render
+   * of the whole chrome inside the gesture. It reaches the simulation once per
+   * rAF and the DOM one frame later, which is the same route hover takes.
+   */
+  private crowd = 0
 
   private listeners = new Set<() => void>()
   private snapshot: InstrumentSnapshot
@@ -182,6 +190,10 @@ export class Instrument {
     this.lastNow = now
 
     if (this.playback === 'live') {
+      // Sampled once and then held: the substeps are one frame of simulation
+      // time being caught up on, and a wall that moved between them would be
+      // two different rooms inside one frame the user sees as one.
+      this.sim.state.crowd = this.crowd
       this.accumulator += dt
       let steps = 0
       while (this.accumulator >= DT && steps < MAX_SUBSTEPS) {
@@ -225,17 +237,37 @@ export class Instrument {
       hoveredId: this.hoveredId,
       reducedMotion: this.reducedMotion,
       warmth: this.warmth,
-      castStrength: this.castStrength,
+      /*
+       * The cast is the packing, exactly: one minus the same damp the sheets
+       * are slowed by, off the same function. The room takes the field's
+       * colour at the rate the field stops moving, so there is one state
+       * change to read rather than two that nearly agree.
+       *
+       * It has to be the packing and not the field's own chroma. A real field
+       * is far less colourful than it looks (mean chroma 0.0047 at 35%
+       * covered, 0.0141 at 85%, over 40 eight-sheet rolls) and CAST_GAIN of 6
+       * against a CAST_C_MAX of 0.05 means the gel is already at its cap at
+       * any of those, so the sheets decide the hue and can never decide the
+       * strength. That is the behaviour worth having: a crowded field of pale
+       * sheets should still cast, and a deliberately monochrome roll should
+       * not blow the room out just for being saturated.
+       *
+       * Read off the state and not off the pointer field, so a scrub takes
+       * the cast back with the room.
+       */
+      castStrength:
+        1 - crowdDamp(this.sim.state.slides, this.sim.state.aspect, this.sim.state.crowd),
     })
   }
 
   /**
-   * Temporary. Crowding will drive this from how packed the field is; until
-   * that exists it is on a key so the mechanism can be judged on its own.
-   * Not React state and not in the snapshot, deliberately.
+   * How far the paper is in, 0 to 1. Takes effect on the next frame.
+   *
+   * No notify and no snapshot: this is pointer-rate, and the one rule the
+   * loop has is that React never renders per frame.
    */
-  setCastStrength(v: number): void {
-    this.castStrength = v < 0 ? 0 : v > 1 ? 1 : v
+  setCrowd(v: number): void {
+    this.crowd = v < 0 ? 0 : v > 1 ? 1 : v
   }
 
   private easeMode(dt: number): void {

@@ -68,6 +68,11 @@ export class History {
     b[p + 1] = state.aspect
     b[p + 2] = state.modeMix
     b[p + 3] = state.paletteEpoch
+    // The room's own width. Without it a scrub taken during a crowd gesture
+    // replays the sheet positions of a wide field inside whatever room the
+    // pointer happens to be holding, and draws half the composition under
+    // paper. GLOBAL_LANES is 8 and four were spare.
+    b[p + 4] = state.crowd
     p += GLOBAL_LANES
 
     const n = Math.min(this.slideCount, state.slides.length)
@@ -134,6 +139,7 @@ export class History {
     state.aspect = b[p + 1] as number
     state.modeMix = b[p + 2] as number
     state.paletteEpoch = b[p + 3] as number
+    state.crowd = b[p + 4] as number
     p += GLOBAL_LANES
 
     const n = Math.min(this.slideCount, state.slides.length)

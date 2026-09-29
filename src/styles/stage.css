@@ -179,6 +179,47 @@
   mix-blend-mode: multiply;
 }
 
+/* --- the paper ------------------------------------------------------------ */
+
+/*
+ * White paper sliding in from the left, making the room smaller.
+ *
+ * It is the hardest thing on the stage to see, and the numbers say why: the
+ * covering composites to about (255, 255, 255) over a lit surface of about
+ * (245, 246, 247), so the area it takes gets BRIGHTER and flatter rather than
+ * dimmer. There is no darkening to lean on. Three things carry it instead, and
+ * all three are the mount's own vocabulary rather than new material: the same
+ * card colour, the same 64px fibre, and the same cut edge on its leading side.
+ * The leading edge also gets the mount's shadow, so what reads is a sheet lying
+ * on the surface with the lamps still on underneath it.
+ *
+ * `width` is written per frame by the renderer, quantised to a whole pixel.
+ * `display` is the class, because a zero-width element still paints its own
+ * right-hand border and a hairline down the left edge of the box at rest is a
+ * mark nobody asked for.
+ *
+ * Right edge only. The other three sides run off the stage, and a border there
+ * would draw a line along the outside of the viewport.
+ */
+.lb-paper {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  display: none;
+  box-sizing: border-box;
+  pointer-events: none;
+  border-right: 1px solid var(--lb-card-edge);
+  background-color: var(--lb-mount);
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+}
+
+.lb-paper.is-in {
+  display: block;
+}
+
 /*
  * The mounts are direct children of the stage, positioned by the renderer.
  */
