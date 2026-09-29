@@ -210,7 +210,11 @@ describe('generatePalette over 300 seeds', () => {
     expect(nearest[Math.floor(nearest.length * 0.1)] as number).toBeGreaterThan(0.055)
     // And no temperament may opt out of two slides being two slides.
     expect(everyNearest[0] as number).toBeGreaterThan(0.006)
-  })
+    // Three hundred rolls, each scored against 56 rejects: 3.1s on a laptop
+    // and past the 5s default on a shared CI runner. The sample size is what
+    // the percentile assertions above are worth, so the timeout moves rather
+    // than the loop.
+  }, 30000)
 
   it('satisfies the hard constraints of its own temperament in at least 85% of rolls', () => {
     // Graded against the temperament that produced the roll. Against a single
@@ -670,6 +674,12 @@ describe('cost', () => {
       previous = generatePalette({ rng, count: 6, areaNorm: AREA, keep: NO_KEEP, previous })
     }
     const elapsed = performance.now() - t0
-    expect(elapsed).toBeLessThan(2000)
+    // 20ms a roll. The budget this defends is that Regenerate must not cost
+    // enough frames to be seen, and a roll happens once per press, so the
+    // headroom against 16.7ms is already large. 2000ms was the laptop number
+    // with 1.5x of slack and a shared runner ate all of it, which measured the
+    // runner rather than the palette. At 4000ms a real regression, anything
+    // that makes a roll three times its cost, still fails here.
+    expect(elapsed).toBeLessThan(4000)
   })
 })
