@@ -193,7 +193,8 @@ export function integrateField(
   return litArea > 0 ? covered / litArea : 0
 }
 
-function shoelace(p: readonly number[]): number {
+/** Area of a simple polygon, flat xy pairs. The only areas the field knows. */
+export function shoelace(p: readonly number[]): number {
   const n = p.length / 2
   if (n < 3) return 0
   let a = 0
@@ -224,6 +225,31 @@ function clipHalf(src: readonly number[], nx: number, ny: number, c: number): nu
     }
   }
   return out
+}
+
+/**
+ * Clip a convex polygon to an axis-aligned rect, given as its four edges.
+ *
+ * The whole rect and not the one edge the paper moves, because this is the
+ * arithmetic counterpart of a `ctx.rect(...); ctx.clip()` and a rect is what
+ * that clips to. Matching it edge for edge is what keeps the measured area and
+ * the painted area the same number when a second edge starts moving, which is
+ * the failure `litRect` was introduced to make impossible on the wall side.
+ */
+export function clipToRect(
+  poly: readonly number[],
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): number[] {
+  let p = clipHalf(poly, -1, 0, -x0)
+  if (p.length < 6) return p
+  p = clipHalf(p, 1, 0, x1)
+  if (p.length < 6) return p
+  p = clipHalf(p, 0, -1, -y0)
+  if (p.length < 6) return p
+  return clipHalf(p, 0, 1, y1)
 }
 
 /** Clip against a slide's interior: four half-planes in the slide's own frame. */
@@ -279,6 +305,15 @@ export class Painter {
   private lastMix = 0
   /** Left edge of the lit area at the last draw, in stage px. Paper's width. */
   private litX0 = 0
+  /**
+   * The other three edges of the same rect, in stage px. Off the viewport
+   * rather than off `lit.x1 * vh`, so they are the very numbers the raster
+   * clip and the `litArea` denominator below already use: a resize that lands
+   * one frame before the simulation's `aspect` catches up must not leave the
+   * measured room a different rect from the painted one.
+   */
+  private litX1 = 0
+  private litY1 = 0
   private cssW = 0
   private cssH = 0
 
@@ -322,6 +357,8 @@ export class Painter {
     // painter because `sampleAt` has to refuse the same region between draws.
     const lit = litRect(state.aspect, state.crowd)
     this.litX0 = lit.x0 * vp.height
+    this.litX1 = vp.width
+    this.litY1 = vp.height
 
     /*
      * Everything is clipped to the lit area, not just the region polys below.
@@ -461,9 +498,22 @@ export class Painter {
       // the box, and paper is the first thing that overlaps a sheet without
       // moving it. Left untouched when no paper is in, so the frame allocates
       // exactly what it always did.
+      //
+      // All four edges and not just the paper's. Once the room is narrower
+      // than a sheet, `containAxis` centres the sheet instead of pushing it
+      // (a push breaks the far edge to satisfy the near one), so the sheet
+      // hangs out over the RIGHT wall and that off-stage area was being
+      // integrated as if it were lit. Measured against dense pixel sampling
+      // of the same rects, 1440x900 with 8 sheets: agreement was exact to
+      // crowd 0.80 and then ran away, coverage reading 1.12 against a truth
+      // of 0.858 at crowd 0.90 and 7.36 at 0.99, where the field came back
+      // 4.9,4.4,4.8. Outside [0,1] entirely, and on the way there the field
+      // goes back UP (0.704 at crowd 0.85, 0.750 at 0.90), so the cast got
+      // paler as the room closed. A phone at 390x780 with 4 sheets starts
+      // diverging at crowd 0.65.
       let poly = [x0, y0, x1, y1, x2, y2, x3, y3]
       if (this.litX0 > 0) {
-        poly = clipHalf(poly, -1, 0, -this.litX0)
+        poly = clipToRect(poly, this.litX0, 0, this.litX1, this.litY1)
         if (poly.length < 6) {
           this.dark.push(slide.id)
           continue

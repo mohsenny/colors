@@ -419,6 +419,22 @@ export const CAST_TAU = 1.2
 export const PACK_LOOSE = 0.5
 export const PACK_PACKED = 0.85
 
+/**
+ * The lit surface the gesture leaves beside the widest sheet, as a fraction of
+ * that sheet's own width. See `crowdCap`: it is what stops the drag at the
+ * physical end of the room rather than at a room of zero width.
+ *
+ * Five per cent and not nothing, because the number the cap is measured
+ * against keeps moving after the cap is taken. A sheet swaying through
+ * SWAY_DEG changes its own span by up to 0.0054 in height units, and the cap
+ * is taken when the pointer moves rather than re-taken every frame, so a flush
+ * fit would drift into the centring branch a second later. Five per cent of
+ * the widest stock sheet is 15.9px at 1920x1080 and 8.3px at 390x780, and
+ * holding 1920x1080 at its cap for ten simulated minutes the room never came
+ * within 17.9px of the widest sheet in it.
+ */
+export const CROWD_SLACK = 0.05
+
 // --- reduced motion -----------------------------------------------------------
 /** Global speed multiplier when the user asked for less movement. */
 export const REDUCED_SPEED = 0.16

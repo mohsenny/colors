@@ -140,10 +140,21 @@ svg {
   -webkit-user-select: none;
   overscroll-behavior: none;
   -webkit-touch-callout: none;
-  /* A touch that drags the paper in is horizontal, which is the one direction
-     the browser claims for itself: without this the first 10px of the gesture
-     go to a scroll or a back-navigation and the pointer stream stops there. */
-  touch-action: none;
+  /* A touch that drags the paper in is a single-finger horizontal pan, which
+     is the one direction the browser claims for itself: with no rule here the
+     first 10px go to a pan or to Chromium's overscroll back-navigation and
+     the pointer stream stops there. `pinch-zoom` refuses that and keeps
+     magnification, which `none` was also taking, and it was taking it from
+     the whole app: this element is position:fixed inset:0. Under 620px the
+     Legend is display:none and the 10.5px tab hex is the only value written
+     down anywhere, so the one thing on the box worth enlarging was the one
+     thing that could not be. Double-tap zoom stays off, as it is under
+     `manipulation`, and here that is the right bargain: a double tap on the
+     film is how a colour is saved. The iOS left-edge back-swipe survives
+     either way, being a system gesture no value of this cancels. Descendants
+     that do need the full opt-out declare their own (.lb-frame, .lb-grip,
+     .lb-copy, .lb-lock, the timeline thumb). */
+  touch-action: pinch-zoom;
 }
 
 /* One focus treatment for the whole app. Pointer users never see it; keyboard

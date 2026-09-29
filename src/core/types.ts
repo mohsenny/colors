@@ -212,9 +212,15 @@ export interface StageHandlers {
    * width the paper has taken, 0 to 1. A fraction and not px, so the room keeps
    * its proportion through a window resize. Pointer rate, like `onMove`, so
    * nothing on this path may reach React.
+   *
+   * Returns the crowd the room will actually be at, which is not always the
+   * one asked for: the gesture is capped at the width of the widest sheet.
+   * The stage needs the answer in the same tick, because a drag that moved
+   * nothing still owes the deselect that a press on bare surface means, and
+   * waiting a frame for the state to come back would miss a fast flick.
    */
-  onCrowd(crowd: number): void
-  /** Raised once when a crowd drag ends. */
+  onCrowd(crowd: number): number
+  /** Raised once when a crowd drag ends that actually moved the paper. */
   onCrowdEnd(): void
   /**
    * Double-click on the film: save the colour that point is currently showing.

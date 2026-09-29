@@ -15,9 +15,9 @@ import {
   SPEED_MIN,
   TAB_PROUD,
 } from '../core/constants'
-import { litRect } from '../core/lit'
+import { crowdCap, crowdInside, litEdgePx, litRect, widestSpan } from '../core/lit'
 import { DEG, wrapPi } from '../core/noise'
-import { sideBand } from '../core/size'
+import { sideBand, stockSizeFrac } from '../core/size'
 import type { Dye, SimState, SlideState, Viewport } from '../core/types'
 import { History } from './history'
 import { Simulation, crowdDamp, packDamp, packingFraction } from './simulation'
@@ -32,6 +32,9 @@ const VP: Viewport = {
 }
 
 const PORTRAIT: Viewport = { width: 420, height: 880, short: 420, aspect: 420 / 880, frame: 5, slideCount: 4 }
+
+/** The widest stock sheet and the most of them: the tightest seed there is. */
+const WIDE: Viewport = { width: 2560, height: 1080, short: 1080, aspect: 2560 / 1080, frame: 7, slideCount: SLIDE_COUNT_MAX }
 
 function fingerprint(state: SimState): string {
   return state.slides
@@ -170,9 +173,12 @@ describe('containment', () => {
   })
 
   it('centres sheets in a room too narrow to hold them', () => {
-    // Half a per cent of the width left lit is far past anything the gesture
-    // will reach, and it is the case that breaks a resolver that pushes: the
-    // two edges cannot both be satisfied, so the answer has to be the middle.
+    // Half a per cent of the width left lit is somewhere the gesture can no
+    // longer go at all: `crowdCap` stops the pointer at 0.835 here. It is
+    // reached by resizing the window down onto a room already closed, or by
+    // pulling a sheet up to SIZE_PX_MAX inside one, and it is the case that
+    // breaks a resolver that pushes: the two edges cannot both be satisfied,
+    // so the answer has to be the middle.
     const sim = new Simulation(31337, VP)
     sim.state.crowd = 0.995
     run(sim, 10)
@@ -313,6 +319,55 @@ describe('crowding', () => {
     // Half a pixel a second is the threshold the sway was tuned against: below
     // it nothing on screen reads as moving.
     expect(worst * VP.height).toBeLessThan(0.5)
+  })
+
+  it('cannot be dragged into the room that has to centre its sheets', () => {
+    /*
+     * The gesture, as `crowdTo` runs it: the cap is re-taken off the live
+     * state on every pointer move and the hand keeps pushing past it. What is
+     * being asserted is the end state the feature promises. The sheets pack
+     * and hold still, all of them inside a room that can hold them, rather
+     * than stacking on one x with the right of each cropped by the window.
+     */
+    const SHAPES: ReadonlyArray<Viewport> = [
+      VP,
+      { width: 1920, height: 1080, short: 1080, aspect: 16 / 9, frame: 7, slideCount: 8 },
+      { width: 1000, height: 1000, short: 1000, aspect: 1, frame: 7, slideCount: 12 },
+      { width: 390, height: 780, short: 390, aspect: 0.5, frame: 5, slideCount: 4 },
+    ]
+    for (const shape of SHAPES) {
+      const sim = new Simulation(4242, shape)
+      const stock = (stockSizeFrac(shape.short) * shape.short) / shape.height
+      const ticks = Math.round(30 / DT)
+      let worstOutside = 0
+      let narrowest = Number.POSITIVE_INFINITY
+      let reached = 0
+      for (let i = 0; i < ticks; i++) {
+        const cap = crowdCap(
+          sim.state.aspect,
+          widestSpan(sim.state.slides, TAB_PROUD / shape.height),
+          stock,
+        )
+        // Shoved all the way to the right edge of the window and held there.
+        sim.state.crowd = crowdInside((2 * i) / ticks, cap)
+        reached = Math.max(reached, sim.state.crowd)
+        sim.step(false)
+        const lit = litRect(sim.state.aspect, sim.state.crowd)
+        for (const s of sim.state.slides) {
+          const b = unionBox(s, shape)
+          worstOutside = Math.max(worstOutside, lit.x0 - b.left, b.right - lit.x1, -b.top, b.bottom - 1)
+          narrowest = Math.min(narrowest, lit.x1 - lit.x0 - (b.right - b.left))
+        }
+      }
+      // Containment is total: pushed off both walls, never centred across one.
+      expect(worstOutside).toBeLessThan(1 / shape.height)
+      expect(narrowest).toBeGreaterThan(0)
+      // And the handle survives: a full stock sheet of lit surface is still
+      // on screen to the right of the paper's edge.
+      const edge = litEdgePx(litRect(sim.state.aspect, reached), shape.height)
+      expect(edge + stock * shape.height).toBeLessThanOrEqual(shape.width + 1e-9)
+      expect(reached).toBeGreaterThan(0.5)
+    }
   })
 
   it('holds the lean it was cut with rather than clamping the sway', () => {
@@ -828,6 +883,44 @@ describe('mutation', () => {
       expect(b.right).toBeLessThanOrEqual(next.aspect + 1e-9)
       expect(b.top).toBeGreaterThanOrEqual(-1e-9)
       expect(b.bottom).toBeLessThanOrEqual(1 + 1e-9)
+    }
+  })
+
+  it('keeps a reseeded layout inside the room the paper left behind', () => {
+    // The resize that changes the slide count re-seeds against the empty room,
+    // and `crowd` is not part of what it resets. Uncontained, three of the four
+    // new sheets landed left of the lit edge here and the worst by 202px, and a
+    // paused instrument stayed that way because no step runs to fetch them back.
+    const sim = new Simulation(777, VP)
+    run(sim, 10)
+    // Reachable by gesture at 1440x900, where `crowdCap` is about 0.8. The
+    // resize is what makes the room too small for where the seeds went.
+    sim.state.crowd = 0.45
+    const next: Viewport = { ...VP, width: 560, short: 560, aspect: 560 / 900, frame: 5, slideCount: 4 }
+    sim.setViewport(next)
+    const lit = litRect(sim.state.aspect, sim.state.crowd)
+    for (const s of sim.state.slides) {
+      const b = unionBox(s, next)
+      expect(b.left).toBeGreaterThanOrEqual(lit.x0 - 1 / next.height)
+      expect(b.right).toBeLessThanOrEqual(lit.x1 + 1 / next.height)
+    }
+  })
+
+  it('seeds clear of every wall, so containing a fresh layout at crowd 0 moves nothing', () => {
+    // Which is the whole argument that the line above costs the empty room
+    // nothing: SEED_INSET is 0.06 and the lean plus the tab add at most 0.024
+    // to a stock sheet's half-span, so a seeded sheet is never in contact and
+    // `depenetrate` returns on its first pass without writing x or y.
+    for (const vp of [VP, PORTRAIT, WIDE]) {
+      const sim = new Simulation(31337, vp)
+      const lit = litRect(sim.state.aspect, 0)
+      for (const s of sim.state.slides) {
+        const b = unionBox(s, vp)
+        expect(b.left - lit.x0).toBeGreaterThan(0)
+        expect(lit.x1 - b.right).toBeGreaterThan(0)
+        expect(b.top).toBeGreaterThan(0)
+        expect(1 - b.bottom).toBeGreaterThan(0)
+      }
     }
   })
 

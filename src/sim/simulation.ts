@@ -52,7 +52,7 @@ import {
   WANDER_GAIN_DEG,
 } from '../core/constants'
 import { driftDye } from '../core/drift'
-import { containAxis, litArea, litRect } from '../core/lit'
+import { containAxis, halfSpanX, litArea, litRect } from '../core/lit'
 import type { LitRect } from '../core/lit'
 import { DEG, clamp, clampAbs, makeNoiseTables, smoothstep, vnoise, wrapPi } from '../core/noise'
 import { mixDye } from '../core/oklab'
@@ -265,6 +265,23 @@ export class Simulation {
       s.rngState = (this.runtime.get(s.id) as SlideRuntime).rng.state
     }
     this.nextId = slides.reduce((max, s) => Math.max(max, s.id), -1) + 1
+
+    /*
+     * `seedSlides` places against the empty room on purpose, but the room on
+     * screen can already have paper in it: a window resize that changes the
+     * slide count re-seeds and nothing resets `crowd`. Measured at crowd 0.6,
+     * 1440x900 dropping to four sheets, all four landed left of the lit edge
+     * and the worst by 286px, and with playback paused no step runs to fetch
+     * them back, so the composition sits on white paper until Play.
+     *
+     * At crowd 0 this is a no-op rather than a behaviour change: SEED_INSET is
+     * 0.06 against a worst excess of 0.024 that the lean and the tab add to a
+     * stock sheet's half-span, and measured seed slack is 0.00px at 1440x900,
+     * 420x880 and 2560x1080. It draws no PRNG, so the six-draws-per-contact
+     * rule and the replay are untouched.
+     */
+    const lit = this.lit()
+    for (const s of slides) this.depenetrate(s, lit)
   }
 
   /** Noise tables are drawn first, then the stream is left for bounce events. */
@@ -479,7 +496,9 @@ export class Simulation {
     const sn = Math.sin(s.rot)
     const H = s.h + p
     return {
-      hx: (Math.abs(c) * s.w + Math.abs(sn) * H) / 2,
+      // Through `halfSpanX`, because the gesture cap measures the same box and
+      // a cap that disagreed by a lean would let the paper close past it.
+      hx: halfSpanX(s.w, s.h, s.rot, p),
       hy: (Math.abs(sn) * s.w + Math.abs(c) * H) / 2,
       cx: s.x + (p / 2) * sn,
       cy: s.y - (p / 2) * c,

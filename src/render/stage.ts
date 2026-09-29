@@ -12,7 +12,7 @@ import {
 } from '../core/constants'
 import { lampsAt } from '../core/lamps'
 import type { Cast, Lamp } from '../core/lamps'
-import { crowdFromDrag, inPaperGrab, litEdgePx, litRect } from '../core/lit'
+import { crowdDragTo, crowdLanded, inPaperGrab, litEdgePx, litRect } from '../core/lit'
 import { filmHex } from '../core/oklab'
 import { clampSide, sideBand, stockSizeFrac } from '../core/size'
 import type { RenderOptions, SimState, SlideState, StageHandlers, Viewport } from '../core/types'
@@ -98,6 +98,12 @@ const MOVE_DEADZONE = 3.5
  * travels is the wall of the room moving. Wider than MOVE_DEADZONE because a
  * sheet nudged two pixels is nothing and a room nudged two pixels is a state
  * change under every sheet on the glass.
+ *
+ * Measured on HORIZONTAL travel alone, which is the only travel the paper
+ * answers. Against Math.hypot a tap that slid 6px down the glass and 1px
+ * across armed the drag, and on touch that is the common tap rather than a
+ * clumsy one: the paper came in two pixels, the instrument started playing
+ * again, and the sheet the user had selected was never deselected.
  */
 const CROWD_DEADZONE = 6
 
@@ -201,6 +207,13 @@ interface DragState {
   startY: number
   /** Move and crowd: false until the pointer has left the dead zone. */
   armed: boolean
+  /**
+   * Crowd only: the room has actually changed width since the press. Armed is
+   * not enough, because the gesture is capped: a hand that keeps pushing at
+   * the cap travels as far as it likes and moves nothing, and that press is
+   * still a press on bare lightbox, which means deselect.
+   */
+  moved: boolean
 }
 
 function div(cls: string): HTMLDivElement {
@@ -233,6 +246,8 @@ export class Stage {
    * leaves the next press grabbing the edge that is actually on screen.
    */
   private crowdNow = 0
+  /** Aspect as the simulation last had it, for the same reason. */
+  private aspectNow = 1
 
   private viewport: Viewport | null = null
   /** The cast, low-passed, linear sRGB. White until a field says otherwise. */
@@ -244,9 +259,16 @@ export class Stage {
   private reduced = false
   /** Last lamp values written, so a style write only happens when one changes. */
   private lampKeys: string[] = []
-  /** The stage never moves, so its offset is read once per drag, not per move. */
+  /**
+   * The stage never moves, so its offset is read once per drag, not per move,
+   * and once per viewport change for the hover path: a getBoundingClientRect
+   * on every pointermove is a forced layout for a rectangle that only a
+   * resize can change.
+   */
   private originX = 0
   private originY = 0
+  /** Whether the root is currently wearing the grab strip's cursor. */
+  private grabCursor = false
 
   constructor(root: HTMLElement, handlers: StageAllHandlers) {
     this.root = root
@@ -477,7 +499,14 @@ export class Stage {
 
   private write(state: SimState, opts: RenderOptions): void {
     const vp = opts.viewport
-    this.viewport = vp
+    if (vp !== this.viewport) {
+      this.viewport = vp
+      // A new viewport object is a resize, which is the only thing that can
+      // move the stage. The hover path reads this rather than the layout.
+      const rect = this.root.getBoundingClientRect()
+      this.originX = rect.left
+      this.originY = rect.top
+    }
     if (vp.frame !== this.framePx) {
       this.framePx = vp.frame
       this.root.style.setProperty('--lb-frame', `${vp.frame}px`)
@@ -492,7 +521,13 @@ export class Stage {
     this.painter.draw(state, opts)
     this.writeLamps(state.t, opts.warmth, this.castFor(state.t, opts))
 
+    // Both, and off the state rather than off the viewport: the paper below is
+    // drawn from `state.aspect`, so the strip that takes hold of it has to be
+    // placed from the same number or the target drifts off the object. The two
+    // part company on any resize the simulation has not taken yet, and the
+    // sub-threshold ones never reach it at all.
     this.crowdNow = state.crowd
+    this.aspectNow = state.aspect
 
     // The paper. Width only: a zero-width element still draws its right-hand
     // hairline, so the class is what takes it off the surface entirely and is
@@ -733,6 +768,7 @@ export class Stage {
         startX: e.clientX,
         startY: e.clientY,
         armed: true,
+        moved: false,
       }
       if (grip instanceof HTMLElement) {
         try {
@@ -761,16 +797,16 @@ export class Stage {
      *
      * Armed here but deliberately NOT acted on, and in particular the
      * selection is left alone. A press on bare lightbox means deselect, and
-     * that meaning has to survive: if the pointer never leaves the dead zone
-     * this falls back to the plain bare-surface press and deselects on
-     * pointerup, exactly as it did before there was any paper. Only travel
-     * makes it a crowd drag, and a crowd drag keeps the selection, because
-     * resizing the room is not a statement about which sheet you are reading.
+     * that meaning has to survive: unless the room actually ends up a
+     * different width, this falls back to the plain bare-surface press and
+     * deselects on pointerup, exactly as it did before there was any paper.
+     * Only a room that moved makes it a crowd drag, and a crowd drag keeps
+     * the selection, because resizing the room is not a statement about
+     * which sheet you are reading.
      */
     if (!rec && vp) {
       const rect = this.root.getBoundingClientRect()
-      const edge = litEdgePx(litRect(vp.aspect, this.crowdNow), vp.height)
-      if (inPaperGrab(e.clientX - rect.left, edge, stockSizeFrac(vp.short) * vp.short)) {
+      if (this.inGrabStrip(e.clientX - rect.left, vp)) {
         this.originX = rect.left
         this.originY = rect.top
         this.drag = {
@@ -785,6 +821,7 @@ export class Stage {
           startX: e.clientX,
           startY: e.clientY,
           armed: false,
+          moved: false,
         }
         try {
           // On the ROOT, not on the event's target. The Dock is a z-index 200
@@ -822,6 +859,7 @@ export class Stage {
       startX: e.clientX,
       startY: e.clientY,
       armed: false,
+      moved: false,
     }
     try {
       frame.setPointerCapture(e.pointerId)
@@ -843,13 +881,12 @@ export class Stage {
       const vp = this.viewport
       if (!vp) return
       if (drag.kind === 'crowd') {
-        if (!drag.armed) {
-          if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < CROWD_DEADZONE) return
-          drag.armed = true
-        }
-        // Horizontal travel only. The paper has one degree of freedom and a
-        // hand pushing something sideways does not travel in a straight line.
-        this.handlers.onCrowd(crowdFromDrag(drag.crowd0, e.clientX - drag.startX, vp.width))
+        // Horizontal travel only, both for the dead zone and for the drag.
+        // The paper has one degree of freedom and a hand pushing something
+        // sideways does not travel in a straight line.
+        const asked = crowdDragTo(drag, e.clientX - drag.startX, vp.width, CROWD_DEADZONE)
+        if (asked === null) return
+        crowdLanded(drag, this.handlers.onCrowd(asked))
         return
       }
       const rec = this.recs.get(drag.id)
@@ -885,6 +922,43 @@ export class Stage {
       this.hoveredId = id
       this.handlers.onHover?.(id)
     }
+    /*
+     * The one mark the grab strip gets.
+     *
+     * A stock sheet of bare surface behaves differently from the surface
+     * beside it (243px at 1440x900, 40% of the width on a 390px phone) and
+     * nothing said so: the feature was found by an accident that shoves the
+     * whole composition sideways. The grip's own trick, and the same reason
+     * there is no Legend row for it: a row is permanent dead text for
+     * everyone who never crowds, and it is display:none under 620px, which is
+     * the width where the strip is largest.
+     *
+     * Only when nothing is under the pointer, because a sheet lying over the
+     * strip takes the press itself.
+     */
+    const vp = this.viewport
+    this.setCursor(id === null && vp !== null && this.inGrabStrip(e.clientX - this.originX, vp))
+  }
+
+  /**
+   * Is a client-relative x on the strip of lit surface that takes hold of the
+   * paper? One expression, because the press and the cursor that advertises
+   * it disagreeing by a pixel is a target that cannot be learned.
+   */
+  private inGrabStrip(x: number, vp: Viewport): boolean {
+    return inPaperGrab(
+      x,
+      litEdgePx(litRect(this.aspectNow, this.crowdNow), vp.height),
+      stockSizeFrac(vp.short) * vp.short,
+    )
+  }
+
+  /** Written only on change, so an instrument nobody hovers the strip on
+   *  never gets the property at all. */
+  private setCursor(grab: boolean): void {
+    if (grab === this.grabCursor) return
+    this.grabCursor = grab
+    this.root.style.cursor = grab ? 'col-resize' : ''
   }
 
   private onPointerUp = (e: PointerEvent): void => {
@@ -915,16 +989,22 @@ export class Stage {
         this.handlers.onResizeEnd()
         return
       case 'crowd':
-        // Never armed means the hand never moved, so this press was a click on
-        // bare lightbox after all and the deselect it owes is paid here.
-        if (drag.armed) this.handlers.onCrowdEnd()
+        // The room never moved means this press was a click on bare lightbox
+        // after all, and the deselect it owes is paid here. On the paper and
+        // not on the arming, because the gesture is capped: a hand that keeps
+        // pushing once the room is one sheet wide has armed and has changed
+        // nothing, and refusing the deselect there would leave a sheet
+        // selected with nothing the user can see to explain it.
+        if (drag.moved) this.handlers.onCrowdEnd()
         else this.handlers.onSelect(null)
         return
     }
   }
 
   private onPointerLeave = (): void => {
-    if (this.drag || this.hoveredId === null) return
+    if (this.drag) return
+    this.setCursor(false)
+    if (this.hoveredId === null) return
     this.hoveredId = null
     this.handlers.onHover?.(null)
   }

@@ -1,6 +1,8 @@
-import { HISTORY_FRAMES, DT, MAX_SUBSTEPS, MODE_MS } from '../core/constants'
+import { HISTORY_FRAMES, DT, MAX_SUBSTEPS, MODE_MS, TAB_PROUD } from '../core/constants'
+import { crowdCap, crowdInside, widestSpan } from '../core/lit'
 import { filmHex } from '../core/oklab'
 import { Rng, randomSeed } from '../core/rng'
+import { stockSizeFrac } from '../core/size'
 import type { BlendMode, Dye, SlideState, Viewport } from '../core/types'
 import { generatePalette } from '../palette/palette'
 import { Stage } from '../render/stage'
@@ -61,6 +63,18 @@ export class Instrument {
   private sim: Simulation
   private history: History
   private viewport: Viewport
+  /**
+   * The viewport the simulation actually has, which is not always the one just
+   * measured: a resize under the significance threshold is deliberately not
+   * passed on, because passing it on rebuilds the ring and reseeds the field.
+   *
+   * The comparison has to be against this and not against the last measurement,
+   * or the threshold is a per-step one and steps accumulate. A mobile address
+   * bar retracting 100dvh in four 1.5% stages, or a window dragged out in
+   * pauses longer than the debounce, each pass the test and never trip it, and
+   * the room ends up an arbitrary distance from the window it is drawn in.
+   */
+  private applied: Viewport
 
   private raf = 0
   private lastNow = 0
@@ -121,6 +135,7 @@ export class Instrument {
   constructor(root: HTMLElement) {
     this.root = root
     this.viewport = measureViewport(root)
+    this.applied = this.viewport
 
     const seed = resolveSeed()
     this.paletteRng = new Rng(seed ^ 0x5bf03635)
@@ -214,12 +229,12 @@ export class Instrument {
       const head = this.history.head
       if (this.playhead >= head) {
         this.playhead = head
-        this.history.restore(this.sim.state, head)
+        this.restoreFrame(head)
         this.playback = 'live'
         this.accumulator = 0
         this.notify()
       } else {
-        this.history.restore(this.sim.state, Math.round(this.playhead))
+        this.restoreFrame(Math.round(this.playhead))
         this.notify()
       }
     }
@@ -263,14 +278,48 @@ export class Instrument {
   }
 
   /**
+   * How far in the gesture may push the paper right now, 0 to 1.
+   *
+   * Off the simulation state and the viewport, never off the pointer. It takes
+   * no part in replay, and not because its inputs are all recorded: two of them
+   * are live viewport reads. It takes no part because `crowd` is a ring lane of
+   * its own and comes back verbatim, so the ceiling is only ever asked what the
+   * hand may do NOW. Crowd to 0.8 on a wide window and then narrow it and the
+   * ceiling there would be 0.70, which is the right answer to a question replay
+   * never asks.
+   *
+   * The stock sheet is in the sum because the strip that takes hold of the
+   * paper is cut to one, and a room narrower than the strip is a handle with
+   * nothing to press on.
+   */
+  private crowdCeiling(): number {
+    const vp = this.viewport
+    return crowdCap(
+      this.sim.state.aspect,
+      widestSpan(this.sim.state.slides, TAB_PROUD / vp.height),
+      (stockSizeFrac(vp.short) * vp.short) / vp.height,
+    )
+  }
+
+  /**
    * How far the paper is in, 0 to 1. Live during the drag, taking effect on
-   * the next frame.
+   * the next frame. Returns what the room will actually be, which is the only
+   * thing that tells the gesture whether it moved anything.
    *
    * No notify and no snapshot on the moving part: this is pointer-rate, and
    * the one rule the loop has is that React never renders per frame. The route
    * is the one hover takes, a field read by the next rAF.
    */
-  private crowdTo(crowd: number): void {
+  private crowdTo(crowd: number): number {
+    const next = crowdInside(crowd, this.crowdCeiling())
+    /*
+     * A gesture asking for the room it is already in is not an edit, and
+     * everything below is an edit: it truncates the future, and it forces
+     * playback live. A paused instrument used to start playing again from a
+     * tap on bare surface that travelled six pixels, which is most taps, and
+     * from any further push once the paper had reached the cap.
+     */
+    if (next === this.crowd) return next
     // An edit of simulation state, so it lands at the live edge like a move.
     this.commitBranch()
     /*
@@ -291,7 +340,8 @@ export class Instrument {
       this.accumulator = 0
       this.notify()
     }
-    this.crowd = crowd < 0 ? 0 : crowd > 1 ? 1 : crowd
+    this.crowd = next
+    return next
   }
 
   private easeMode(dt: number): void {
@@ -502,7 +552,7 @@ export class Instrument {
     const clamped = Math.min(1, Math.max(0, position))
     const tick = Math.round(oldest + clamped * (head - oldest))
     this.playhead = tick
-    this.history.restore(this.sim.state, tick)
+    this.restoreFrame(tick)
     this.notify()
   }
 
@@ -519,6 +569,27 @@ export class Instrument {
   }
 
   /**
+   * The one way back into the past, and the only place `this.crowd` is read
+   * out of the timeline rather than written into it.
+   *
+   * The pointer field is a copy and the ring is the record, so every restore
+   * has to take the copy with it. Without that the live frame, which writes
+   * the field into `state.crowd` every tick, reinstates the pointer's last
+   * value the instant playback resumes: crowd the paper to 0.6, scrub back
+   * before the gesture, then click a sheet (which commits that frame as the
+   * present) and press Play, and the first frame took the room from full
+   * width to 40% with no gesture behind it. Measured on the 777 seed at
+   * 1440x900, the worst sheet moved 634px in that one tick; with the adoption
+   * it moves 0.7px, which is just the step.
+   *
+   * `crowdTo` commits before it assigns, so the gesture itself still wins.
+   */
+  private restoreFrame(tick: number): void {
+    this.history.restore(this.sim.state, tick)
+    this.crowd = this.sim.state.crowd
+  }
+
+  /**
    * Anything that mutates simulation state while the playhead sits in the past
    * has to commit that point as the new present, otherwise the buffer would hold
    * frames that can never be reached again.
@@ -527,7 +598,7 @@ export class Instrument {
     if (this.history.head < 0) return
     const current = Math.round(this.playhead)
     if (current >= this.history.head) return
-    this.history.restore(this.sim.state, current)
+    this.restoreFrame(current)
     this.history.truncateAfter(current)
     this.tick = current
     this.playhead = current
@@ -557,7 +628,7 @@ export class Instrument {
     clearTimeout(this.resizeTimer)
     this.resizeTimer = window.setTimeout(() => {
       const next = measureViewport(this.root, this.countOverride)
-      if (!viewportSignificant(this.viewport, next)) {
+      if (!viewportSignificant(this.applied, next)) {
         this.viewport = next
         return
       }
@@ -577,6 +648,7 @@ export class Instrument {
   private applyViewport(next: Viewport): void {
     const countChanged = next.slideCount !== this.viewport.slideCount
     this.viewport = next
+    this.applied = next
     this.sim.setViewport(next)
     if (countChanged) {
       this.history = new History(next.slideCount)
@@ -615,6 +687,10 @@ export class Instrument {
     this.commitBranch()
     this.countOverride = next.slideCount
     this.viewport = next
+    // The count and only the count. The sim is told the new count below but
+    // never the new shape, so claiming it had the new shape would let a
+    // sub-threshold resize slip through under cover of the stepper.
+    this.applied = { ...this.applied, slideCount: next.slideCount }
 
     const { added, removed } = this.sim.setSlideCount(next.slideCount)
     // One at a time, so each new colour is chosen against the ones already
