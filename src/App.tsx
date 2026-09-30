@@ -84,6 +84,8 @@ export default function App() {
           <Dock
             playing={snapshot.playing}
             blend={snapshot.blend}
+            swatches={snapshot.swatches}
+            rolls={snapshot.rolls}
             timeline={{
               position: snapshot.position,
               filled: snapshot.filled,

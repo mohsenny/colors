@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ReactElement } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import type { BlendMode } from '../core/types'
 import { Options } from './Options'
 import { Timeline } from './Timeline'
@@ -8,6 +8,10 @@ import type { TimelineProps } from './Timeline'
 export interface DockProps {
   playing: boolean
   blend: BlendMode
+  /** Colours off the glass for the New button, most colourful first. */
+  swatches: string[]
+  /** Rolls this sitting. A change is what makes the New button riffle. */
+  rolls: number
   /** Passed straight through to Timeline. */
   timeline: TimelineProps
   /** Passed straight through to Options. */
@@ -60,12 +64,48 @@ function PauseIcon(): ReactElement {
   )
 }
 
-function RegenerateIcon(): ReactElement {
+/**
+ * New colours, drawn as three of the colours it is about to replace.
+ *
+ * It was a circular arrow, and next to a timeline a circular arrow says
+ * replay. A fan of gels says colour before it says anything else, and since
+ * the gels are taken off the glass the button is never a colour that is not
+ * in the room. Pressing it closes the fan and deals it open again on the new
+ * roll, so the button shows what it did as well as what it does.
+ */
+function NewColours({
+  swatches,
+  rolls,
+  onPress,
+}: {
+  swatches: string[]
+  rolls: number
+  onPress(): void
+}): ReactElement {
   return (
-    <Icon>
-      <path d="M11.9 7a4.9 4.9 0 1 1-1.55-3.58" />
-      <path d="M9.5 3.3h2.7V.9" />
-    </Icon>
+    <button
+      type="button"
+      className="lb-deal"
+      aria-label="New colours"
+      // Two identical keyframes taken in turn, because re-applying the same
+      // animation name does not restart it. None before the first roll, so
+      // the fan does not deal itself on load.
+      data-riffle={rolls === 0 ? undefined : rolls % 2 === 0 ? 'a' : 'b'}
+      onClick={onPress}
+    >
+      <span className="lb-deal-fan" aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="lb-deal-gel"
+            style={{ '--gel': swatches[i % Math.max(swatches.length, 1)] } as CSSProperties}
+          />
+        ))}
+      </span>
+      <span className="lb-deal-label" aria-hidden="true">
+        New
+      </span>
+    </button>
   )
 }
 
@@ -96,6 +136,8 @@ export function Dock(props: DockProps): ReactElement {
   const {
     playing,
     blend,
+    swatches,
+    rolls,
     timeline,
     slideCount,
     warmth,
@@ -210,6 +252,13 @@ export function Dock(props: DockProps): ReactElement {
         timeline.expanded ? ' is-expanded' : ''
       }`}
     >
+      {/*
+        First, because it is the verb the instrument exists for, and apart from
+        the timeline, which is where the old circular arrow was read as replay.
+        The dock pins its left edge when it widens, so this stays put too.
+      */}
+      <NewColours swatches={swatches} rolls={rolls} onPress={onRegenerate} />
+
       <button
         type="button"
         className="lb-btn"
@@ -220,10 +269,6 @@ export function Dock(props: DockProps): ReactElement {
       </button>
 
       <Timeline {...timeline} />
-
-      <button type="button" className="lb-btn" aria-label="New colours" onClick={onRegenerate}>
-        <RegenerateIcon />
-      </button>
 
       <div className="lb-seg" role="group" aria-label="Colour mode" data-mode={blend}>
         <span className="lb-seg-indicator" aria-hidden="true" />

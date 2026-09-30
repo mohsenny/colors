@@ -44,6 +44,10 @@ export interface InstrumentSnapshot {
   warmth: number
   /** Text for the polite live region. Purely for screen readers. */
   announcement: string
+  /** Up to three colours off the glass, most colourful first, as hex. */
+  swatches: string[]
+  /** How many times the colours have been rolled this sitting. */
+  rolls: number
 }
 
 type Playback = 'live' | 'replay' | 'paused' | 'scrubbing'
@@ -105,6 +109,7 @@ export class Instrument {
   private nextMixId = -1
   private paletteRng: Rng
   private previousPalette: Dye[] | null = null
+  private rolls = 0
 
   private reducedMotion = false
   private reduceQuery: MediaQueryList | null = null
@@ -391,6 +396,7 @@ export class Instrument {
   regenerate(): void {
     this.commitBranch()
     this.sim.applyPalette(this.rollPalette())
+    this.rolls += 1
     const kept = this.pinOrder.length
     this.announcement = kept
       ? `New colours generated. ${kept} pinned ${kept === 1 ? 'colour' : 'colours'} kept.`
@@ -781,7 +787,25 @@ export class Instrument {
       slideCount: this.viewport.slideCount,
       warmth: this.warmth,
       announcement: this.announcement,
+      swatches: this.swatches(),
+      rolls: this.rolls,
     }
+  }
+
+  /**
+   * The colours the dock's New button is made of.
+   *
+   * The roll's colours and not the ones on screen. A regenerate notifies on
+   * the frame it is pressed, when every sheet is still at the start of its
+   * crossfade, so the displayed colour would hand the button the palette that
+   * was just thrown away.
+   */
+  private swatches(): string[] {
+    return this.sim.state.slides
+      .map((s) => (s.tweenT < 1 ? s.dyeTo : s.dyeBase))
+      .sort((a, b) => b.C * b.d - a.C * a.d)
+      .slice(0, 3)
+      .map(filmHex)
   }
 
   private notify(): void {
