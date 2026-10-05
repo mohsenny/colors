@@ -113,11 +113,11 @@ export function Dock(props: DockProps): ReactElement {
       {/* Five letters each, so the half-width indicator sits under either word. */}
       <div className="lb-seg" role="group" aria-label="What moves in the room" data-mode={snap.kind}>
         <span className="lb-seg-indicator" aria-hidden="true" />
-        <button type="button" className="lb-seg-btn" aria-pressed={snap.kind === 'probe'} onClick={() => onKind('probe')}>
-          Probe
-        </button>
         <button type="button" className="lb-seg-btn" aria-pressed={snap.kind === 'light'} onClick={() => onKind('light')}>
           Light
+        </button>
+        <button type="button" className="lb-seg-btn" aria-pressed={snap.kind === 'probe'} onClick={() => onKind('probe')}>
+          Probe
         </button>
       </div>
 

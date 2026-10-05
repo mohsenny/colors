@@ -4,6 +4,7 @@ import App from './App'
 import './styles/global.css'
 import './styles/stage.css'
 import './styles/ui.css'
+import '../../src/styles/title.css'
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>

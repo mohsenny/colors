@@ -66,21 +66,6 @@
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
 }
 
-/* The way to the other instrument. The only row that takes the pointer. */
-.lb-legend-link {
-  pointer-events: auto;
-  text-decoration: none;
-}
-
-.lb-legend-link .lb-legend-effect {
-  transition: color var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
-}
-
-.lb-legend-link:hover .lb-legend-effect,
-.lb-legend-link:focus-visible .lb-legend-effect {
-  color: var(--lb-ink, rgba(26, 26, 30, 0.82));
-}
-
 /* -------------------------------------------------------------------- dock */
 
 .lb-dock {
@@ -293,7 +278,7 @@
   transition: transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
-.lb-seg[data-mode='light'] .lb-seg-indicator {
+.lb-seg[data-mode='probe'] .lb-seg-indicator {
   transform: translateX(100%);
 }
 
@@ -779,21 +764,8 @@
 /* ------------------------------------------------- small viewports (620px) */
 
 @media (max-width: 619px) {
-  /* Only the way across, in the free corner at the top. */
   .lb-legend {
-    top: calc(14px + env(safe-area-inset-top, 0px));
-    bottom: auto;
-  }
-
-  .lb-legend-row:not(.lb-legend-link),
-  .lb-legend-link .lb-legend-gesture {
     display: none;
-  }
-
-  /* A finger's worth of target round a line of micro-type. */
-  .lb-legend-link {
-    padding: 12px;
-    margin: -12px;
   }
 
   .lb-dock {

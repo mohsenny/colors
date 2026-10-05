@@ -102,9 +102,9 @@ Same verbs as Lightbox wherever there is an equivalent.
 | Stop time | <kbd>Space</kbd> | Same |
 | Go back a few seconds | Drag the timeline. 15 s ring buffer, replays exactly | Same |
 | Start over | <kbd>R</kbd>. Clears particles, deals three fresh probes or restarts the stream of light, recentres | <kbd>R</kbd> new colours |
-| Switch Probe / Light | <kbd>L</kbd>, or the segmented control. The room is dealt fresh in that kind | <kbd>B</kbd> Paint / Light |
+| Switch Light / Probe | <kbd>L</kbd>, or the segmented control. The room is dealt fresh in that kind | <kbd>B</kbd> Paint / Light |
 | Choose a body | <kbd>1</kbd> to <kbd>7</kbd>, or the body chip | |
-| Go to Lightbox | <kbd>G</kbd>, or the last line of the legend | <kbd>G</kbd> goes to Lattice |
+| Go to Lightbox | Its name, top left | Same, the other way |
 
 Up to eight particles at once. A ninth retires the oldest, which fades out. Particles that hit a surface, cross a horizon or leave the room fade out the same way.
 
@@ -112,14 +112,16 @@ Up to eight particles at once. A ninth retires the oldest, which fades out. Part
 
 ## 7. Chrome
 
-The same four places Lightbox uses, and nothing else. No header, no sidebar, no footer, no wordmark.
+The same places Lightbox uses, and nothing else. No header, no sidebar, no footer.
+
+**Title, top left.** Both names, `Lightbox Lattice`, shared by the two pages: Helvetica medium at 22 px (18 px on a phone), tracking pulled in, no panel. The page you are on is dark grey, the other light grey, and clicking it crosses over while the words stay put. When the other page is the one just behind or ahead in the tab's history, it steps there rather than loading it again, so the room comes back as it was left.
 
 **Dock, bottom centre.** One pill, Lightbox's material exactly (panel white at 0.82, fibre, 14 px blur, float shadow, fades to 0.35 when idle and playing). Left to right:
 
 1. **Body chip.** A 12 px sphere in the body's colour and its name in micro-type (`SUN`). It holds the place of Lightbox's `New` fan: the one place the chrome carries colour, and the colour is the room's own. Opens the bodies drawer.
 2. Play / pause.
 3. Timeline. Widens when paused, the dock pins its left edge, exactly as Lightbox.
-4. **Probe | Light** segmented control: what moves in the room, and what a double-click releases. Light is the default. Probe deals three probes in orbit. Light keeps an uneven stream coming, a ray every 0.15 to 0.75 s and at most six in flight, each sent in along a random rope from either end of x, y or z, so it starts on the lattice and leaves it only where the body bends it. Both five letters, for the same reason Lightbox's Paint and Light are: the sliding indicator is a 50% pill.
+4. **Light | Probe** segmented control: what moves in the room, and what a double-click releases. Light is the default and comes first. Probe deals three probes in orbit. Light keeps an uneven stream coming, a ray every 0.15 to 0.75 s and at most six in flight, each sent in along a random rope from either end of x, y or z, so it starts on the lattice and leaves it only where the body bends it. Both five letters, for the same reason Lightbox's Paint and Light are: the sliding indicator is a 50% pill.
 5. Plus, opening the options drawer.
 
 **Drawers, above the dock.** Same panel, same unfold. Lightbox's rule holds: the dock is what you reach for while watching, a drawer is a decision about the instrument. The bodies drawer is a list of the seven presets, each a sphere swatch, a name, its kind in micro-type and its number key. The options drawer has **Mass** and **Size** (logarithmic sliders in the timeline's visual language: 4 px track, the paused timeline's round head; the values themselves are in the readout). Size is labelled Horizon while the body is a black hole. Letting go of a slider re-frames the room if the body has left 0.4 to 2.5 units. One drawer open at a time; pressing anywhere else or <kbd>Esc</kbd> closes it.

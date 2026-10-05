@@ -6,6 +6,7 @@ import { PRESETS, presetById } from './physics/bodies'
 import { Dock } from './ui/Dock'
 import { Legend } from './ui/Legend'
 import { Readout } from './ui/Readout'
+import { Title } from '../../src/ui/Title'
 
 function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
   const snap: Snapshot = useSyncExternalStore(instrument.subscribe, instrument.getSnapshot)
@@ -25,8 +26,6 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         instrument.reset()
       } else if (e.key === 'l' || e.key === 'L') {
         instrument.toggleKind()
-      } else if (e.key === 'g' || e.key === 'G') {
-        window.location.href = '../'
       } else if (/^[1-9]$/.test(e.key)) {
         const p = PRESETS[Number(e.key) - 1]
         if (p) instrument.selectPreset(p.id)
@@ -90,6 +89,7 @@ export default function App(): ReactElement {
     <main className="lb-stage">
       <canvas ref={canvasRef} className="lt-canvas" aria-label="A lattice of space around a body, with particles moving through it" />
       <div ref={tabRef} className="lt-tab" aria-hidden="true" />
+      <Title active="lattice" />
       {failed && <p className="lt-fail">This needs WebGL2, which this browser does not offer.</p>}
       {instrument && <Chrome instrument={instrument} />}
     </main>

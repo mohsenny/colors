@@ -1,0 +1,49 @@
+/*
+ * The two names in the top-left corner, shared by Lightbox and Lattice.
+ *
+ * Big enough to read as the name of the page, small enough to stay type on the
+ * lit surface rather than a header. No panel, like the legend in the opposite
+ * corner. Helvetica at medium weight with the tracking pulled in, the way it
+ * is set at display sizes.
+ *
+ * The view transition name keeps the words still while the rooms crossfade
+ * underneath, so only the two shades trade places.
+ */
+.lb-title {
+  position: fixed;
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  z-index: 200;
+  display: flex;
+  align-items: baseline;
+  gap: 0.42em;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.028em;
+  user-select: none;
+  view-transition-name: lb-title;
+}
+
+.lb-title-name {
+  color: rgba(26, 26, 30, 0.26);
+  text-decoration: none;
+  transition: color var(--lb-t-fade, 320ms) var(--lb-ease, ease);
+}
+
+.lb-title-name[aria-current='page'] {
+  color: rgba(26, 26, 30, 0.78);
+}
+
+a.lb-title-name:hover {
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+@media (max-width: 619px) {
+  .lb-title {
+    left: calc(14px + env(safe-area-inset-left, 0px));
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    font-size: 18px;
+  }
+}

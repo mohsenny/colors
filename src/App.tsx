@@ -4,6 +4,7 @@ import type { InstrumentSnapshot } from './app/instrument'
 import { Dock } from './ui/Dock'
 import { Legend } from './ui/Legend'
 import { PaletteTray } from './ui/PaletteTray'
+import { Title } from './ui/Title'
 
 /**
  * React owns the chrome and nothing else. The stage below is an empty div that
@@ -59,10 +60,6 @@ export default function App() {
           if (typing) return
           instrument.toggleBlend()
           return
-        case 'KeyG':
-          if (typing) return
-          window.location.href = 'lattice/'
-          return
         case 'Escape':
           instrument.select(null)
           return
@@ -76,6 +73,7 @@ export default function App() {
   return (
     <>
       <div className="lb-stage" ref={stageRef} />
+      <Title active="lightbox" />
       {snapshot && instrument ? (
         <>
           <Legend />
