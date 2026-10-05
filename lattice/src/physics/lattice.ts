@@ -59,14 +59,22 @@ export function levelView(level: number, distance: number): LevelView {
   return { weight, reach: [1 + weight * REACH_IN * z, 1 + weight * REACH_OUT * z] }
 }
 
+/**
+ * The camera distance at which the net is drawn out to `rest` units from the
+ * centre. For an eye that is not on the orbit, such as one riding a probe.
+ */
+export function detailFor(rest: number): number {
+  return (VIEW_AT * Math.max(0, rest - 1)) / REACH_OUT
+}
+
 export interface Level {
   spacing: number
-  /** First index of the level in `indices`. */
-  start: number
+  /** The level's first vertex. */
+  first: number
   /** The level's ropes nearest the body first: how far each misses the centre... */
   miss: Float32Array
-  /** ...and the level's index count up to and including it. */
-  ends: Uint32Array
+  /** ...and the level's vertex count up to and including it. */
+  verts: Uint32Array
 }
 
 export interface Net {
@@ -74,8 +82,8 @@ export interface Net {
   rest: Float32Array
   /** Which way each vertex's rope runs: 0 x, 1 y, 2 z. */
   axis: Float32Array
-  /** Index pairs for gl.LINES. */
-  indices: Uint32Array
+  /** 1 where a vertex runs on to the next one, 0 at the end of its rope. */
+  link: Float32Array
   levels: Level[]
 }
 
@@ -89,7 +97,7 @@ export interface Net {
 export function buildNet(): Net {
   const rest: number[] = []
   const axes: number[] = []
-  const indices: number[] = []
+  const links: number[] = []
   const levels = LEVELS.map(({ spacing, extent }, k): Level => {
     const ropes: [number, number, number][] = []
     const cells = Math.ceil(extent / spacing) + 1
@@ -104,9 +112,9 @@ export function buildNet(): Net {
       }
     }
     ropes.sort((p, q) => p[2] - q[2])
-    const start = indices.length
+    const first = rest.length / 3
     const miss = new Float32Array(ropes.length * 3)
-    const ends = new Uint32Array(ropes.length * 3)
+    const verts = new Uint32Array(ropes.length * 3)
     let n = 0
     for (const [a, b, m] of ropes) {
       const half = Math.sqrt(extent * extent - m * m)
@@ -117,22 +125,21 @@ export function buildNet(): Net {
       }
       const ts = [...along.slice(1).reverse().map((s) => -s), ...along]
       for (let axis = 0; axis < 3; axis++) {
-        const base = rest.length / 3
-        for (const t of ts) {
+        ts.forEach((t, s) => {
           if (axis === 0) rest.push(t, a, b)
           else if (axis === 1) rest.push(a, t, b)
           else rest.push(a, b, t)
           axes.push(axis)
-        }
-        for (let s = 0; s < ts.length - 1; s++) indices.push(base + s, base + s + 1)
+          links.push(s < ts.length - 1 ? 1 : 0)
+        })
         miss[n] = m
-        ends[n] = indices.length - start
+        verts[n] = rest.length / 3 - first
         n++
       }
     }
-    return { spacing, start, miss, ends }
+    return { spacing, first, miss, verts }
   })
-  return { rest: new Float32Array(rest), axis: new Float32Array(axes), indices: new Uint32Array(indices), levels }
+  return { rest: new Float32Array(rest), axis: new Float32Array(axes), link: new Float32Array(links), levels }
 }
 
 function mod3(i: number): number {
@@ -203,7 +210,7 @@ export function radialMap(rs: number, surface: number): RadialMap {
 /**
  * Pulls the net in. Writes drawn positions into `out` and, per vertex, how far
  * it was drawn in (0 untouched, toward 1 swallowed), which the line shader
- * turns into tone so the well reads darker where the ropes converge.
+ * turns into weight and tone, so a rope is heaviest where it is pulled hardest.
  */
 export function deform(net: Net, rs: number, surface: number, out: Float32Array, squeeze: Float32Array): void {
   const map = radialMap(rs, surface)

@@ -22,7 +22,7 @@ It is an instrument to look at, not a simulator to configure. It opens with prob
 3. **The room is framed to the body.** A preset sets the scale so the body is about two lattice cells across. Changing Mass or Size afterwards changes the body inside the same room, so you see it grow, shrink, deepen. Shrink a star far enough and it collapses into a black hole in front of you.
 4. **Probes speed up, light does not.** Matter falling into a well speeds up, as you'd expect. Light always moves at c locally. Seen from far away it *slows down* near the mass (the Shapiro delay) and stops at a horizon. Both are drawn honestly and the readout says which you are looking at.
 5. **One body in v1.** The classic picture has Earth orbiting the Sun. Two bodies means two overlapping wells, and the lattice has no single correct answer for that. v1 gets one body right first (see §8).
-6. **No 3D library.** WebGL2 directly. What's on screen is a set of lines, a set of points and one sphere drawn per pixel, which three.js would only add weight to. This keeps Lightbox's "no runtime dependencies beyond React" rule.
+6. **No 3D library.** WebGL2 directly. What's on screen is a net of ribbons, a set of points and one sphere drawn per pixel, which three.js would only add weight to. This keeps Lightbox's "no runtime dependencies beyond React" rule.
 7. **Chrome is copied from Lightbox, not reinvented.** Tokens, fibre, dock, segmented control, drawer, timeline and legend are lifted verbatim from Lightbox at `b19db57`, with the `lb-` prefix kept so a diff between `src/styles` and `lattice/src/styles` shows drift. A shared package becomes worth it when a third instrument appears.
 
 ## 3. The room
@@ -35,7 +35,7 @@ It is an instrument to look at, not a simulator to configure. It opens with prob
 
 Inside a star's surface the map only has to stay finite and in order (those points are behind the opaque body). For a black hole anything pulled past the horizon sits just inside it, hidden by the ink sphere. The inward shift grows by less than one unit per unit of rest radius, so the map is monotonic and **ropes never cross**.
 
-**Line tone.** Graphite `rgba(26, 30, 44, a)`. Alpha falls with depth (far lines fade into the surface, like aerial perspective) and rises with local compression, so the well reads darker where the ropes converge. Lines are hairlines; depth-tested against the body.
+**Line tone and weight.** Graphite `rgba(26, 30, 44, a)`. Alpha falls with depth (far lines fade into the surface, like aerial perspective) and rises with local compression, so the well reads darker where the ropes converge. A rope at rest is a hairline; where the mass has pulled it in, it gets up to 2 px heavier, so the bent stretch of every rope is its boldest part and the straight runs far out recede. Close in, where nearly every rope on screen is pulled and the bends read on their own, the extra weight eases off. Depth-tested against the body.
 
 **Body.** Matte sphere, soft key light from the upper left like the lamps in Lightbox, cool shadow side. One quiet colour per preset (§5). A black hole is `--lb-ink-strong` with a faint cool rim so it stays a sphere and not a hole in the screen.
 
@@ -97,7 +97,8 @@ Same verbs as Lightbox wherever there is an equivalent.
 | Zoom | Scroll or pinch | |
 | Release a particle | Double-click. A probe goes into a slightly eccentric orbit whose plane faces you; light goes sideways past the mass | Double-click takes a colour |
 | Aim it | Double-click and keep holding, then drag. A faint dotted forecast shows the next three seconds | |
-| Hold one particle | Click it. Click again to let go | Click stops a sheet |
+| Ride a probe | Click it. The eye swings in behind it and travels with it, so the net streams past and the closest pass is felt, with its speed and clock pinned beside it. Drag looks around, scroll moves closer or further. <kbd>Esc</kbd> or a click anywhere else steps off | |
+| Hold a light | Click it. Click again to let go | Click stops a sheet |
 | Read a particle | Hover it. A tab shows `PROBE 0.43 C · CLOCK 0.88×` | Hex tab on a sheet |
 | Stop time | <kbd>Space</kbd> | Same |
 | Go back a few seconds | Drag the timeline. 15 s ring buffer, replays exactly | Same |
@@ -145,6 +146,8 @@ DRAG            turn the room
 SPACE           stop time
 DOUBLE-CLICK    release, hold to aim
 ```
+
+While riding a probe it reads `DRAG look around`, `SPACE stop time`, `ESC OR CLICK step off`.
 
 **Particle colours.** Light is always gold, and nothing else in the room is. Probes take the Lightbox roll at film strength, minus its amber, so the only saturated colour in the room is on the particles and the chip. Probe trails are dots every 0.1 s for 4 s. Light is a streak with no head: widest and hottest where it has just been, narrowing and fading over 1.5 s, so a glance tells it from a probe's dots.
 

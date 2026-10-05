@@ -1,6 +1,6 @@
 /*
- * An orbit camera and the few matrix helpers it needs. Column-major, as WebGL
- * wants them.
+ * An orbit camera, the view it hands the renderer, and the few matrix helpers
+ * they need. Column-major, as WebGL wants them.
  */
 
 import type { Vec3 } from '../physics/motion'
@@ -14,9 +14,33 @@ export const DIST_DEFAULT = 25
 /** Short of straight down: past it the up vector flips and the room spins. */
 const PITCH_LIMIT = 1.35
 
+/**
+ * Where the eye is and what it looks at, plus how the net should be drawn for
+ * it: `detail` is the orbit distance whose levels, reach and fog it gets, and
+ * `lens` is how close to the eye a rope starts to fade.
+ */
+export interface View {
+  eye: Vec3
+  target: Vec3
+  up: Vec3
+  fov: number
+  near: number
+  far: number
+  detail: number
+  lens: number
+}
+
+export interface Matrices {
+  view: Mat4
+  proj: Mat4
+  viewProj: Mat4
+  inverse: Mat4
+  basis: Basis
+}
+
 export interface Basis {
   eye: Vec3
-  /** Unit vector from the eye toward the centre. */
+  /** Unit vector from the eye toward what it looks at. */
   forward: Vec3
   right: Vec3
   up: Vec3
@@ -42,26 +66,74 @@ export class OrbitCamera {
     this.distance = DIST_DEFAULT
   }
 
-  basis(): Basis {
+  view(): View {
     const cp = Math.cos(this.pitch)
     const eye: Vec3 = [
       this.distance * cp * Math.sin(this.yaw),
       this.distance * Math.sin(this.pitch),
       this.distance * cp * Math.cos(this.yaw),
     ]
-    const forward = normalize([-eye[0], -eye[1], -eye[2]])
-    const right = normalize(cross(forward, [0, 1, 0]))
-    const up = cross(right, forward)
-    return { eye, forward, right, up }
+    return {
+      eye,
+      target: [0, 0, 0],
+      up: [0, 1, 0],
+      fov: FOV,
+      near: Math.max(0.1, this.distance - 30),
+      far: this.distance + 30,
+      detail: this.distance,
+      // The net looks the same at every zoom, so the lens fade scales with it.
+      lens: (1.5 * this.distance) / DIST_DEFAULT,
+    }
   }
+}
 
-  matrices(aspect: number): { view: Mat4; proj: Mat4; viewProj: Mat4; inverse: Mat4; basis: Basis } {
-    const basis = this.basis()
-    const view = lookAt(basis)
-    const near = Math.max(0.1, this.distance - 30)
-    const proj = perspective(FOV, aspect, near, this.distance + 30)
-    const viewProj = multiply(proj, view)
-    return { view, proj, viewProj, inverse: invert(viewProj), basis }
+export function basisOf(v: View): Basis {
+  const forward = normalize([v.target[0] - v.eye[0], v.target[1] - v.eye[1], v.target[2] - v.eye[2]])
+  const right = normalize(cross(forward, v.up))
+  const up = cross(right, forward)
+  return { eye: v.eye, forward, right, up }
+}
+
+export function matricesOf(v: View, aspect: number): Matrices {
+  const basis = basisOf(v)
+  const view = lookAt(basis)
+  const proj = perspective(v.fov, aspect, v.near, v.far)
+  const viewProj = multiply(proj, view)
+  return { view, proj, viewProj, inverse: invert(viewProj), basis }
+}
+
+/**
+ * Part way from one view to another. The eye swings round the centre and
+ * closes in at an even rate, rather than cutting a straight line that could
+ * pass through the body.
+ */
+export function mixView(a: View, b: View, t: number): View {
+  const lerp = (x: number, y: number): number => x + (y - x) * t
+  const ease = (x: number, y: number): number => Math.exp(lerp(Math.log(x), Math.log(y)))
+  const ra = Math.hypot(...a.eye)
+  const rb = Math.hypot(...b.eye)
+  const da = normalize(a.eye)
+  const db = normalize(b.eye)
+  const angle = Math.acos(Math.max(-1, Math.min(1, da[0] * db[0] + da[1] * db[1] + da[2] * db[2])))
+  let dir: Vec3
+  if (angle < 1e-4) dir = db
+  else {
+    const s = Math.sin(angle)
+    const ka = Math.sin((1 - t) * angle) / s
+    const kb = Math.sin(t * angle) / s
+    dir = normalize([da[0] * ka + db[0] * kb, da[1] * ka + db[1] * kb, da[2] * ka + db[2] * kb])
+  }
+  const r = ease(ra, rb)
+  const up: Vec3 = [lerp(a.up[0], b.up[0]), lerp(a.up[1], b.up[1]), lerp(a.up[2], b.up[2])]
+  return {
+    eye: [dir[0] * r, dir[1] * r, dir[2] * r],
+    target: [lerp(a.target[0], b.target[0]), lerp(a.target[1], b.target[1]), lerp(a.target[2], b.target[2])],
+    up: Math.hypot(...up) > 1e-3 ? normalize(up) : b.up,
+    fov: lerp(a.fov, b.fov),
+    near: ease(a.near, b.near),
+    far: lerp(a.far, b.far),
+    detail: ease(a.detail, b.detail),
+    lens: ease(a.lens, b.lens),
   }
 }
 

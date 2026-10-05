@@ -24,6 +24,8 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         instrument.togglePlay()
       } else if (e.key === 'r' || e.key === 'R') {
         instrument.reset()
+      } else if (e.key === 'Escape') {
+        instrument.stepOff()
       } else if (e.key === 'l' || e.key === 'L') {
         instrument.toggleKind()
       } else if (/^[1-9]$/.test(e.key)) {
@@ -40,7 +42,7 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
   return (
     <>
       <Readout snap={snap} />
-      <Legend />
+      <Legend riding={snap.riding} />
       <Dock
         snap={snap}
         short={preset?.short ?? (snap.hole ? 'Hole' : 'Custom')}

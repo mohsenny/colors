@@ -1,6 +1,6 @@
 /*
- * WebGL2, directly. What is on screen is a set of hairlines, a set of points
- * and one sphere drawn per pixel, which a 3D library would only add weight to.
+ * WebGL2, directly. What is on screen is a net of ribbons, a set of points and
+ * one sphere drawn per pixel, which a 3D library would only add weight to.
  *
  * The canvas is transparent and sits on the lit CSS surface, so the room is
  * drawn on the same lightbox the sheets in Lightbox lie on. Everything is
@@ -13,11 +13,23 @@ import { VIEW_AT, levelView } from '../physics/lattice'
 import type { Level, Net } from '../physics/lattice'
 import type { Vec3 } from '../physics/motion'
 
+/*
+ * Each rope is drawn a segment at a time, as a ribbon turned to face the
+ * screen, so its weight can follow the pull: a hairline where space is at
+ * rest, heavier where the mass has drawn it in. The bend is the boldest part
+ * of every rope, and the straight run far out recedes.
+ */
 const LATTICE_VS = `#version 300 es
-in vec3 aPos;
-in float aSqueeze;
+in vec2 aCorner;
+in vec3 aA;
+in vec3 aB;
+in float aSqueezeA;
+in float aSqueezeB;
 in float aAxis;
+in float aLink;
 uniform mat4 uVP;
+uniform vec2 uView;
+uniform float uDpr;
 uniform vec3 uEye;
 uniform vec2 uFog;
 uniform vec2 uReach;
@@ -25,42 +37,92 @@ uniform vec2 uNear;
 uniform float uAlpha;
 uniform float uBody;
 uniform vec4 uInk[3];
+uniform vec2 uWeight;
 out float vAlpha;
 out vec3 vInk;
+out float vAcross;
+out float vHalf;
+const vec4 GONE = vec4(2.0, 2.0, 2.0, 1.0);
 void main() {
-  gl_Position = uVP * vec4(aPos, 1.0);
+  vAlpha = 0.0;
+  vInk = vec3(0.0);
+  vAcross = 0.0;
+  vHalf = 1.0;
+  // The last vertex of a rope does not run on into the next rope.
+  if (aLink < 0.5) {
+    gl_Position = GONE;
+    return;
+  }
+  vec4 a = uVP * vec4(aA, 1.0);
+  vec4 b = uVP * vec4(aB, 1.0);
+  // Cut the segment where it passes behind the eye, or its direction on
+  // screen turns inside out.
+  const float E = 1e-3;
+  if (a.w < E && b.w < E) {
+    gl_Position = GONE;
+    return;
+  }
+  float ta = a.w < E ? (E - a.w) / (b.w - a.w) : 0.0;
+  float tb = b.w < E ? (E - a.w) / (b.w - a.w) : 1.0;
+  vec4 ca = mix(a, b, ta);
+  vec4 cb = mix(a, b, tb);
+  float t = mix(ta, tb, aCorner.x);
+  vec3 pos = mix(aA, aB, t);
+  float squeeze = mix(aSqueezeA, aSqueezeB, t);
+
+  // Weight in device pixels: one at rest, up to uWeight.x CSS px more at a
+  // pull of uWeight.y. Under a pixel the ribbon stays a pixel and gives up ink
+  // instead, which is how a hairline thinner than the screen looks.
+  float pull = smoothstep(0.0, uWeight.y, squeeze);
+  float w = 1.0 + uWeight.x * uDpr * pull;
+  float cover = min(w, 1.0);
+  w = max(w, 1.0);
+  vHalf = 0.5 * w;
+  // Half a pixel more each side, for the soft edge.
+  float hw = vHalf + 0.5;
+  vAcross = aCorner.y * hw;
+  vec2 d = (cb.xy / cb.w - ca.xy / ca.w) * uView;
+  vec2 dir = dot(d, d) > 1e-8 ? normalize(d) : vec2(1.0, 0.0);
+  vec4 c = mix(ca, cb, aCorner.x);
+  c.xy += vec2(-dir.y, dir.x) * aCorner.y * hw * 2.0 / uView * c.w;
+  gl_Position = c;
+
   vec4 ink = uInk[int(aAxis + 0.5)];
   vInk = ink.rgb;
-  float d = distance(aPos, uEye);
+  float dist = distance(pos, uEye);
   // Aerial perspective: far ropes sink into the surface, as far things do in a
   // lit room. Never to zero, or the back of the net stops being a net.
-  float fog = 1.0 - 0.85 * smoothstep(uFog.x, uFog.y, d);
+  float fog = 1.0 - 0.85 * smoothstep(uFog.x, uFog.y, dist);
   // The net dissolves into the surface away from the body instead of ending,
   // so there is never an edge. Measured at rest, which the squeeze gives back,
   // so how far a level shows does not depend on how hard it is pulled.
-  float rest = length(aPos) / max(1e-3, 1.0 - aSqueeze);
+  float rest = length(pos) / max(1e-3, 1.0 - squeeze);
   float reach = 1.0 - smoothstep(uReach.x, uReach.y, rest);
   // A rope passing right by the lens would be a smear across the screen.
-  float near = smoothstep(uNear.x, uNear.y, d);
+  float near = smoothstep(uNear.x, uNear.y, dist);
   // Ropes between the eye and the body thin to a ghost across its face, so
   // the body stays an object the net bends round rather than a thing in a cage.
   float D = length(uEye);
   vec3 toward = -uEye / D;
-  vec3 v = aPos - uEye;
+  vec3 v = pos - uEye;
   float along = dot(v, toward);
   float off = length(v - toward * along) * D / max(along, 1e-3);
   float front = 1.0 - smoothstep(D - uBody, D, along);
   float face = 1.0 - 0.8 * front * (1.0 - smoothstep(uBody, 1.3 * uBody, off));
-  vAlpha = uAlpha * ink.a * fog * reach * near * face * (1.0 + 4.0 * aSqueeze);
+  vAlpha = uAlpha * ink.a * cover * fog * reach * near * face * (1.0 + 1.5 * squeeze);
 }`
 
 const LATTICE_FS = `#version 300 es
 precision highp float;
 in float vAlpha;
 in vec3 vInk;
+in float vAcross;
+in float vHalf;
 out vec4 o;
 void main() {
-  float a = min(vAlpha, 0.72);
+  float edge = clamp(vHalf + 0.5 - abs(vAcross), 0.0, 1.0);
+  float a = min(vAlpha, 0.72) * edge;
+  if (a <= 0.0) discard;
   o = vec4(vInk * a, a);
 }`
 
@@ -219,7 +281,9 @@ export interface FrameDraw {
   inverse: Mat4
   eye: Vec3
   light: Vec3
-  distance: number
+  /** The orbit distance the net is drawn for, and where ropes start to fade at the lens. */
+  detail: number
+  lens: number
   body: BodyDraw
   /** x y z, r g b a, size px, ring flag. */
   points: Float32Array
@@ -246,6 +310,10 @@ const INKS = new Float32Array([
 const POINT_STRIDE = 9
 const BEAM_STRIDE = 13
 
+/** A rope at full pull is this many CSS px heavier than a hairline, and full is this much drawn in. */
+const WEIGHT_PX = 2
+const WEIGHT_PULL = 0.5
+
 export class Renderer {
   private gl: WebGL2RenderingContext
   private lattice: WebGLProgram
@@ -256,7 +324,7 @@ export class Renderer {
   private posBuf: WebGLBuffer
   private squeezeBuf: WebGLBuffer
   private axisBuf: WebGLBuffer
-  private indexBuf: WebGLBuffer
+  private linkBuf: WebGLBuffer
   private levels: Level[] = []
   private quadVao: WebGLVertexArrayObject
   private pointsVao: WebGLVertexArrayObject
@@ -276,19 +344,23 @@ export class Renderer {
     this.pointsProg = compile(gl, POINTS_VS, POINTS_FS)
     this.beamProg = compile(gl, BEAM_VS, BEAM_FS)
 
+    // One instance per segment, read straight out of the vertex buffers: a
+    // segment is a vertex and the one after it. Where they start is set per
+    // level at draw time, since WebGL2 has no base instance.
     this.latticeVao = gl.createVertexArray() as WebGLVertexArrayObject
     gl.bindVertexArray(this.latticeVao)
+    const corners = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, corners)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, -1, 0, 1, 1, -1, 1, 1]), gl.STATIC_DRAW)
+    this.attrib(this.lattice, 'aCorner', 2, 0, 0)
     this.posBuf = gl.createBuffer() as WebGLBuffer
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf)
-    this.attrib(this.lattice, 'aPos', 3, 0, 0)
     this.squeezeBuf = gl.createBuffer() as WebGLBuffer
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.squeezeBuf)
-    this.attrib(this.lattice, 'aSqueeze', 1, 0, 0)
     this.axisBuf = gl.createBuffer() as WebGLBuffer
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.axisBuf)
-    this.attrib(this.lattice, 'aAxis', 1, 0, 0)
-    this.indexBuf = gl.createBuffer() as WebGLBuffer
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuf)
+    this.linkBuf = gl.createBuffer() as WebGLBuffer
+    for (const name of ['aA', 'aB', 'aSqueezeA', 'aSqueezeB', 'aAxis', 'aLink']) {
+      const loc = gl.getAttribLocation(this.lattice, name)
+      if (loc >= 0) gl.vertexAttribDivisor(loc, 1)
+    }
 
     this.quadVao = gl.createVertexArray() as WebGLVertexArrayObject
     gl.bindVertexArray(this.quadVao)
@@ -336,13 +408,27 @@ export class Renderer {
 
   setNet(net: Net): void {
     const gl = this.gl
-    gl.bindVertexArray(this.latticeVao)
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuf)
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, net.indices, gl.STATIC_DRAW)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.axisBuf)
     gl.bufferData(gl.ARRAY_BUFFER, net.axis, gl.STATIC_DRAW)
-    gl.bindVertexArray(null)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.linkBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, net.link, gl.STATIC_DRAW)
     this.levels = net.levels
+  }
+
+  /** Points the segment attributes at a level's first vertex. */
+  private segmentsFrom(first: number): void {
+    const gl = this.gl
+    const p = this.lattice
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuf)
+    this.attrib(p, 'aA', 3, 12, first * 12)
+    this.attrib(p, 'aB', 3, 12, (first + 1) * 12)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.squeezeBuf)
+    this.attrib(p, 'aSqueezeA', 1, 4, first * 4)
+    this.attrib(p, 'aSqueezeB', 1, 4, (first + 1) * 4)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.axisBuf)
+    this.attrib(p, 'aAxis', 1, 4, first * 4)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.linkBuf)
+    this.attrib(p, 'aLink', 1, 4, first * 4)
   }
 
   setShape(positions: Float32Array, squeeze: Float32Array): void {
@@ -378,26 +464,33 @@ export class Renderer {
 
     gl.depthMask(false)
 
-    gl.useProgram(this.lattice)
-    gl.uniformMatrix4fv(gl.getUniformLocation(this.lattice, 'uVP'), false, f.viewProj)
-    gl.uniform3fv(gl.getUniformLocation(this.lattice, 'uEye'), f.eye)
-    // The net looks the same at every zoom, so its fog and lens fade scale with it.
-    const z = f.distance / VIEW_AT
-    gl.uniform2f(gl.getUniformLocation(this.lattice, 'uFog'), f.distance - 6 * z, f.distance + 8 * z)
-    gl.uniform2f(gl.getUniformLocation(this.lattice, 'uNear'), 1.5 * z, 4 * z)
-    gl.uniform4fv(gl.getUniformLocation(this.lattice, 'uInk'), INKS)
-    gl.uniform1f(gl.getUniformLocation(this.lattice, 'uBody'), f.body.radius)
+    const lp = this.lattice
+    gl.useProgram(lp)
+    gl.uniformMatrix4fv(gl.getUniformLocation(lp, 'uVP'), false, f.viewProj)
+    gl.uniform2f(gl.getUniformLocation(lp, 'uView'), this.canvas.width, this.canvas.height)
+    gl.uniform1f(gl.getUniformLocation(lp, 'uDpr'), this.dpr)
+    gl.uniform3fv(gl.getUniformLocation(lp, 'uEye'), f.eye)
+    // The net looks the same at every zoom, so its fog scales with it.
+    const z = f.detail / VIEW_AT
+    gl.uniform2f(gl.getUniformLocation(lp, 'uFog'), f.detail - 6 * z, f.detail + 8 * z)
+    gl.uniform2f(gl.getUniformLocation(lp, 'uNear'), f.lens, (8 / 3) * f.lens)
+    gl.uniform4fv(gl.getUniformLocation(lp, 'uInk'), INKS)
+    gl.uniform1f(gl.getUniformLocation(lp, 'uBody'), f.body.radius)
+    // Close in, nearly every rope on screen is pulled and the bends read on
+    // their own, so the weight eases off or the room turns to charcoal.
+    gl.uniform2f(gl.getUniformLocation(lp, 'uWeight'), WEIGHT_PX * Math.min(1, Math.sqrt(z)), WEIGHT_PULL)
     gl.bindVertexArray(this.latticeVao)
     // A device pixel is half as wide on a retina screen, so it gets more ink.
     const ink = this.dpr > 1.5 ? 0.2 : 0.14
     for (let k = 0; k < this.levels.length; k++) {
-      const { weight, reach } = levelView(k, f.distance)
+      const { weight, reach } = levelView(k, f.detail)
       const level = this.levels[k]
       const count = ropesWithin(level, reach[1])
-      if (weight <= 0 || count === 0) continue
-      gl.uniform2f(gl.getUniformLocation(this.lattice, 'uReach'), reach[0], reach[1])
-      gl.uniform1f(gl.getUniformLocation(this.lattice, 'uAlpha'), ink * Math.min(1, 2 * weight))
-      gl.drawElements(gl.LINES, count, gl.UNSIGNED_INT, level.start * 4)
+      if (weight <= 0 || count < 2) continue
+      gl.uniform2f(gl.getUniformLocation(lp, 'uReach'), reach[0], reach[1])
+      gl.uniform1f(gl.getUniformLocation(lp, 'uAlpha'), ink * Math.min(1, 2 * weight))
+      this.segmentsFrom(level.first)
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count - 1)
     }
 
     if (f.beamCount > 0) {
@@ -430,7 +523,7 @@ export class Renderer {
 
 export { BEAM_STRIDE, POINT_STRIDE }
 
-/** Index count of a level's ropes that come within `reach` of the centre. */
+/** Vertex count of a level's ropes that come within `reach` of the centre. */
 function ropesWithin(level: Level, reach: number): number {
   let a = 0
   let b = level.miss.length
@@ -439,5 +532,5 @@ function ropesWithin(level: Level, reach: number): number {
     if (level.miss[m] < reach) a = m + 1
     else b = m
   }
-  return a === 0 ? 0 : level.ends[a - 1]
+  return a === 0 ? 0 : level.verts[a - 1]
 }

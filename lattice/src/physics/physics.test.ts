@@ -179,7 +179,7 @@ describe('lattice', () => {
     const net = buildNet()
     for (const level of net.levels) {
       for (let i = 0; i < level.miss.length; i++) {
-        const v = net.indices[level.start + (i === 0 ? 0 : level.ends[i - 1])]
+        const v = level.first + (i === 0 ? 0 : level.verts[i - 1])
         const p = Array.from(net.rest.subarray(v * 3, v * 3 + 3), (x) => x.toFixed(4))
         const key = [p.filter((_, j) => j !== i % 3).join(), i % 3].join('|')
         expect(seen.has(key)).toBe(false)

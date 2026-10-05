@@ -18,7 +18,7 @@ import {
   surfaceClock,
 } from '../physics/bodies'
 import type { Field, Preset } from '../physics/bodies'
-import { buildNet, deform, radialMap } from '../physics/lattice'
+import { buildNet, deform, detailFor, radialMap } from '../physics/lattice'
 import type { Net, RadialMap } from '../physics/lattice'
 import {
   circularSpeed,
@@ -33,7 +33,8 @@ import {
   step,
 } from '../physics/motion'
 import type { Kind, Mover, Vec3 } from '../physics/motion'
-import { OrbitCamera, normalize, project, ray } from '../render/camera'
+import { OrbitCamera, matricesOf, mixView, normalize, project, ray } from '../render/camera'
+import type { Matrices, View } from '../render/camera'
 import { BEAM_STRIDE, POINT_STRIDE, Renderer } from '../render/gl'
 import { DT, ESCAPE_R, HISTORY_FRAMES, World } from '../sim/world'
 import type { Particle } from '../sim/world'
@@ -60,6 +61,26 @@ const BEAM_PX = 3.2
 const FORECAST_S = 3
 /** A press further out than this releases from here, toward the press. */
 const REACH_PRESS = 8
+
+/**
+ * Riding a probe. The eye sits this far behind it and this high (radians) on
+ * the side away from the body, looking at a point this far from the probe
+ * toward the body, so the probe, the way ahead and the body are all in view.
+ * Wider than the room's lens, so the net rushes past.
+ */
+const RIDE_BACK = 1.8
+const RIDE_RISE = 0.55
+const RIDE_TOWARD = 0.75
+const RIDE_FOV = (60 * Math.PI) / 180
+/**
+ * Seconds to swing in or out. The eye follows the probe's turns this far
+ * behind, and its position a moment behind, so a probe speeding up through
+ * its closest pass pulls away from the eye and dropping back again lets it
+ * catch up.
+ */
+const SWING_S = 0.9
+const TURN_LAG_S = 0.25
+const CHASE_LAG_S = 0.1
 
 /**
  * Light in the room: an uneven stream, each ray sent in along a rope of the net
@@ -96,6 +117,7 @@ export interface Snapshot {
   massLog: number
   sizeLog: number
   kind: Kind
+  riding: boolean
   playing: boolean
   expanded: boolean
   position: number
@@ -133,6 +155,19 @@ interface Press {
   toggled?: number
 }
 
+interface Ride {
+  id: number
+  /** The eye's frame, eased: along the path and out from the body. */
+  along: Vec3
+  out: Vec3
+  /** Where the eye follows: the probe, a moment ago. */
+  chase: Vec3
+  /** Looking round: angle about the probe from behind, height, and how far back. */
+  yaw: number
+  rise: number
+  back: number
+}
+
 export class Instrument {
   private renderer: Renderer
   private camera = new OrbitCamera()
@@ -167,6 +202,14 @@ export class Instrument {
   private acc = 0
   private lastTouch = 0
   private reduced = false
+
+  private view: View = this.camera.view()
+  private mats: Matrices = matricesOf(this.view, 1)
+  /** The probe being ridden. A click waits out the double-click before riding. */
+  private ride: Ride | null = null
+  private pendingRide: { id: number; at: number } | null = null
+  /** The view on screen when the eye last changed what it follows, and when. */
+  private swing: { from: View; t0: number } | null = null
 
   private presses = new Map<number, Press>()
   private pinch: { d: number } | null = null
@@ -266,6 +309,7 @@ export class Instrument {
    * the first ray of the stream.
    */
   private seed(): void {
+    this.stepOff()
     this.world.clear()
     this.back = 0
     this.wait = 0
@@ -452,10 +496,11 @@ export class Instrument {
       if (ticked && this.world.count < HISTORY_FRAMES && this.world.count % 6 === 0) this.emit()
     }
 
-    if (this.playing && !this.reduced && this.presses.size === 0 && now - this.lastTouch > IDLE_MS) {
+    if (this.playing && !this.reduced && !this.ride && this.presses.size === 0 && now - this.lastTouch > IDLE_MS) {
       this.camera.turn(IDLE_TURN * elapsed, 0)
     }
 
+    this.updateView(now, elapsed)
     this.draw()
   }
 
@@ -464,8 +509,109 @@ export class Instrument {
     return this.world.frameAt(this.back)
   }
 
+  // ------------------------------------------------------------------ ride
+
+  /**
+   * Rides a probe: the eye swings in behind it and travels with it, so the net
+   * streams past and the turn round the body and the rush through the closest
+   * pass are felt from the inside.
+   */
+  private rideOn(id: number): void {
+    const p = this.visible().find((q) => q.id === id && q.kind === 'probe' && q.fade === 0)
+    if (!p) return
+    const along = normalize(len(p.vel) > 1e-9 ? p.vel : cross(p.pos, [0, 1, 0]))
+    this.ride = { id, along, out: normalize(p.pos), chase: [...p.pos], yaw: 0, rise: RIDE_RISE, back: RIDE_BACK }
+    this.swing = this.reduced ? null : { from: this.view, t0: performance.now() }
+    this.announceText = 'Riding the probe'
+    this.emit()
+  }
+
+  /** Back to the room, as it was left. */
+  stepOff(): void {
+    this.pendingRide = null
+    if (!this.ride) return
+    this.ride = null
+    this.swing = this.reduced ? null : { from: this.view, t0: performance.now() }
+    this.announceText = 'Stepped off'
+    this.emit()
+  }
+
+  private updateView(now: number, elapsed: number): void {
+    if (this.pendingRide && now >= this.pendingRide.at) {
+      const { id } = this.pendingRide
+      this.pendingRide = null
+      this.rideOn(id)
+    }
+    let goal = this.camera.view()
+    if (this.ride) {
+      const id = this.ride.id
+      const p = this.visible().find((q) => q.id === id)
+      // Gone into the body, out of the room, or scrubbed to before it was released.
+      if (p) goal = this.rideView(this.ride, p, elapsed)
+      else this.stepOff()
+    }
+    if (this.swing) {
+      const u = Math.max(0, (now - this.swing.t0) / 1000 / SWING_S)
+      if (u >= 1) this.swing = null
+      else goal = mixView(this.swing.from, goal, u * u * (3 - 2 * u))
+    }
+    this.view = goal
+    this.mats = matricesOf(goal, this.width / this.height)
+  }
+
+  private rideView(r: Ride, p: Particle, elapsed: number): View {
+    const turn = 1 - Math.exp(-elapsed / TURN_LAG_S)
+    const chase = 1 - Math.exp(-elapsed / CHASE_LAG_S)
+    if (len(p.vel) > 1e-9) r.along = normalize(mix3(r.along, normalize(p.vel), turn))
+    r.out = normalize(mix3(r.out, normalize(p.pos), turn))
+    r.chase = mix3(r.chase, p.pos, chase)
+    // Square the frame up: along the path, up away from the body, and across.
+    const f = r.along
+    let across = cross(f, r.out)
+    if (len(across) < 1e-3) across = cross(f, Math.abs(f[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])
+    across = normalize(across)
+    const up = cross(across, f)
+    const cy = Math.cos(r.yaw)
+    const sy = Math.sin(r.yaw)
+    const cr = Math.cos(r.rise)
+    const sr = Math.sin(r.rise)
+    const at = (i: number): number => r.back * (cr * (-cy * f[i] + sy * across[i]) + sr * up[i])
+    let eye: Vec3 = [r.chase[0] + at(0), r.chase[1] + at(1), r.chase[2] + at(2)]
+    // Never inside the body, whichever way the eye has been turned.
+    const clear = this.field.radius + 0.3
+    const re = len(eye)
+    if (re < clear) eye = [(eye[0] / re) * clear, (eye[1] / re) * clear, (eye[2] / re) * clear]
+    const rp = len(p.pos)
+    const toward = Math.min(RIDE_TOWARD, 0.5 * (rp - this.field.radius))
+    const target: Vec3 = [p.pos[0] - (p.pos[0] / rp) * toward, p.pos[1] - (p.pos[1] / rp) * toward, p.pos[2] - (p.pos[2] / rp) * toward]
+    const reach = Math.max(len(eye), rp) + 3
+    return {
+      eye,
+      target,
+      up,
+      fov: RIDE_FOV,
+      near: 0.03,
+      far: len(eye) + 30,
+      detail: Math.min(40, Math.max(6, detailFor(reach))),
+      lens: 0.12,
+    }
+  }
+
+  private lookAround(dYaw: number, dRise: number): void {
+    if (!this.ride) return
+    this.ride.yaw += dYaw
+    this.ride.rise = Math.max(-0.5, Math.min(1.35, this.ride.rise + dRise))
+  }
+
+  private zoom(factor: number): void {
+    if (this.ride) this.ride.back = Math.max(0.6, Math.min(5, this.ride.back * factor))
+    else this.camera.zoom(factor)
+  }
+
+  // ------------------------------------------------------------------ draw
+
   private draw(): void {
-    const m = this.camera.matrices(this.width / this.height)
+    const m = this.mats
     const b = m.basis
     // Lamps upper left of the viewer, as on the lightbox.
     const light = normalize([
@@ -517,7 +663,7 @@ export class Instrument {
           const k = 1 - i / DOT_COUNT
           point(dots[i], c, 0.75 * k * life, 3.2, false)
         }
-        point(p.pos, c, life, 8, false)
+        point(p.pos, c, life, p.id === this.ride?.id ? 10 : 8, false)
         if (p.held) point(p.pos, INK, 0.55 * life, 17, true)
       } else {
         // No head: the streak is the light, brightest where it has just been.
@@ -547,7 +693,8 @@ export class Instrument {
       inverse: m.inverse,
       eye: b.eye,
       light,
-      distance: this.camera.distance,
+      detail: this.view.detail,
+      lens: this.view.lens,
       body: { radius: this.field.radius, color, hole: this.field.hole },
       points: this.points,
       pointCount: pc,
@@ -569,7 +716,7 @@ export class Instrument {
   // ------------------------------------------------------------- hover tab
 
   private hitParticle(x: number, y: number): Particle | null {
-    const vp = this.camera.matrices(this.width / this.height).viewProj
+    const vp = this.mats.viewProj
     let best: Particle | null = null
     let bestD = HIT_PX
     for (const p of this.visible()) {
@@ -586,15 +733,20 @@ export class Instrument {
   }
 
   private drawTab(vp: Float32Array): void {
-    const target = this.hover && this.presses.size === 0 ? this.hitParticle(this.hover.x, this.hover.y) : null
+    const hovered = this.hover && this.presses.size === 0 ? this.hitParticle(this.hover.x, this.hover.y) : null
+    this.canvas.style.cursor = hovered ? 'pointer' : this.presses.size > 0 ? 'grabbing' : 'grab'
+    // The probe being ridden keeps its tab, so the speed and clock can be watched change.
+    const ridden = this.ride ? this.visible().find((p) => p.id === this.ride?.id) : undefined
+    const target = hovered ?? ridden
     if (!target) {
       this.tab.classList.remove('is-on')
-      this.canvas.style.cursor = this.presses.size > 0 ? 'grabbing' : 'grab'
       return
     }
-    this.canvas.style.cursor = 'pointer'
     const s = project(vp, target.pos, this.width, this.height)
-    if (!s) return
+    if (!s) {
+      this.tab.classList.remove('is-on')
+      return
+    }
     const rs = this.field.rs
     let text: string
     if (target.kind === 'probe') {
@@ -617,7 +769,7 @@ export class Instrument {
 
   /** Where a press lands: on the plane through the centre that faces the viewer. */
   private pressPoint(x: number, y: number): Vec3 {
-    const m = this.camera.matrices(this.width / this.height)
+    const m = this.mats
     const b = m.basis
     const d = ray(m.inverse, b.eye, x, y, this.width, this.height)
     const t = -dot(b.eye, b.forward) / dot(d, b.forward)
@@ -639,7 +791,7 @@ export class Instrument {
     const dx = q.dx ?? 0
     const dy = q.dy ?? 0
     const drag = Math.hypot(dx, dy)
-    const b = this.camera.basis()
+    const b = this.mats.basis
     let dir: Vec3
     if (drag > 6) {
       dir = normalize([right[0] * dx - up[0] * dy, right[1] * dx - up[1] * dy, right[2] * dx - up[2] * dy])
@@ -675,10 +827,12 @@ export class Instrument {
     const double = e.timeStamp - prev.t < DOUBLE_MS && Math.hypot(prev.x - x, prev.y - y) < DOUBLE_PX
     const press: Press = { id: e.pointerId, x, y, t: e.timeStamp, moved: false, mode: 'turn' }
 
-    if (double) {
-      // The first click of a double-click held whatever it landed on. That was
-      // not what was meant, so it is undone before the release.
+    if (double && !this.ride) {
+      // The first click of a double-click held whatever it landed on, or was
+      // about to ride it. That was not what was meant, so it is undone before
+      // the release.
       if (prev.toggled !== undefined) this.toggleHold(prev.toggled)
+      this.pendingRide = null
       press.mode = 'aim'
       press.origin = this.pressPoint(x, y)
       press.dx = 0
@@ -706,7 +860,7 @@ export class Instrument {
       q.y = y
       const [a, b] = [...this.presses.values()]
       const d = Math.hypot(a.x - b.x, a.y - b.y)
-      if (this.pinch.d > 0 && d > 0) this.camera.zoom(this.pinch.d / d)
+      if (this.pinch.d > 0 && d > 0) this.zoom(this.pinch.d / d)
       this.pinch.d = d
       return
     }
@@ -721,7 +875,8 @@ export class Instrument {
 
     if (!q.moved && Math.hypot(dx, dy) < CLICK_PX) return
     q.moved = true
-    this.camera.turn(-dx * TURN_PER_PX, dy * TURN_PER_PX)
+    if (this.ride) this.lookAround(-dx * TURN_PER_PX, dy * TURN_PER_PX)
+    else this.camera.turn(-dx * TURN_PER_PX, dy * TURN_PER_PX)
     q.x = x
     q.y = y
     this.hover = null
@@ -735,7 +890,7 @@ export class Instrument {
     this.lastTouch = performance.now()
 
     if (q.mode === 'aim' && q.origin) {
-      const b = this.camera.basis()
+      const b = this.mats.basis
       this.branch()
       this.world.add(this.aimMover(q, b.right, b.up))
       this.announceText = this.kind === 'probe' ? 'Probe released' : 'Light released'
@@ -746,7 +901,14 @@ export class Instrument {
     if (!q.moved && e.type === 'pointerup') {
       const { x, y } = this.local(e)
       const hit = this.hitParticle(x, y)
-      if (hit) {
+      if (hit?.kind === 'probe' && hit.id !== this.ride?.id) {
+        this.pendingRide = { id: hit.id, at: performance.now() + DOUBLE_MS }
+      } else if (this.ride) {
+        // Anywhere else, or the probe itself, steps off, and is not the first
+        // half of a double-click.
+        this.stepOff()
+        this.lastDown = { x: -999, y: -999, t: -999, toggled: undefined }
+      } else if (hit) {
         this.toggleHold(hit.id)
         this.lastDown.toggled = hit.id
       }
@@ -761,7 +923,7 @@ export class Instrument {
     e.preventDefault()
     this.lastTouch = performance.now()
     const scale = e.deltaMode === 1 ? 16 : 1
-    this.camera.zoom(Math.exp(e.deltaY * scale * 0.0015))
+    this.zoom(Math.exp(e.deltaY * scale * 0.0015))
   }
 
   private toggleHold(id: number): void {
@@ -808,6 +970,7 @@ export class Instrument {
       massLog: Math.log10(this.mass),
       sizeLog: Math.log10(effectiveRadius(this.mass, this.radius)),
       kind: this.kind,
+      riding: this.ride !== null,
       playing: this.playing,
       expanded: !this.playing || this.scrubbing,
       position: n <= 1 ? 1 : 1 - this.back / (n - 1),
@@ -830,6 +993,10 @@ function customColor(f: Field): string {
   const v = Math.round(178 - 120 * c)
   const h = v.toString(16).padStart(2, '0')
   return `#${h}${h}${Math.min(255, v + 10).toString(16).padStart(2, '0')}`
+}
+
+function mix3(a: Vec3, b: Vec3, t: number): Vec3 {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 }
 
 /** An integer to [0, 1), well mixed. */
