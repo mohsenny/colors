@@ -3,7 +3,7 @@
 Eight sheets of transparent coloured film drifting over a backlit surface. Where they
 cross you get a third colour that nobody chose. That colour is the point.
 
-**[Open Lightbox](https://mohsenny.github.io/colors/)**
+**[Open Lightbox](https://mohsenny.github.io/whoami/)**
 
 ![Eight translucent colour sheets drifting over a bright white surface, several of them overlapping to produce new colours, with a small control dock at the bottom and one saved colour in the top right](docs/screenshot.jpg)
 
@@ -70,7 +70,7 @@ More on all of it in [docs/design-notes.md](docs/design-notes.md).
 
 ## Lattice
 
-**[Open Lattice](https://mohsenny.github.io/colors/lattice/)**, the sibling instrument: a
+**[Open Lattice](https://mohsenny.github.io/whoami/lattice/)**, the sibling instrument: a
 net of space pulled in by a mass, with probes and light moving through it. Same
 surface, same chrome. The names in the top-left corner cross between the instruments.
 Its source is in [lattice/](lattice/) and what it does and why is in
@@ -78,7 +78,7 @@ Its source is in [lattice/](lattice/) and what it does and why is in
 
 ## Solar
 
-**[Open Solar](https://mohsenny.github.io/colors/solar/)**, the third: the Sun, the
+**[Open Solar](https://mohsenny.github.io/whoami/solar/)**, the third: the Sun, the
 planets and the Moon where they really are, at their true sizes and distances. Become
 any of them to see the others from there, run the clock up to a year a second either
 way, and jump to the next eclipse. Same chrome with the lights out. Its source is in
