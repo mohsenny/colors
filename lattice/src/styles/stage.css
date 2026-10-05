@@ -1,0 +1,155 @@
+/*
+ * The lit surface, copied from Lightbox with its tubes at rest. The room is
+ * drawn on a transparent canvas above it, so the net hangs in the same light
+ * the slides lie in.
+ */
+
+:root {
+  /* Greys. The UI file reads these so the chrome matches the mount exactly. */
+  --lb-surface: #fbfaf8;
+  --lb-mount: rgba(255, 255, 255, 0.955);
+  --lb-mount-hover: rgba(255, 255, 255, 0.982);
+  --lb-mount-selected: rgba(255, 255, 255, 0.99);
+  --lb-ink-900: rgba(16, 16, 20, 0.95);
+  --lb-ink-700: rgba(26, 26, 30, 0.72);
+  --lb-ink-500: rgba(26, 26, 30, 0.5);
+  --lb-ink-300: rgba(26, 26, 30, 0.26);
+  /* The one hairline used for lips, rings and focus. Cool graphite, never blue. */
+  --lb-graphite: rgba(26, 30, 44, 0.18);
+  --lb-lip: rgba(30, 34, 48, 0.055);
+  --lb-tab-shadow: rgba(30, 34, 48, 0.1);
+  /*
+   * The cut edge of the card. One line around the whole silhouette, mount and
+   * tab together, and it has to be faint: a white card on a lit white surface
+   * is separated by its shadow, and this is only there so the shape still
+   * closes where the shadow is weakest.
+   */
+  --lb-card-edge: rgba(30, 34, 48, 0.13);
+  /* Shadows are deliberately cooler than the surface: the signature of a lit box. */
+  --lb-shadow-rgb: 46, 52, 72;
+}
+
+.lb-stage {
+  /* The four tubes, at Lightbox's neutral resting state. Lightbox drifts them
+     on its clock; here they hold still, so nothing moves but the room. */
+  --lb-tube-1: 255 250 240;
+  --lb-tube-1-i: 1;
+  --lb-tube-2: 248 250 253;
+  --lb-tube-2-i: 1;
+  --lb-tube-3: 255 251 243;
+  --lb-tube-3-i: 1;
+  --lb-tube-4: 245 249 255;
+  --lb-tube-4-i: 1;
+
+  position: fixed;
+  inset: 0;
+  /* Dynamic units so mobile browser chrome cannot clip the surface. */
+  width: 100dvw;
+  height: 100dvh;
+  overflow: hidden;
+  /* Keeps every multiply and screen layer inside the stage. Load-bearing. */
+  isolation: isolate;
+  margin: 0;
+  background-color: var(--lb-surface);
+  /*
+   * Bottom to top: the trough between the lamps, two very broad lobes, the rim,
+   * then the four tubes.
+   *
+   * THE TUBES. What makes a lightbox a lightbox is that you can almost see the
+   * lamps through the diffuser. Four of them, upright, each a narrow core
+   * inside a broad halo, and both ellipses are shorter than the viewport so the
+   * streak fades out before the edges: that falloff is the whole trick, because
+   * a band running edge to edge reads as a gradient and a band with ends reads
+   * as a fixture.
+   *
+   * THE TROUGH IS WHY THEY ARE VISIBLE. The first version painted near-white
+   * lamps on a near-white base and the whole effect vanished: you cannot make
+   * something read as brighter than a surface that is already at the top of the
+   * range. So the base is the DARK part, the shade between two fixtures, and
+   * the tubes bring it back to full white. The peak is still essentially paper
+   * white and the trough is only about 6% under it, which is roughly what a real
+   * diffuser does between lamps 25% of the width apart.
+   *
+   */
+  background-image:
+    radial-gradient(
+      1.9% 44% at 12.5% 47%,
+      rgb(var(--lb-tube-1) / calc(0.92 * var(--lb-tube-1-i))) 0%,
+      rgb(var(--lb-tube-1) / 0) 58%
+    ),
+    radial-gradient(
+      1.9% 44% at 37.5% 50%,
+      rgb(var(--lb-tube-2) / calc(0.92 * var(--lb-tube-2-i))) 0%,
+      rgb(var(--lb-tube-2) / 0) 58%
+    ),
+    radial-gradient(
+      1.9% 44% at 62.5% 50%,
+      rgb(var(--lb-tube-3) / calc(0.92 * var(--lb-tube-3-i))) 0%,
+      rgb(var(--lb-tube-3) / 0) 58%
+    ),
+    radial-gradient(
+      1.9% 44% at 87.5% 53%,
+      rgb(var(--lb-tube-4) / calc(0.92 * var(--lb-tube-4-i))) 0%,
+      rgb(var(--lb-tube-4) / 0) 58%
+    ),
+    radial-gradient(
+      17% 88% at 12.5% 47%,
+      rgb(var(--lb-tube-1) / calc(0.82 * var(--lb-tube-1-i))) 0%,
+      rgb(var(--lb-tube-1) / 0) 74%
+    ),
+    radial-gradient(
+      17% 88% at 37.5% 50%,
+      rgb(var(--lb-tube-2) / calc(0.82 * var(--lb-tube-2-i))) 0%,
+      rgb(var(--lb-tube-2) / 0) 74%
+    ),
+    radial-gradient(
+      17% 88% at 62.5% 50%,
+      rgb(var(--lb-tube-3) / calc(0.82 * var(--lb-tube-3-i))) 0%,
+      rgb(var(--lb-tube-3) / 0) 74%
+    ),
+    radial-gradient(
+      17% 88% at 87.5% 53%,
+      rgb(var(--lb-tube-4) / calc(0.82 * var(--lb-tube-4-i))) 0%,
+      rgb(var(--lb-tube-4) / 0) 74%
+    ),
+    /* The rim. A panel loses a little light where it meets its housing, and the
+       falloff is what tells the eye this is a surface with edges rather than a
+       page that happens to be white. Under 2% at its strongest. */
+    linear-gradient(to bottom, rgba(223, 229, 240, 0.34) 0%, rgba(223, 229, 240, 0) 5.5%),
+    linear-gradient(to top, rgba(223, 229, 240, 0.3) 0%, rgba(223, 229, 240, 0) 5%),
+    linear-gradient(to right, rgba(223, 229, 240, 0.28) 0%, rgba(223, 229, 240, 0) 3.5%),
+    linear-gradient(to left, rgba(223, 229, 240, 0.28) 0%, rgba(223, 229, 240, 0) 3.5%),
+    radial-gradient(154% 146% at 28% 18%, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 66%),
+    radial-gradient(158% 150% at 81% 86%, rgba(228, 233, 244, 0.34) 0%, rgba(228, 233, 244, 0) 70%),
+    linear-gradient(118deg, rgb(247, 244, 236) 0%, rgb(239, 242, 250) 100%);
+}
+
+/*
+ * Grain. Static by construction: animated grain shimmers exactly when the user
+ * has paused to study a colour. Sits below every slide (slides start at z 10).
+ */
+.lb-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* 140 user units over 140 px keeps the noise cell at 1 CSS px. */
+  background-size: 140px 140px;
+}
+
+
+/* Above the grain, so the ropes stay crisp. */
+.lt-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}

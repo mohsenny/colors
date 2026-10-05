@@ -59,6 +59,10 @@ export default function App() {
           if (typing) return
           instrument.toggleBlend()
           return
+        case 'KeyG':
+          if (typing) return
+          window.location.href = 'lattice/'
+          return
         case 'Escape':
           instrument.select(null)
           return

@@ -1,6 +1,8 @@
 /*
- * The floating chrome: dock (new colours / play / timeline / mode), legend,
- * palette tray.
+ * The floating chrome, copied from Lightbox (colors repo, b19db57) with the
+ * lb- names kept so the two can be diffed. Lattice's own additions are lt-
+ * and sit at the end: the body chip, the bodies drawer, the sliders, the
+ * readout card and the particle tab.
  *
  * Everything here is subordinate to the slides. Rules of thumb applied
  * throughout: translucent near-white panels so the lit surface shows through,
@@ -197,141 +199,6 @@
   background: rgba(30, 34, 48, 0.075);
 }
 
-/* ------------------------------------------------------------- new colours */
-
-/*
- * The one place the chrome carries colour, and it is always the room's own.
- * The fan says colour and the word says what pressing it does: three colours
- * and "New" finish each other's sentence, where either alone is a guess.
- */
-.lb-deal {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 26px;
-  padding: 0 9px 0 5px;
-  border-radius: var(--lb-r-pill, 999px);
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-  transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
-}
-
-.lb-deal:hover {
-  color: var(--lb-ink, #1a1a1e);
-  background: rgba(30, 34, 48, 0.055);
-}
-
-.lb-deal:active {
-  background: rgba(30, 34, 48, 0.09);
-}
-
-.lb-deal-fan {
-  position: relative;
-  width: 20px;
-  height: 16px;
-}
-
-/*
- * A swatch fan, pivoted below the foot like the real thing. Solid rather than
- * multiplied: at seven pixels wide the crossings came out as a brown wedge at
- * the pivot, and the one job here is to read as colour. The white edge is the
- * mount every sheet on the glass wears.
- */
-.lb-deal-gel {
-  --spread: 1;
-  position: absolute;
-  bottom: 0;
-  left: calc(50% - 4px);
-  box-sizing: border-box;
-  width: 8px;
-  height: 15px;
-  border: 1px solid #fff;
-  border-radius: 2px;
-  background-color: var(--gel, #d9dbe0);
-  box-shadow:
-    0.4px 1px 2px rgba(46, 52, 72, 0.22),
-    0 0 0 0.5px rgba(30, 34, 48, 0.07);
-  transform-origin: 50% 125%;
-  transform: rotate(calc(var(--a) * var(--spread)));
-  /* The sheets' own crossfade, 520ms staggered 46ms, so the fan changes
-     colour in step with the room rather than ahead of it. */
-  transition:
-    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
-    background-color 520ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) var(--lag);
-}
-
-.lb-deal-gel:nth-child(1) {
-  --a: -20deg;
-  --lag: 0ms;
-}
-
-.lb-deal-gel:nth-child(2) {
-  --a: 0deg;
-  --lag: 46ms;
-}
-
-.lb-deal-gel:nth-child(3) {
-  --a: 20deg;
-  --lag: 92ms;
-}
-
-/* Opens a little under the pointer: an offer to deal. */
-.lb-deal:hover .lb-deal-gel {
-  --spread: 1.4;
-}
-
-/*
- * The deal. The fan closes on itself and opens again on the new roll. No end
- * frames, so it leaves from and returns to wherever the fan is, open under
- * the pointer or closed after a key press, and never snaps at the finish.
- */
-.lb-deal[data-riffle='a'] .lb-deal-gel {
-  animation: lb-riffle-a 460ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) var(--lag);
-}
-
-.lb-deal[data-riffle='b'] .lb-deal-gel {
-  animation: lb-riffle-b 460ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) var(--lag);
-}
-
-@keyframes lb-riffle-a {
-  30% {
-    transform: translateY(1px) rotate(calc(var(--a) * 0.08));
-  }
-  70% {
-    transform: rotate(calc(var(--a) * var(--spread) * 1.15));
-  }
-}
-
-@keyframes lb-riffle-b {
-  30% {
-    transform: translateY(1px) rotate(calc(var(--a) * 0.08));
-  }
-  70% {
-    transform: rotate(calc(var(--a) * var(--spread) * 1.15));
-  }
-}
-
-.lb-deal-label {
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-/* The colours changing is the answer to the press, so it stays. The fan's
-   movement is the part that goes. */
-@media (prefers-reduced-motion: reduce) {
-  .lb-deal-gel {
-    animation: none !important;
-  }
-
-  .lb-deal:hover .lb-deal-gel {
-    --spread: 1;
-  }
-}
-
 /* ----------------------------------------------------------- options panel */
 
 /*
@@ -398,55 +265,6 @@
   letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-}
-
-/* --------------------------------------------------------------- stepper */
-
-.lb-stepper {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  padding: 2px;
-  border-radius: var(--lb-r-pill, 999px);
-  background: rgba(30, 34, 48, 0.05);
-}
-
-.lb-step-btn {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--lb-r-pill, 999px);
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-  transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
-}
-
-.lb-step-btn:hover:not(:disabled) {
-  color: var(--lb-ink, #1a1a1e);
-  background: rgba(255, 255, 255, 0.7);
-}
-
-/*
- * At the end of the range the button stays in place and goes quiet. Removing it
- * would move the other one, and a control that moves when you reach the end of
- * its travel is a control you then have to re-aim at.
- */
-.lb-step-btn:disabled {
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-  opacity: 0.4;
-  cursor: default;
-}
-
-.lb-step-value {
-  min-width: 22px;
-  /* Tabular, so stepping 9 to 10 does not shove the buttons sideways. */
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
-  color: var(--lb-ink-strong, #101014);
 }
 
 /* ------------------------------------------------------- segmented control */
@@ -666,17 +484,9 @@
     0 0 0 0.5px rgba(30, 34, 48, 0.24);
 }
 
-/* ------------------------------------------------------------ palette tray */
+/* ------------------------------------------------------------- tray card */
 
-/*
- * Top right, not centred.
- *
- * Centred put the tray across the middle band of the surface, which is where
- * the sheets cross and where the eye is. The corner is the quiet part of the
- * frame: the list is there when you look for it and out of the composition when
- * you are not. It also grows downward from a fixed edge, so a new colour does
- * not shift the ones already saved.
- */
+/* Top right, the quiet corner of the frame. Lattice puts its readout here. */
 .lb-tray {
   position: fixed;
   /* The same 16px the legend sits at, so the corners read as one margin. */
@@ -706,185 +516,270 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-.lb-tray-item {
-  position: relative;
+/* ================================================================ lattice */
+
+/* ---------------------------------------------------------------- sphere */
+
+/* The body at chip size, lit from the upper left like the one in the room. */
+.lt-sphere {
+  flex: none;
+  display: block;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 46%),
+    radial-gradient(circle at 70% 76%, rgba(46, 52, 72, 0.32) 0%, rgba(46, 52, 72, 0) 62%),
+    var(--lt-body, #b2b2bc);
+  box-shadow:
+    0.4px 1px 2px rgba(46, 52, 72, 0.22),
+    0 0 0 0.5px rgba(30, 34, 48, 0.1);
+}
+
+.lt-sphere.is-hole {
+  background:
+    radial-gradient(circle at 50% 50%, #101014 0%, #101014 62%, rgba(102, 112, 143, 0.7) 100%);
+}
+
+/* ------------------------------------------------------------- body chip */
+
+/* Where New sits in Lightbox: the one place the dock carries colour. */
+.lt-chip {
   display: flex;
   align-items: center;
-  /* 6, not 7: the row carries one more control than it used to and the tray is
-     a corner object, not a panel. */
   gap: 6px;
-  height: 22px;
-  max-height: 22px;
-  padding: 0 4px;
-  border-radius: var(--lb-r-inner, 1.5px);
-  animation: lb-tray-in var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+  height: 26px;
+  padding: 0 9px 0 6px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
 }
 
-.lb-tray-item:hover {
-  background: rgba(30, 34, 48, 0.045);
+.lt-chip:hover {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(30, 34, 48, 0.055);
 }
 
-/* Clipping is only for the collapse. A live row is never clipped: its focus
-   rings sit proud of the padding box. */
-.lb-tray-item.is-leaving {
-  pointer-events: none;
-  overflow: hidden;
-  animation: lb-tray-out var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+.lt-chip.is-on {
+  color: var(--lb-ink-strong, #101014);
+  background: rgba(30, 34, 48, 0.075);
 }
 
-@keyframes lb-tray-in {
-  from {
-    opacity: 0;
-    max-height: 0;
-    transform: translateX(7px);
-  }
-  to {
-    opacity: 1;
-    max-height: 22px;
-    transform: translateX(0);
-  }
-}
-
-@keyframes lb-tray-out {
-  from {
-    opacity: 1;
-    max-height: 22px;
-    transform: translateX(0);
-  }
-  to {
-    opacity: 0;
-    max-height: 0;
-    transform: translateX(7px);
-  }
-}
-
-/* The half-pixel inner lip is the slides' own cue, at swatch scale. It is a
-   chip and not a button: the copy control is the copy control. */
-.lb-tray-swatch {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 2px;
-  background: var(--lb-swatch, #fff);
-  box-shadow:
-    inset 0 0 0 0.6px rgba(0, 0, 0, 0.075),
-    0 0 0 0.5px rgba(255, 255, 255, 0.7);
-}
-
-.lb-tray-hex {
-  flex: 1 1 auto;
-  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10.5px;
-  letter-spacing: 0.09em;
-  font-variant-numeric: slashed-zero tabular-nums;
+.lt-chip-label {
+  min-width: 52px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   text-align: left;
   white-space: nowrap;
+}
+
+/* ---------------------------------------------------------- bodies drawer */
+
+/* Opens over the chip rather than the middle of the dock. */
+.lt-bodies {
+  left: 0;
+  gap: 1px;
+  padding: 5px;
+  min-width: 236px;
+  transform: translate(0, 6px) scale(0.97);
+  transform-origin: bottom left;
+}
+
+.lt-bodies.is-open {
+  transform: translate(0, 0) scale(1);
+}
+
+.lt-body-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 5px;
+  text-align: left;
   color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-  transition: color var(--lb-t-quick, 120ms) ease;
-}
-
-.lb-tray-hex:hover {
-  color: var(--lb-ink-strong, #101014);
-}
-
-/* A sampled crossing has no slide to select, so it does not offer to be one. */
-.lb-tray-hex.is-static {
-  cursor: default;
-}
-
-.lb-tray-hex.is-static:hover {
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-}
-
-/*
- * Copy, and unpin. Both 14px boxes at the right edge of the row.
- *
- * Copy is always visible. It is the reason a colour is in the tray at all, and
- * a saved hex you cannot see how to take is a saved hex you have to
- * hand-transcribe. Unpin stays on hover: it is destructive, secondary, and one
- * wrong tap from losing the thing you saved.
- */
-.lb-tray-copy,
-.lb-tray-unpin {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 14px;
-  height: 14px;
-  border-radius: var(--lb-r-pill, 999px);
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
   transition:
     color var(--lb-t-quick, 120ms) ease,
-    opacity var(--lb-t-quick, 120ms) ease;
+    background-color var(--lb-t-quick, 120ms) ease;
 }
 
-.lb-tray-unpin {
-  opacity: 0;
-}
-
-.lb-tray-item:hover .lb-tray-unpin,
-.lb-tray-unpin:focus-visible {
-  opacity: 1;
-}
-
-.lb-tray-copy:hover,
-.lb-tray-unpin:hover {
+.lt-body-row:hover {
   color: var(--lb-ink, #1a1a1e);
-  background: rgba(30, 34, 48, 0.07);
+  background: rgba(30, 34, 48, 0.045);
 }
 
-/* Taken. The one moment this row is allowed to be the darkest thing in the
-   tray, because it is answering a question the user just asked. */
-.lb-tray-copy[data-done='true'],
-.lb-tray-copy[data-done='true']:hover {
+.lt-body-row[aria-pressed='true'] {
   color: var(--lb-ink-strong, #101014);
-  background: none;
+  background: rgba(30, 34, 48, 0.065);
 }
 
-/*
- * The crossfade. Both marks sit in the same 12px box, so neither moves the
- * button and the tick lands exactly where the copy glyph was.
- */
-.lb-tray-copy-mark,
-.lb-tray-copy-tick {
-  transform-origin: 50% 50%;
-  transition:
-    opacity 140ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
-    transform 140ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+.lt-body-name {
+  flex: 1 1 auto;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.lb-tray-copy-tick {
+.lt-body-kind,
+.lt-body-key {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+.lt-body-key {
+  width: 10px;
+  font-family: var(--lb-font-mono, ui-monospace, monospace);
+  letter-spacing: 0;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------- slider */
+
+/* The timeline's own track and handle, as a native range so it steps by key. */
+.lt-slider {
+  width: 168px;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: none;
+}
+
+.lt-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(30, 34, 48, 0.12);
+}
+
+.lt-slider::-moz-range-track {
+  height: 4px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(30, 34, 48, 0.12);
+}
+
+.lt-slider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--lb-panel-hover, rgba(255, 255, 255, 0.99));
+  box-shadow:
+    0 1px 2px rgba(30, 34, 48, 0.16),
+    0 0 0 0.5px rgba(30, 34, 48, 0.2);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.lt-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--lb-panel-hover, rgba(255, 255, 255, 0.99));
+  box-shadow:
+    0 1px 2px rgba(30, 34, 48, 0.16),
+    0 0 0 0.5px rgba(30, 34, 48, 0.2);
+}
+
+.lt-slider:hover::-webkit-slider-thumb {
+  box-shadow:
+    0 1px 3px rgba(30, 34, 48, 0.22),
+    0 0 0 0.5px rgba(30, 34, 48, 0.28);
+}
+
+/* --------------------------------------------------------------- readout */
+
+.lt-readout .lb-tray-list {
+  gap: 2px;
+  padding: 8px 10px 9px;
+  min-width: 196px;
+}
+
+.lt-readout-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lb-ink-strong, #101014);
+}
+
+.lt-readout-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.lt-readout-label {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+.lt-readout-value {
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+/* ------------------------------------------------------------ particle tab */
+
+/* The slides' hex tab, hanging off a particle instead of a mount. */
+.lt-tab {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 150;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background-color: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  box-shadow:
+    var(--lb-shadow-soft, 1.9px 5.5px 16.7px rgba(46, 52, 72, 0.119)),
+    0 0 0 0.5px var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  pointer-events: none;
   opacity: 0;
-  transform: scale(0.7);
+  transition: opacity var(--lb-t-quick, 120ms) ease;
 }
 
-.lb-tray-copy-icon.is-done .lb-tray-copy-mark {
-  opacity: 0;
-  transform: scale(0.7);
-}
-
-.lb-tray-copy-icon.is-done .lb-tray-copy-tick {
+.lt-tab.is-on {
   opacity: 1;
-  transform: scale(1);
 }
 
-/* The swap is information, not decoration, so it survives: only the scale goes. */
-@media (prefers-reduced-motion: reduce) {
-  .lb-tray-copy-mark,
-  .lb-tray-copy-tick {
-    transition-duration: 1ms;
-    transform: none !important;
-  }
+.lt-fail {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
 }
 
 /* ------------------------------------------------- small viewports (620px) */
-/* Mirrors SMALL_VIEWPORT in src/core/constants.ts; a media query cannot read it. */
 
 @media (max-width: 619px) {
-  /* No room for it beside the dock, and every gesture in it is a mouse
-     gesture. A touch user gets none of the three, only the way across, in
-     the free corner at the top. */
+  /* Only the way across, in the free corner at the top. */
   .lb-legend {
     top: calc(14px + env(safe-area-inset-top, 0px));
     bottom: auto;
@@ -902,16 +797,8 @@
   }
 
   .lb-dock {
-    /* Still the widest thing in the dock when paused, but the dock has to stay
-       inside a phone: it grows to fill what is left rather than to a fixed
-       size. */
-    --lb-tl-w: 88px;
-    /* 214px is what the rest of the dock occupies at this type size, plus a
-       6px breathing margin each side. Measure it again if the chrome changes:
-       the uppercase mode labels alone moved it by 18px, and the options
-       button went in without it, which put the paused dock 6px off each side
-       of a 390px phone. */
-    --lb-tl-open: min(304px, calc(100vw - 214px));
+    --lb-tl-w: 72px;
+    --lb-tl-open: min(304px, calc(100vw - 236px));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
   }
@@ -922,85 +809,27 @@
     letter-spacing: 0.09em;
   }
 
-  /* The fan alone, in the footprint of an icon button, so the 196px above
-     still holds. The accessible name never depended on the word. */
-  .lb-deal {
+  /* The sphere alone, in the footprint of an icon button. */
+  .lt-chip {
     justify-content: center;
     width: 26px;
     padding: 0;
   }
 
-  .lb-deal-label {
+  .lt-chip-label {
     display: none;
   }
 
-  /* The tray becomes a horizontal strip just above the dock. Still floating,
-     still narrow: it scrolls rather than growing into a bar. */
-  .lb-tray {
-    right: auto;
-    left: 50%;
-    top: auto;
-    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
-    max-width: calc(100vw - 24px);
-    transform: translateX(-50%);
+  .lt-readout {
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    top: calc(10px + env(safe-area-inset-top, 0px));
   }
 
-  .lb-tray-list {
-    flex-direction: row;
-    gap: 2px;
-    max-width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
+  .lt-readout .lb-tray-list {
+    min-width: 0;
   }
 
-  .lb-tray-list::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* The row is the swatch, seven characters of hex, and two 14px controls. */
-  .lb-tray-item {
-    max-height: none;
-    max-width: 124px;
-    gap: 6px;
-    animation-name: lb-tray-in-row;
-  }
-
-  .lb-tray-item.is-leaving {
-    animation-name: lb-tray-out-row;
-  }
-
-  /* No hover on touch, so the unpin control is simply always there. */
-  .lb-tray-unpin {
-    opacity: 1;
-  }
-
-  @keyframes lb-tray-in-row {
-    from {
-      opacity: 0;
-      max-width: 0;
-      padding-left: 0;
-      padding-right: 0;
-      transform: translateY(6px);
-    }
-    to {
-      opacity: 1;
-      max-width: 124px;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes lb-tray-out-row {
-    from {
-      opacity: 1;
-      max-width: 124px;
-      transform: translateY(0);
-    }
-    to {
-      opacity: 0;
-      max-width: 0;
-      padding-left: 0;
-      padding-right: 0;
-      transform: translateY(6px);
-    }
+  .lt-slider {
+    width: min(168px, calc(100vw - 140px));
   }
 }

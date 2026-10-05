@@ -8,7 +8,8 @@ const ROWS: ReadonlyArray<{ key: string; gesture: string; effect: string }> = [
 
 /**
  * Three lines in the bottom-left corner, naming the only three things that
- * cannot be discovered by moving the mouse.
+ * cannot be discovered by moving the mouse, and a fourth that is the way to
+ * the other instrument: a hint and a link at once, so it needs no chrome.
  *
  * They stay. An earlier version retired each line the first time you did the
  * thing it described, which is a clever idea and a bad one: the gestures are
@@ -26,6 +27,10 @@ export function Legend(): ReactElement {
           <span className="lb-legend-effect">{row.effect}</span>
         </div>
       ))}
+      <a className="lb-legend-row lb-legend-link" href="lattice/">
+        <span className="lb-legend-gesture">G</span>
+        <span className="lb-legend-effect">Lattice</span>
+      </a>
     </div>
   )
 }

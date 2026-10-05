@@ -1,0 +1,851 @@
+/*
+ * The instrument: the body, the net, the particles, the camera and the clock,
+ * and the pointer gestures on the room. React only draws the chrome around it
+ * and reads a snapshot.
+ */
+
+import {
+  PRESETS,
+  effectiveRadius,
+  exaggeration,
+  fieldFor,
+  formatClock,
+  formatExaggeration,
+  formatLength,
+  formatMass,
+  presetById,
+  schwarzschild,
+  surfaceClock,
+} from '../physics/bodies'
+import type { Field, Preset } from '../physics/bodies'
+import { buildNet, deform, radialMap } from '../physics/lattice'
+import type { Net, RadialMap } from '../physics/lattice'
+import {
+  circularSpeed,
+  clockRate,
+  cross,
+  dot,
+  len,
+  lightSpeedSeen,
+  localSpeed,
+  makeLight,
+  makeProbe,
+  step,
+} from '../physics/motion'
+import type { Kind, Mover, Vec3 } from '../physics/motion'
+import { OrbitCamera, normalize, project, ray } from '../render/camera'
+import { BEAM_STRIDE, POINT_STRIDE, Renderer } from '../render/gl'
+import { DT, ESCAPE_R, HISTORY_FRAMES, World } from '../sim/world'
+import type { Particle } from '../sim/world'
+
+/** Log10 bounds of the two body sliders, kg and m. M87* sits inside both. */
+export const MASS_LOG = [22, 41] as const
+export const SIZE_LOG = [3, 14] as const
+
+/** A second press this soon and this close is a double-click. */
+const DOUBLE_MS = 320
+const DOUBLE_PX = 12
+const CLICK_PX = 5
+const TURN_PER_PX = 0.006
+/** Rad per second the room turns by itself once nobody is touching it. */
+const IDLE_TURN = 0.05
+const IDLE_MS = 2400
+const HIT_PX = 14
+
+/** Probe trail: a dot every 0.1 s for 4 s. Light: a streak for 1.5 s, this wide at the front. */
+const DOT_STRIDE = 6
+const DOT_COUNT = 40
+const LIGHT_FRAMES = 90
+const BEAM_PX = 3.2
+const FORECAST_S = 3
+/** A press further out than this releases from here, toward the press. */
+const REACH_PRESS = 8
+
+/**
+ * Light in the room: an uneven stream, each ray sent in along a rope of the net
+ * from this far out, so it starts on the lattice and leaves it only where the
+ * body bends it. Gaps in ticks, at most this many in flight, and ropes up to
+ * this many units off the centre on either side.
+ */
+const LIGHT_FROM = 10
+const LIGHT_GAP = [9, 45] as const
+const LIGHT_FLYING = 6
+const LIGHT_OFF = 4.5
+
+/** Probe hues: the Lightbox roll without its amber, which is too near gold. */
+const HUES: readonly Vec3[] = [
+  [0.89, 0.34, 0.18],
+  [0.18, 0.42, 1.0],
+  [0.09, 0.64, 0.6],
+  [0.7, 0.25, 0.56],
+  [0.36, 0.55, 0.16],
+  [0.82, 0.29, 0.36],
+  [0.24, 0.35, 0.5],
+]
+/** Light is always gold, and nothing else in the room is. Deep enough to hold on white. */
+const GOLD: Vec3 = [0.8, 0.58, 0.1]
+/** The core at the front of a streak, where the light is. */
+const HOT: Vec3 = [1, 0.72, 0.12]
+const INK: Vec3 = [26 / 255, 30 / 255, 44 / 255]
+
+export interface Snapshot {
+  presetId: string | null
+  name: string
+  color: string
+  hole: boolean
+  massLog: number
+  sizeLog: number
+  kind: Kind
+  playing: boolean
+  expanded: boolean
+  position: number
+  filled: number
+  readout: { mass: string; radius: string; clock: string; drawn: string }
+  /** For the live region. */
+  announce: string
+}
+
+function hexToVec(hex: string): Vec3 {
+  const n = parseInt(hex.slice(1), 16)
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
+}
+
+/** Time scale, simulated units per second: a circular orbit at 4 takes ten
+ * seconds, capped so light takes over a second to cross the room. */
+function rateFor(rs: number): number {
+  const v = Math.sqrt(rs / 8)
+  const period = (2 * Math.PI * 4) / v
+  return Math.min(9, period / 10)
+}
+
+interface Press {
+  id: number
+  x: number
+  y: number
+  t: number
+  moved: boolean
+  mode: 'turn' | 'aim'
+  /** Aim: the release point in the room, and the drag so far. */
+  origin?: Vec3
+  dx?: number
+  dy?: number
+  /** Click on a particle: its id, and whether this press toggled its hold. */
+  toggled?: number
+}
+
+export class Instrument {
+  private renderer: Renderer
+  private camera = new OrbitCamera()
+  private world = new World()
+  private net: Net
+  private shape: Float32Array
+  private squeeze: Float32Array
+
+  private mass: number
+  private radius: number
+  private frame: number
+  private presetId: string | null
+  private field: Field = { rs: 0, radius: 1, hole: false }
+  private rate = 1
+  private kind: Kind = 'light'
+  /** Where the net draws a rest point, for laying light on a rope. */
+  private map: RadialMap = radialMap(0, 1)
+  /** Ticks until the next ray, and dice thrown so far. */
+  private wait = 0
+  private dice = 0
+
+  private playing = true
+  private scrubbing = false
+  private resumeAfterScrub = false
+  /** Frames back from the newest that is on screen. 0 is now. */
+  private back = 0
+
+  private width = 1
+  private height = 1
+  private raf = 0
+  private last = 0
+  private acc = 0
+  private lastTouch = 0
+  private reduced = false
+
+  private presses = new Map<number, Press>()
+  private pinch: { d: number } | null = null
+  private lastDown = { x: -999, y: -999, t: -999, toggled: undefined as number | undefined }
+  private hover: { x: number; y: number } | null = null
+
+  private points = new Float32Array(4096 * POINT_STRIDE)
+  private beams = new Float32Array(12 * LIGHT_FRAMES * 6 * BEAM_STRIDE)
+
+  private snap: Snapshot
+  private listeners = new Set<() => void>()
+  private announceText = ''
+
+  private canvas: HTMLCanvasElement
+  private tab: HTMLElement
+
+  constructor(canvas: HTMLCanvasElement, tab: HTMLElement) {
+    this.canvas = canvas
+    this.tab = tab
+    this.renderer = new Renderer(canvas)
+    this.net = buildNet()
+    this.shape = new Float32Array(this.net.rest.length)
+    this.squeeze = new Float32Array(this.net.rest.length / 3)
+    this.renderer.setNet(this.net)
+
+    const fromHash = this.readHash()
+    const preset = presetById(fromHash?.preset ?? 'sun') ?? PRESETS[2]
+    this.presetId = fromHash?.preset ? preset.id : fromHash ? null : preset.id
+    this.mass = fromHash?.mass ?? preset.mass
+    this.radius = fromHash?.radius ?? Math.max(preset.radius, schwarzschild(preset.mass))
+    this.frame = effectiveRadius(this.mass, this.radius)
+    this.applyBody()
+    this.seed()
+
+    this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    this.snap = this.makeSnapshot()
+  }
+
+  // ------------------------------------------------------------- lifecycle
+
+  start(): void {
+    this.resize()
+    window.addEventListener('resize', this.resize)
+    this.canvas.addEventListener('pointerdown', this.onDown)
+    window.addEventListener('pointermove', this.onMove)
+    window.addEventListener('pointerup', this.onUp)
+    window.addEventListener('pointercancel', this.onUp)
+    this.canvas.addEventListener('pointerleave', this.onLeave)
+    this.canvas.addEventListener('wheel', this.onWheel, { passive: false })
+    this.last = performance.now()
+    this.lastTouch = this.last
+    this.raf = requestAnimationFrame(this.frameLoop)
+  }
+
+  stop(): void {
+    cancelAnimationFrame(this.raf)
+    window.removeEventListener('resize', this.resize)
+    this.canvas.removeEventListener('pointerdown', this.onDown)
+    window.removeEventListener('pointermove', this.onMove)
+    window.removeEventListener('pointerup', this.onUp)
+    window.removeEventListener('pointercancel', this.onUp)
+    this.canvas.removeEventListener('pointerleave', this.onLeave)
+    this.canvas.removeEventListener('wheel', this.onWheel)
+  }
+
+  subscribe = (fn: () => void): (() => void) => {
+    this.listeners.add(fn)
+    return () => this.listeners.delete(fn)
+  }
+
+  getSnapshot = (): Snapshot => this.snap
+
+  private emit(): void {
+    this.snap = this.makeSnapshot()
+    for (const fn of this.listeners) fn()
+  }
+
+  private resize = (): void => {
+    this.width = window.innerWidth
+    this.height = window.innerHeight
+    this.renderer.resize(this.width, this.height, Math.min(2, window.devicePixelRatio || 1))
+  }
+
+  // ------------------------------------------------------------------ body
+
+  private applyBody(): void {
+    this.field = fieldFor(this.mass, this.radius, this.frame)
+    this.rate = rateFor(this.field.rs)
+    this.map = radialMap(this.field.rs, this.field.radius)
+    deform(this.net, this.field.rs, this.field.radius, this.shape, this.squeeze)
+    this.renderer.setShape(this.shape, this.squeeze)
+    this.writeHash()
+  }
+
+  /**
+   * The room opens already moving: three probes on tilted planes, or in Light,
+   * the first ray of the stream.
+   */
+  private seed(): void {
+    this.world.clear()
+    this.back = 0
+    this.wait = 0
+    if (this.kind === 'light') {
+      this.sendLight()
+      return
+    }
+    const base = this.field.hole ? [3.6, 4.6, 6] : [2.4, 3.4, 4.6].map((r) => Math.max(r, this.field.radius + 0.6))
+    const tilts = [0.35, -0.6, 1.1]
+    base.forEach((r, i) => {
+      const a = i * 2.1
+      const t = tilts[i]
+      const pos: Vec3 = [r * Math.cos(a), 0, r * Math.sin(a)]
+      // Tangent in the xz plane, then tilted about the radius.
+      const tan: Vec3 = [-Math.sin(a), 0, Math.cos(a)]
+      const radial = normalize(pos)
+      const dir = rotate(tan, radial, t)
+      const v = circularSpeed(r, this.field.rs) * (i === 1 ? 0.88 : 1)
+      this.world.add(makeProbe(pos, [dir[0] * v, dir[1] * v, dir[2] * v], this.field.rs))
+    })
+  }
+
+  /**
+   * In Light, called every tick: after a random gap, a ray comes in along a
+   * random rope, from either end of any of the three directions.
+   */
+  private sendLight(): void {
+    if (this.wait-- > 0) return
+    this.wait = LIGHT_GAP[0] + Math.floor(this.roll() * (LIGHT_GAP[1] - LIGHT_GAP[0]))
+    const flying = this.world.slots.filter((p) => p !== null && p.kind === 'light' && p.fade === 0 && !p.held).length
+    if (flying >= LIGHT_FLYING) return
+    // Ropes sit on the half-steps. Never one straight through the body's middle.
+    const steps = 2 * LIGHT_OFF + 1
+    const near = Math.min(LIGHT_OFF, 0.6 * Math.max(this.field.radius, this.field.rs))
+    let a = 0
+    let b = 0
+    do {
+      a = Math.floor(this.roll() * steps) - LIGHT_OFF
+      b = Math.floor(this.roll() * steps) - LIGHT_OFF
+    } while (Math.hypot(a, b) < near)
+    const axis = Math.floor(this.roll() * 3)
+    const sign = this.roll() < 0.5 ? -1 : 1
+    const rest: Vec3 = [0, 0, 0]
+    const dir: Vec3 = [0, 0, 0]
+    rest[axis] = -sign * LIGHT_FROM
+    rest[(axis + 1) % 3] = a
+    rest[(axis + 2) % 3] = b
+    dir[axis] = sign
+    // Where the net draws that point, so the ray starts on the drawn rope.
+    const rho = len(rest)
+    const k = this.map.radius(rho) / rho
+    this.world.add(makeLight([rest[0] * k, rest[1] * k, rest[2] * k], dir))
+  }
+
+  /** The stream's dice: the same throws on every visit. */
+  private roll(): number {
+    return hash01(++this.dice)
+  }
+
+  selectPreset(id: string): void {
+    const p = presetById(id)
+    if (!p) return
+    this.presetId = p.id
+    this.mass = p.mass
+    this.radius = Math.max(p.radius, schwarzschild(p.mass))
+    this.frame = effectiveRadius(this.mass, this.radius)
+    this.applyBody()
+    this.seed()
+    this.announceText = `${p.name}`
+    this.emit()
+  }
+
+  setMassLog(v: number): void {
+    this.mass = 10 ** v
+    this.presetId = null
+    this.applyBody()
+    this.emit()
+  }
+
+  setSizeLog(v: number): void {
+    this.radius = 10 ** v
+    this.presetId = null
+    this.applyBody()
+    this.emit()
+  }
+
+  /**
+   * A slider was let go. If the body has grown or shrunk out of the room,
+   * re-frame on it: the room is always the size the body can be seen in.
+   */
+  settleBody(): void {
+    const drawn = effectiveRadius(this.mass, this.radius) / this.frame
+    if (drawn >= 0.4 && drawn <= 2.5) return
+    this.frame = effectiveRadius(this.mass, this.radius)
+    this.applyBody()
+    this.seed()
+    this.emit()
+  }
+
+  /** What moves in the room. Switching deals it fresh. */
+  setKind(k: Kind): void {
+    if (k === this.kind) return
+    this.kind = k
+    this.seed()
+    if (!this.playing) this.togglePlay()
+    this.announceText = k === 'probe' ? 'Probes' : 'Light'
+    this.emit()
+  }
+
+  toggleKind(): void {
+    this.setKind(this.kind === 'probe' ? 'light' : 'probe')
+  }
+
+  reset(): void {
+    this.camera.reset()
+    this.seed()
+    if (!this.playing) this.togglePlay()
+    this.emit()
+  }
+
+  // -------------------------------------------------------------- playback
+
+  togglePlay(): void {
+    if (this.playing) {
+      this.playing = false
+    } else {
+      this.world.rewind(this.back)
+      this.back = 0
+      this.playing = true
+      this.acc = 0
+    }
+    this.emit()
+  }
+
+  scrubStart(): void {
+    this.scrubbing = true
+    this.resumeAfterScrub = this.playing
+    this.playing = false
+    this.emit()
+  }
+
+  scrub(position: number): void {
+    const n = this.world.count
+    this.back = Math.round((1 - position) * Math.max(0, n - 1))
+    this.emit()
+  }
+
+  scrubEnd(): void {
+    this.scrubbing = false
+    if (this.resumeAfterScrub) {
+      this.world.rewind(this.back)
+      this.back = 0
+      this.playing = true
+      this.acc = 0
+    }
+    this.emit()
+  }
+
+  /** Anything that changes the particles from a scrubbed moment branches there. */
+  private branch(): void {
+    if (this.back === 0) return
+    this.world.rewind(this.back)
+    this.back = 0
+  }
+
+  // ------------------------------------------------------------------ loop
+
+  private frameLoop = (now: number): void => {
+    this.raf = requestAnimationFrame(this.frameLoop)
+    const elapsed = Math.min(0.1, (now - this.last) / 1000)
+    this.last = now
+
+    if (this.playing) {
+      this.acc += elapsed
+      const wf = { rs: this.field.rs, radius: this.field.radius, rate: this.rate }
+      let ticked = false
+      while (this.acc >= DT) {
+        this.world.tick(wf)
+        if (this.kind === 'light') this.sendLight()
+        this.acc -= DT
+        ticked = true
+      }
+      // The timeline only moves at 60 Hz, but React does not need every frame.
+      if (ticked && this.world.count < HISTORY_FRAMES && this.world.count % 6 === 0) this.emit()
+    }
+
+    if (this.playing && !this.reduced && this.presses.size === 0 && now - this.lastTouch > IDLE_MS) {
+      this.camera.turn(IDLE_TURN * elapsed, 0)
+    }
+
+    this.draw()
+  }
+
+  private visible(): Particle[] {
+    if (this.back === 0) return this.world.slots.filter((p): p is Particle => p !== null)
+    return this.world.frameAt(this.back)
+  }
+
+  private draw(): void {
+    const m = this.camera.matrices(this.width / this.height)
+    const b = m.basis
+    // Lamps upper left of the viewer, as on the lightbox.
+    const light = normalize([
+      -b.right[0] * 0.6 + b.up[0] * 0.7 - b.forward[0] * 0.5,
+      -b.right[1] * 0.6 + b.up[1] * 0.7 - b.forward[1] * 0.5,
+      -b.right[2] * 0.6 + b.up[2] * 0.7 - b.forward[2] * 0.5,
+    ])
+    const preset = this.presetId ? presetById(this.presetId) : undefined
+    const color = hexToVec(preset?.color ?? customColor(this.field))
+
+    let pc = 0
+    let bc = 0
+    const point = (p: Vec3, c: Vec3, a: number, size: number, ring: boolean): void => {
+      if (pc * POINT_STRIDE >= this.points.length) return
+      const o = pc * POINT_STRIDE
+      this.points.set([p[0], p[1], p[2], c[0], c[1], c[2], a, size, ring ? 1 : 0], o)
+      pc++
+    }
+    // A light's path, newest first, as a ribbon that narrows and fades behind it.
+    const beam = (path: Vec3[], life: number): void => {
+      const n = path.length
+      if (n < 2 || (bc + (n - 1) * 6) * BEAM_STRIDE > this.beams.length) return
+      const at = (i: number, side: number): void => {
+        const u = i / (LIGHT_FRAMES - 1)
+        const p = path[i]
+        const prev = path[Math.min(n - 1, i + 1)]
+        const next = path[Math.max(0, i - 1)]
+        const width = 0.7 + (BEAM_PX - 0.7) * (1 - u) ** 1.5
+        const shape = [side, width, life * (1 - u) ** 1.3, Math.max(0, 1 - 4 * u)]
+        this.beams.set([...p, ...prev, ...next, ...shape], bc * BEAM_STRIDE)
+        bc++
+      }
+      for (let i = 0; i + 1 < n; i++) {
+        at(i, -1)
+        at(i, 1)
+        at(i + 1, -1)
+        at(i, 1)
+        at(i + 1, 1)
+        at(i + 1, -1)
+      }
+    }
+
+    for (const p of this.visible()) {
+      const c = HUES[p.hue % HUES.length]
+      const life = 1 - Math.min(1, p.fade)
+      if (p.kind === 'probe') {
+        const dots = this.world.trail(p.id, this.back, DOT_STRIDE, DOT_COUNT)
+        for (let i = 1; i < dots.length; i++) {
+          const k = 1 - i / DOT_COUNT
+          point(dots[i], c, 0.75 * k * life, 3.2, false)
+        }
+        point(p.pos, c, life, 8, false)
+        if (p.held) point(p.pos, INK, 0.55 * life, 17, true)
+      } else {
+        // No head: the streak is the light, brightest where it has just been.
+        beam(this.world.trail(p.id, this.back, 1, LIGHT_FRAMES), life)
+        if (p.held) point(p.pos, INK, 0.55 * life, 15, true)
+      }
+    }
+
+    // The aim forecast: where the particle will go if let go now.
+    const aim = [...this.presses.values()].find((q) => q.mode === 'aim')
+    if (aim?.origin) {
+      const mover = this.aimMover(aim, b.right, b.up)
+      const c = mover.kind === 'light' ? GOLD : HUES[this.nextHue() % HUES.length]
+      point(mover.pos, c, 0.9, mover.kind === 'light' ? 4 : 8, false)
+      const frames = Math.round(FORECAST_S / DT)
+      const dt = DT * this.rate
+      for (let i = 1; i <= frames; i++) {
+        if (!step(mover, this.field.rs, dt)) break
+        const r = len(mover.pos)
+        if (r <= this.field.radius || r > ESCAPE_R) break
+        if (i % 5 === 0) point(mover.pos, c, 0.55 * (1 - i / frames) + 0.15, 2.6, false)
+      }
+    }
+
+    this.renderer.draw({
+      viewProj: m.viewProj,
+      inverse: m.inverse,
+      eye: b.eye,
+      light,
+      distance: this.camera.distance,
+      body: { radius: this.field.radius, color, hole: this.field.hole },
+      points: this.points,
+      pointCount: pc,
+      beams: this.beams,
+      beamCount: bc,
+      beamColor: GOLD,
+      beamHot: HOT,
+    })
+
+    this.drawTab(m.viewProj)
+  }
+
+  private nextHue(): number {
+    const ids = this.world.slots.filter((p): p is Particle => p !== null)
+    const newest = ids.reduce<Particle | null>((a, p) => (!a || p.id > a.id ? p : a), null)
+    return newest ? newest.hue + 1 : 0
+  }
+
+  // ------------------------------------------------------------- hover tab
+
+  private hitParticle(x: number, y: number): Particle | null {
+    const vp = this.camera.matrices(this.width / this.height).viewProj
+    let best: Particle | null = null
+    let bestD = HIT_PX
+    for (const p of this.visible()) {
+      if (p.fade > 0) continue
+      const s = project(vp, p.pos, this.width, this.height)
+      if (!s) continue
+      const d = Math.hypot(s[0] - x, s[1] - y)
+      if (d < bestD) {
+        bestD = d
+        best = p
+      }
+    }
+    return best
+  }
+
+  private drawTab(vp: Float32Array): void {
+    const target = this.hover && this.presses.size === 0 ? this.hitParticle(this.hover.x, this.hover.y) : null
+    if (!target) {
+      this.tab.classList.remove('is-on')
+      this.canvas.style.cursor = this.presses.size > 0 ? 'grabbing' : 'grab'
+      return
+    }
+    this.canvas.style.cursor = 'pointer'
+    const s = project(vp, target.pos, this.width, this.height)
+    if (!s) return
+    const rs = this.field.rs
+    let text: string
+    if (target.kind === 'probe') {
+      text = `Probe ${localSpeed(target, rs).toFixed(2)} c · Clock ${clockRate(target, rs).toFixed(2)}×`
+    } else {
+      text = `Light ${lightSpeedSeen(target.pos, target.vel, rs).toFixed(2)} c seen from here`
+    }
+    if (target.held) text += ' · Held'
+    if (this.tab.textContent !== text) this.tab.textContent = text
+    this.tab.style.transform = `translate(${Math.round(s[0] + 12)}px, ${Math.round(s[1] - 26)}px)`
+    this.tab.classList.add('is-on')
+  }
+
+  // ----------------------------------------------------------------- input
+
+  private local(e: PointerEvent | WheelEvent): { x: number; y: number } {
+    const r = this.canvas.getBoundingClientRect()
+    return { x: e.clientX - r.left, y: e.clientY - r.top }
+  }
+
+  /** Where a press lands: on the plane through the centre that faces the viewer. */
+  private pressPoint(x: number, y: number): Vec3 {
+    const m = this.camera.matrices(this.width / this.height)
+    const b = m.basis
+    const d = ray(m.inverse, b.eye, x, y, this.width, this.height)
+    const t = -dot(b.eye, b.forward) / dot(d, b.forward)
+    let p: Vec3 = [b.eye[0] + d[0] * t, b.eye[1] + d[1] * t, b.eye[2] + d[2] * t]
+    const r = len(p)
+    const min = Math.max(this.field.radius * 1.25, this.field.rs * 1.6)
+    if (r < min) {
+      // Pressing on the body releases from just outside it, toward the press.
+      const n = r > 1e-6 ? normalize(p) : b.up
+      p = [n[0] * min, n[1] * min, n[2] * min]
+    }
+    const far = len(p)
+    if (far <= REACH_PRESS) return p
+    return [(p[0] * REACH_PRESS) / far, (p[1] * REACH_PRESS) / far, (p[2] * REACH_PRESS) / far]
+  }
+
+  private aimMover(q: Press, right: Vec3, up: Vec3): Mover {
+    const p = q.origin as Vec3
+    const dx = q.dx ?? 0
+    const dy = q.dy ?? 0
+    const drag = Math.hypot(dx, dy)
+    const b = this.camera.basis()
+    let dir: Vec3
+    if (drag > 6) {
+      dir = normalize([right[0] * dx - up[0] * dy, right[1] * dx - up[1] * dy, right[2] * dx - up[2] * dy])
+    } else {
+      // Undirected: across the line of sight, around the body.
+      const t = cross(b.forward, p)
+      dir = len(t) > 1e-6 ? normalize(t) : right
+    }
+    if (this.kind === 'light') return makeLight(p, dir)
+    const circ = circularSpeed(len(p), this.field.rs)
+    const speed = drag > 6 ? Math.min(circ * 2.4, circ * (drag / 70)) : circ * 0.92
+    return makeProbe(p, [dir[0] * speed, dir[1] * speed, dir[2] * speed], this.field.rs)
+  }
+
+  private onDown = (e: PointerEvent): void => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    const { x, y } = this.local(e)
+    this.lastTouch = performance.now()
+    this.canvas.setPointerCapture(e.pointerId)
+
+    if (this.presses.size === 1) {
+      // Second finger: pinch. Whatever the first was doing stops.
+      const first = [...this.presses.values()][0]
+      first.mode = 'turn'
+      first.origin = undefined
+      first.moved = true
+      this.pinch = { d: Math.hypot(first.x - x, first.y - y) }
+      this.presses.set(e.pointerId, { id: e.pointerId, x, y, t: e.timeStamp, moved: true, mode: 'turn' })
+      return
+    }
+
+    const prev = this.lastDown
+    const double = e.timeStamp - prev.t < DOUBLE_MS && Math.hypot(prev.x - x, prev.y - y) < DOUBLE_PX
+    const press: Press = { id: e.pointerId, x, y, t: e.timeStamp, moved: false, mode: 'turn' }
+
+    if (double) {
+      // The first click of a double-click held whatever it landed on. That was
+      // not what was meant, so it is undone before the release.
+      if (prev.toggled !== undefined) this.toggleHold(prev.toggled)
+      press.mode = 'aim'
+      press.origin = this.pressPoint(x, y)
+      press.dx = 0
+      press.dy = 0
+      this.lastDown = { x: -999, y: -999, t: -999, toggled: undefined }
+    } else {
+      this.lastDown = { x, y, t: e.timeStamp, toggled: undefined }
+    }
+    this.presses.set(e.pointerId, press)
+  }
+
+  private onMove = (e: PointerEvent): void => {
+    const { x, y } = this.local(e)
+    const q = this.presses.get(e.pointerId)
+    if (!q) {
+      if (e.target === this.canvas) this.hover = { x, y }
+      return
+    }
+    this.lastTouch = performance.now()
+    const dx = x - q.x
+    const dy = y - q.y
+
+    if (this.pinch && this.presses.size === 2) {
+      q.x = x
+      q.y = y
+      const [a, b] = [...this.presses.values()]
+      const d = Math.hypot(a.x - b.x, a.y - b.y)
+      if (this.pinch.d > 0 && d > 0) this.camera.zoom(this.pinch.d / d)
+      this.pinch.d = d
+      return
+    }
+
+    if (q.mode === 'aim') {
+      q.dx = (q.dx ?? 0) + dx
+      q.dy = (q.dy ?? 0) + dy
+      q.x = x
+      q.y = y
+      return
+    }
+
+    if (!q.moved && Math.hypot(dx, dy) < CLICK_PX) return
+    q.moved = true
+    this.camera.turn(-dx * TURN_PER_PX, dy * TURN_PER_PX)
+    q.x = x
+    q.y = y
+    this.hover = null
+  }
+
+  private onUp = (e: PointerEvent): void => {
+    const q = this.presses.get(e.pointerId)
+    if (!q) return
+    this.presses.delete(e.pointerId)
+    if (this.presses.size < 2) this.pinch = null
+    this.lastTouch = performance.now()
+
+    if (q.mode === 'aim' && q.origin) {
+      const b = this.camera.basis()
+      this.branch()
+      this.world.add(this.aimMover(q, b.right, b.up))
+      this.announceText = this.kind === 'probe' ? 'Probe released' : 'Light released'
+      this.emit()
+      return
+    }
+
+    if (!q.moved && e.type === 'pointerup') {
+      const { x, y } = this.local(e)
+      const hit = this.hitParticle(x, y)
+      if (hit) {
+        this.toggleHold(hit.id)
+        this.lastDown.toggled = hit.id
+      }
+    }
+  }
+
+  private onLeave = (): void => {
+    this.hover = null
+  }
+
+  private onWheel = (e: WheelEvent): void => {
+    e.preventDefault()
+    this.lastTouch = performance.now()
+    const scale = e.deltaMode === 1 ? 16 : 1
+    this.camera.zoom(Math.exp(e.deltaY * scale * 0.0015))
+  }
+
+  private toggleHold(id: number): void {
+    this.branch()
+    const p = this.world.slots.find((s) => s?.id === id)
+    if (!p) return
+    p.held = !p.held
+    this.announceText = p.held ? 'Particle held' : 'Particle let go'
+    this.emit()
+  }
+
+  // ------------------------------------------------------------------- URL
+
+  private readHash(): { preset?: string; mass?: number; radius?: number } | null {
+    const h = window.location.hash.slice(1)
+    if (!h) return null
+    if (presetById(h)) return { preset: h }
+    const q = new URLSearchParams(h)
+    const m = Number(q.get('m'))
+    const r = Number(q.get('r'))
+    if (!(m > 0) || !(r > 0)) return null
+    const clamp = (v: number, [lo, hi]: readonly [number, number]): number => 10 ** Math.max(lo, Math.min(hi, Math.log10(v)))
+    return { mass: clamp(m, MASS_LOG), radius: clamp(r, SIZE_LOG) }
+  }
+
+  private writeHash(): void {
+    const h = this.presetId ?? `m=${this.mass.toPrecision(4)}&r=${this.radius.toPrecision(4)}`
+    if (window.location.hash.slice(1) === h) return
+    window.history.replaceState(null, '', `#${h}`)
+  }
+
+  // -------------------------------------------------------------- snapshot
+
+  private makeSnapshot(): Snapshot {
+    const preset: Preset | undefined = this.presetId ? presetById(this.presetId) : undefined
+    const hole = this.field.hole
+    const n = this.world.count
+    const clock = surfaceClock(this.mass, this.radius)
+    return {
+      presetId: this.presetId,
+      name: preset?.name ?? (hole ? 'Your black hole' : 'Your body'),
+      color: preset?.color ?? customColor(this.field),
+      hole,
+      massLog: Math.log10(this.mass),
+      sizeLog: Math.log10(effectiveRadius(this.mass, this.radius)),
+      kind: this.kind,
+      playing: this.playing,
+      expanded: !this.playing || this.scrubbing,
+      position: n <= 1 ? 1 : 1 - this.back / (n - 1),
+      filled: n / HISTORY_FRAMES,
+      readout: {
+        mass: formatMass(this.mass),
+        radius: formatLength(effectiveRadius(this.mass, this.radius)),
+        clock: formatClock(clock),
+        drawn: formatExaggeration(exaggeration(this.mass, this.radius)),
+      },
+      announce: this.announceText,
+    }
+  }
+}
+
+/** A body off the presets is grey, darkening toward ink as it nears collapse. */
+function customColor(f: Field): string {
+  if (f.hole) return '#101014'
+  const c = Math.min(1, f.rs / f.radius)
+  const v = Math.round(178 - 120 * c)
+  const h = v.toString(16).padStart(2, '0')
+  return `#${h}${h}${Math.min(255, v + 10).toString(16).padStart(2, '0')}`
+}
+
+/** An integer to [0, 1), well mixed. */
+function hash01(n: number): number {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b)
+  h ^= h >>> 13
+  h = Math.imul(h, 0xc2b2ae35)
+  h ^= h >>> 16
+  return (h >>> 0) / 4294967296
+}
+
+/** Rodrigues: v rotated by `a` about unit axis `k`. */
+function rotate(v: Vec3, k: Vec3, a: number): Vec3 {
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  const kv = cross(k, v)
+  const d = dot(k, v) * (1 - c)
+  return [v[0] * c + kv[0] * s + k[0] * d, v[1] * c + kv[1] * s + k[1] * d, v[2] * c + kv[2] * s + k[2] * d]
+}

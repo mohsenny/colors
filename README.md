@@ -48,6 +48,7 @@ starting set.
 ### Keyboard
 
 <kbd>Space</kbd> play / pause. <kbd>R</kbd> new colours. <kbd>B</kbd> switch mixing.
+<kbd>G</kbd> go to Lattice.
 <kbd>Esc</kbd> deselect. <kbd>Tab</kbd> walks the sheets, then <kbd>Enter</kbd> to
 stop one, <kbd>C</kbd> to copy it, <kbd>L</kbd> to pin it, arrow keys to resize.
 
@@ -67,6 +68,14 @@ to a ring buffer, which is why the timeline scrubs to a real past frame instead 
 playing the animation backwards.
 
 More on all of it in [docs/design-notes.md](docs/design-notes.md).
+
+## Lattice
+
+**[Open Lattice](https://mohsenny.github.io/colors/lattice/)**, the sibling instrument: a
+net of space pulled in by a mass, with probes and light moving through it. Same
+surface, same chrome. <kbd>G</kbd> or the last line of the legend crosses between the two.
+Its source is in [lattice/](lattice/) and what it does and why is in
+[lattice/PRD.md](lattice/PRD.md).
 
 ## Running it locally
 
