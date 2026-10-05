@@ -36,6 +36,7 @@ import type { Kind, Mover, Vec3 } from '../physics/motion'
 import { OrbitCamera, matricesOf, mixView, normalize, project, ray } from '../render/camera'
 import type { Matrices, View } from '../render/camera'
 import { BEAM_STRIDE, POINT_STRIDE, Renderer } from '../render/gl'
+import type { ImpactDraw, SeatDraw } from '../render/gl'
 import { DT, ESCAPE_R, HISTORY_FRAMES, World } from '../sim/world'
 import type { Particle } from '../sim/world'
 
@@ -61,26 +62,45 @@ const BEAM_PX = 3.2
 const FORECAST_S = 3
 /** A press further out than this releases from here, toward the press. */
 const REACH_PRESS = 8
+/**
+ * Light let go nearer than this starts this far out, on the same side, so a
+ * ride has a run in to the pass. Let go without a drag, it heads for the body
+ * and misses it by a throw of the dice: from this share of the closest pass
+ * that gets away up to this many times it, mostly close, so about one in five
+ * hits.
+ */
+const LIGHT_RUN = 5
+const MISS_FROM = 0.9
+const MISS_SPAN = 2.1
+/** Ridden light on its way out past this is leaving the room, and the ride ends with it. */
+const LIGHT_OUT = 6
+/** Seconds the rings from a strike take to spread out and go. */
+const RING_S = 1.6
 
 /**
- * Riding a probe. The eye sits this far behind it and this high (radians) on
- * the side away from the body, looking at a point this far from the probe
- * toward the body, so the probe, the way ahead and the body are all in view.
- * Wider than the room's lens, so the net rushes past.
+ * Riding. What is ridden is drawn as a ball this big, and the eye sits on it:
+ * this many of its radii from its middle and this high (radians) above its
+ * path, so the top of it fills the bottom of the screen, its top edge this far
+ * from the middle of the screen to the bottom. The eye looks the way it is
+ * going, turned in toward the body as it passes, by up to atan 0.8, about 39
+ * degrees, so the body is in view round the turn. Wider than the room's lens,
+ * so the net rushes past.
  */
-const RIDE_BACK = 1.8
-const RIDE_RISE = 0.55
-const RIDE_TOWARD = 0.75
-const RIDE_FOV = (60 * Math.PI) / 180
-/**
- * Seconds to swing in or out. The eye follows the probe's turns this far
- * behind, and its position a moment behind, so a probe speeding up through
- * its closest pass pulls away from the eye and dropping back again lets it
- * catch up.
- */
+const SEAT: Record<Kind, number> = { probe: 0.06, light: 0.04 }
+const SEAT_BACK = 2.2
+const SEAT_RISE = 0.75
+const SEAT_LOW = 0.5
+const LEAN = 0.8
+const RIDE_FOV = (70 * Math.PI) / 180
+/** Seconds to swing in or out, and for the eye to follow the path's turns. */
 const SWING_S = 0.9
 const TURN_LAG_S = 0.25
-const CHASE_LAG_S = 0.1
+/**
+ * Light crosses the room in about a second, so riding it slows the room to
+ * this, easing in and out over about this many seconds.
+ */
+const LIGHT_RIDE_PACE = 0.25
+const PACE_S = 0.4
 
 /**
  * Light in the room: an uneven stream, each ray sent in along a rope of the net
@@ -151,18 +171,19 @@ interface Press {
   origin?: Vec3
   dx?: number
   dy?: number
+  /** Light: how far wide of the middle it goes if not dragged, and which way. */
+  miss?: Vec3
   /** Click on a particle: its id, and whether this press toggled its hold. */
   toggled?: number
 }
 
 interface Ride {
   id: number
-  /** The eye's frame, eased: along the path and out from the body. */
+  kind: Kind
+  /** The eye's frame, eased: along the path, and square to the plane of it. */
   along: Vec3
-  out: Vec3
-  /** Where the eye follows: the probe, a moment ago. */
-  chase: Vec3
-  /** Looking round: angle about the probe from behind, height, and how far back. */
+  normal: Vec3
+  /** Looking round: angle about the seat from behind, height, and how far off in its radii. */
   yaw: number
   rise: number
   back: number
@@ -205,11 +226,16 @@ export class Instrument {
 
   private view: View = this.camera.view()
   private mats: Matrices = matricesOf(this.view, 1)
-  /** The probe being ridden. A click waits out the double-click before riding. */
+  /** What is being ridden. A click on a probe waits out the double-click first. */
   private ride: Ride | null = null
   private pendingRide: { id: number; at: number } | null = null
   /** The view on screen when the eye last changed what it follows, and when. */
   private swing: { from: View; t0: number } | null = null
+  /** What was just stepped off, still drawn as a ball while the eye swings away. */
+  private left: number | null = null
+  private seat: SeatDraw | null = null
+  /** How fast the room runs, slowed while riding light. */
+  private pace = 1
 
   private presses = new Map<number, Press>()
   private pinch: { d: number } | null = null
@@ -484,7 +510,7 @@ export class Instrument {
 
     if (this.playing) {
       this.acc += elapsed
-      const wf = { rs: this.field.rs, radius: this.field.radius, rate: this.rate }
+      const wf = { rs: this.field.rs, radius: this.field.radius, rate: this.rate * this.pace }
       let ticked = false
       while (this.acc >= DT) {
         this.world.tick(wf)
@@ -512,17 +538,24 @@ export class Instrument {
   // ------------------------------------------------------------------ ride
 
   /**
-   * Rides a probe: the eye swings in behind it and travels with it, so the net
-   * streams past and the turn round the body and the rush through the closest
-   * pass are felt from the inside.
+   * Rides a particle: the eye swings in, sits on it and travels with it, so
+   * the net streams past and the turn round the body and the rush through the
+   * closest pass are felt from the inside.
    */
   private rideOn(id: number): void {
-    const p = this.visible().find((q) => q.id === id && q.kind === 'probe' && q.fade === 0)
+    const p = this.visible().find((q) => q.id === id && q.fade === 0)
     if (!p) return
     const along = normalize(len(p.vel) > 1e-9 ? p.vel : cross(p.pos, [0, 1, 0]))
-    this.ride = { id, along, out: normalize(p.pos), chase: [...p.pos], yaw: 0, rise: RIDE_RISE, back: RIDE_BACK }
+    // Up is square to the plane of the path, on the side the screen's up is on,
+    // so the swing in never turns the room over.
+    const up = this.mats.basis.up
+    const plane = cross(p.pos, along)
+    let normal = squareTo(len(plane) > 1e-6 * len(p.pos) ? plane : up, along)
+    if (dot(normal, up) < 0) normal = [-normal[0], -normal[1], -normal[2]]
+    this.ride = { id, kind: p.kind, along, normal, yaw: 0, rise: SEAT_RISE, back: SEAT_BACK }
+    this.left = null
     this.swing = this.reduced ? null : { from: this.view, t0: performance.now() }
-    this.announceText = 'Riding the probe'
+    this.announceText = p.kind === 'probe' ? 'Riding the probe' : 'Riding the light'
     this.emit()
   }
 
@@ -530,6 +563,7 @@ export class Instrument {
   stepOff(): void {
     this.pendingRide = null
     if (!this.ride) return
+    this.left = this.ride.id
     this.ride = null
     this.swing = this.reduced ? null : { from: this.view, t0: performance.now() }
     this.announceText = 'Stepped off'
@@ -543,12 +577,25 @@ export class Instrument {
       this.rideOn(id)
     }
     let goal = this.camera.view()
+    this.seat = null
     if (this.ride) {
       const id = this.ride.id
       const p = this.visible().find((q) => q.id === id)
-      // Gone into the body, out of the room, or scrubbed to before it was released.
-      if (p) goal = this.rideView(this.ride, p, elapsed)
-      else this.stepOff()
+      // Into the body, out of the room, or scrubbed to before it was let go:
+      // the ride ends with it. Light ends a little sooner, on its way out,
+      // since past where the net fades there is nothing to see from it.
+      const leaving = p?.kind === 'light' && dot(p.pos, p.vel) > 0 && len(p.pos) > LIGHT_OUT
+      if (p && p.fade === 0 && !leaving) {
+        const at = this.seatAt(p)
+        this.seat = this.seatFor(p, at)
+        goal = this.rideView(this.ride, at, p.vel, elapsed)
+      } else this.stepOff()
+    }
+    if (!this.ride && this.left !== null) {
+      const id = this.left
+      const p = this.swing ? this.visible().find((q) => q.id === id) : undefined
+      if (p) this.seat = this.seatFor(p, p.pos)
+      else this.left = null
     }
     if (this.swing) {
       const u = Math.max(0, (now - this.swing.t0) / 1000 / SWING_S)
@@ -557,54 +604,102 @@ export class Instrument {
     }
     this.view = goal
     this.mats = matricesOf(goal, this.width / this.height)
+    const pace = this.ride?.kind === 'light' ? LIGHT_RIDE_PACE : 1
+    this.pace += (pace - this.pace) * (1 - Math.exp(-elapsed / PACE_S))
   }
 
-  private rideView(r: Ride, p: Particle, elapsed: number): View {
+  /**
+   * Where the ridden particle is between ticks. The room steps at 60 Hz and
+   * the screen may not, and with the eye this close every step would show.
+   */
+  private seatAt(p: Particle): Vec3 {
+    if (!this.playing || this.back !== 0 || p.held) return p.pos
+    const [now, before] = this.world.trail(p.id, 0, 1, 2)
+    if (!before) return p.pos
+    return mix3(before, now, Math.min(1, this.acc / DT))
+  }
+
+  private seatFor(p: Particle, at: Vec3): SeatDraw {
+    const light = p.kind === 'light'
+    return {
+      center: at,
+      radius: SEAT[p.kind],
+      color: light ? GOLD : HUES[p.hue % HUES.length],
+      glow: light,
+      alpha: 1 - Math.min(1, p.fade),
+    }
+  }
+
+  private rideView(r: Ride, at: Vec3, vel: Vec3, elapsed: number): View {
     const turn = 1 - Math.exp(-elapsed / TURN_LAG_S)
-    const chase = 1 - Math.exp(-elapsed / CHASE_LAG_S)
-    if (len(p.vel) > 1e-9) r.along = normalize(mix3(r.along, normalize(p.vel), turn))
-    r.out = normalize(mix3(r.out, normalize(p.pos), turn))
-    r.chase = mix3(r.chase, p.pos, chase)
-    // Square the frame up: along the path, up away from the body, and across.
+    if (len(vel) > 1e-9) r.along = normalize(mix3(r.along, normalize(vel), turn))
+    // A free fall keeps to one plane. Only a fall straight in or out has none,
+    // and keeps the last.
+    const plane = cross(at, vel)
+    if (len(plane) > 1e-3 * len(at) * len(vel)) {
+      const n = normalize(plane)
+      r.normal = normalize(mix3(r.normal, dot(n, r.normal) < 0 ? [-n[0], -n[1], -n[2]] : n, turn))
+    }
     const f = r.along
-    let across = cross(f, r.out)
-    if (len(across) < 1e-3) across = cross(f, Math.abs(f[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])
-    across = normalize(across)
-    const up = cross(across, f)
+    const up = squareTo(r.normal, f)
+    // Turned in toward the body by how much of the way to it is across the
+    // path: most at the closest pass, none on a fall straight in.
+    const rp = len(at)
+    const a = dot(at, f)
+    const k = LEAN / rp
+    const heading = normalize([f[0] - (at[0] - f[0] * a) * k, f[1] - (at[1] - f[1] * a) * k, f[2] - (at[2] - f[2] * a) * k])
+    const side = normalize(cross(heading, up))
     const cy = Math.cos(r.yaw)
     const sy = Math.sin(r.yaw)
+    const ahead: Vec3 = [cy * heading[0] + sy * side[0], cy * heading[1] + sy * side[1], cy * heading[2] + sy * side[2]]
+    const radius = SEAT[r.kind]
+    const d = r.back * radius
     const cr = Math.cos(r.rise)
     const sr = Math.sin(r.rise)
-    const at = (i: number): number => r.back * (cr * (-cy * f[i] + sy * across[i]) + sr * up[i])
-    let eye: Vec3 = [r.chase[0] + at(0), r.chase[1] + at(1), r.chase[2] + at(2)]
+    let eye: Vec3 = [
+      at[0] + d * (sr * up[0] - cr * ahead[0]),
+      at[1] + d * (sr * up[1] - cr * ahead[1]),
+      at[2] + d * (sr * up[2] - cr * ahead[2]),
+    ]
     // Never inside the body, whichever way the eye has been turned.
-    const clear = this.field.radius + 0.3
+    const clear = this.field.radius + 0.02
     const re = len(eye)
     if (re < clear) eye = [(eye[0] / re) * clear, (eye[1] / re) * clear, (eye[2] / re) * clear]
-    const rp = len(p.pos)
-    const toward = Math.min(RIDE_TOWARD, 0.5 * (rp - this.field.radius))
-    const target: Vec3 = [p.pos[0] - (p.pos[0] / rp) * toward, p.pos[1] - (p.pos[1] / rp) * toward, p.pos[2] - (p.pos[2] / rp) * toward]
-    const reach = Math.max(len(eye), rp) + 3
+    // Look past the seat, lifted so its top edge sits SEAT_LOW of the way from
+    // the middle of the screen to the bottom.
+    const lift = Math.asin(Math.min(1, 1 / r.back)) + Math.atan(SEAT_LOW * Math.tan(RIDE_FOV / 2))
+    const pitch = r.rise - lift
+    const cp = Math.cos(pitch)
+    const spp = Math.sin(pitch)
+    const target: Vec3 = [
+      eye[0] + cp * ahead[0] - spp * up[0],
+      eye[1] + cp * ahead[1] - spp * up[1],
+      eye[2] + cp * ahead[2] - spp * up[2],
+    ]
+    // The net drawn out well past the seat, so on the way out there is still
+    // something ahead to rush past.
+    const reach = 1.5 * Math.max(len(eye), rp) + 3
     return {
       eye,
       target,
       up,
       fov: RIDE_FOV,
-      near: 0.03,
+      near: Math.max(0.002, 0.3 * (d - radius)),
       far: len(eye) + 30,
       detail: Math.min(40, Math.max(6, detailFor(reach))),
-      lens: 0.12,
+      lens: 0.35 * d,
     }
   }
 
   private lookAround(dYaw: number, dRise: number): void {
     if (!this.ride) return
     this.ride.yaw += dYaw
-    this.ride.rise = Math.max(-0.5, Math.min(1.35, this.ride.rise + dRise))
+    this.ride.rise = Math.max(0.15, Math.min(1.35, this.ride.rise + dRise))
   }
 
+  /** On a ride, from sitting on it out to following it from a little way back. */
   private zoom(factor: number): void {
-    if (this.ride) this.ride.back = Math.max(0.6, Math.min(5, this.ride.back * factor))
+    if (this.ride) this.ride.back = Math.max(1.6, Math.min(40, this.ride.back * factor))
     else this.camera.zoom(factor)
   }
 
@@ -663,7 +758,8 @@ export class Instrument {
           const k = 1 - i / DOT_COUNT
           point(dots[i], c, 0.75 * k * life, 3.2, false)
         }
-        point(p.pos, c, life, p.id === this.ride?.id ? 10 : 8, false)
+        // The one ridden is drawn where the eye is, between ticks, and as a ball.
+        point(p.id === this.ride?.id && this.seat ? this.seat.center : p.pos, c, life, 8, false)
         if (p.held) point(p.pos, INK, 0.55 * life, 17, true)
       } else {
         // No head: the streak is the light, brightest where it has just been.
@@ -696,6 +792,8 @@ export class Instrument {
       detail: this.view.detail,
       lens: this.view.lens,
       body: { radius: this.field.radius, color, hole: this.field.hole },
+      impacts: this.impacts(),
+      seat: this.seat,
       points: this.points,
       pointCount: pc,
       beams: this.beams,
@@ -705,6 +803,18 @@ export class Instrument {
     })
 
     this.drawTab(m.viewProj)
+  }
+
+  /** The strikes still ringing at the moment on screen, which scrubbing replays. */
+  private impacts(): ImpactDraw[] {
+    const shown = this.world.ticks - this.back + (this.playing && this.back === 0 ? this.acc / DT : 0)
+    const out: ImpactDraw[] = []
+    for (const s of this.world.impacts) {
+      const age = ((shown - s.tick) * DT) / RING_S
+      if (age < 0 || age >= 1) continue
+      out.push({ at: s.at, color: s.kind === 'light' ? HOT : HUES[s.hue % HUES.length], age })
+    }
+    return out
   }
 
   private nextHue(): number {
@@ -735,18 +845,25 @@ export class Instrument {
   private drawTab(vp: Float32Array): void {
     const hovered = this.hover && this.presses.size === 0 ? this.hitParticle(this.hover.x, this.hover.y) : null
     this.canvas.style.cursor = hovered ? 'pointer' : this.presses.size > 0 ? 'grabbing' : 'grab'
-    // The probe being ridden keeps its tab, so the speed and clock can be watched change.
+    // What is being ridden keeps its tab, pinned just above the seat, so the
+    // speed and clock can be watched change.
     const ridden = this.ride ? this.visible().find((p) => p.id === this.ride?.id) : undefined
     const target = hovered ?? ridden
     if (!target) {
       this.tab.classList.remove('is-on')
       return
     }
-    const s = project(vp, target.pos, this.width, this.height)
+    const seat = target === ridden ? this.seat : null
+    const b = this.mats.basis
+    const anchor: Vec3 = seat
+      ? [seat.center[0] + b.up[0] * seat.radius, seat.center[1] + b.up[1] * seat.radius, seat.center[2] + b.up[2] * seat.radius]
+      : target.pos
+    const s = project(vp, anchor, this.width, this.height)
     if (!s) {
       this.tab.classList.remove('is-on')
       return
     }
+    if (seat) s[1] = Math.min(s[1], this.height - 96)
     const rs = this.field.rs
     let text: string
     if (target.kind === 'probe') {
@@ -795,8 +912,18 @@ export class Instrument {
     let dir: Vec3
     if (drag > 6) {
       dir = normalize([right[0] * dx - up[0] * dy, right[1] * dx - up[1] * dy, right[2] * dx - up[2] * dy])
+    } else if (q.miss) {
+      // Light, undirected: in at the body, turned aside just enough to pass
+      // the middle at the distance thrown.
+      const r = len(p)
+      const wide = len(q.miss)
+      const a = Math.asin(Math.min(0.98, wide / r))
+      const side = normalize(q.miss)
+      const c = Math.cos(a) / r
+      const sa = Math.sin(a)
+      dir = [-p[0] * c + side[0] * sa, -p[1] * c + side[1] * sa, -p[2] * c + side[2] * sa]
     } else {
-      // Undirected: across the line of sight, around the body.
+      // A probe, undirected: across the line of sight, around the body.
       const t = cross(b.forward, p)
       dir = len(t) > 1e-6 ? normalize(t) : right
     }
@@ -804,6 +931,27 @@ export class Instrument {
     const circ = circularSpeed(len(p), this.field.rs)
     const speed = drag > 6 ? Math.min(circ * 2.4, circ * (drag / 70)) : circ * 0.92
     return makeProbe(p, [dir[0] * speed, dir[1] * speed, dir[2] * speed], this.field.rs)
+  }
+
+  /**
+   * How far wide of the middle undirected light goes, and which way round, as
+   * one vector square to the line in from `origin`. Measured against the
+   * closest pass that gets away: grazing the surface, or for anything inside
+   * its own photon sphere, the edge of the shadow.
+   */
+  private throwMiss(origin: Vec3): Vec3 {
+    const { rs, radius } = this.field
+    const graze = rs > 1e-9 && radius > rs ? radius / Math.sqrt(1 - rs / radius) : radius
+    const escape = Math.max(graze, ((3 * Math.sqrt(3)) / 2) * rs)
+    const u = Math.random()
+    const wide = escape * (MISS_FROM + MISS_SPAN * u * u)
+    const n = normalize(origin)
+    const e1 = squareTo([0, 1, 0], n)
+    const e2 = cross(n, e1)
+    const a = Math.random() * 2 * Math.PI
+    const c = Math.cos(a) * wide
+    const s = Math.sin(a) * wide
+    return [e1[0] * c + e2[0] * s, e1[1] * c + e2[1] * s, e1[2] * c + e2[2] * s]
   }
 
   private onDown = (e: PointerEvent): void => {
@@ -837,6 +985,12 @@ export class Instrument {
       press.origin = this.pressPoint(x, y)
       press.dx = 0
       press.dy = 0
+      if (this.kind === 'light') {
+        const o = press.origin
+        const r = len(o)
+        if (r < LIGHT_RUN) press.origin = [(o[0] / r) * LIGHT_RUN, (o[1] / r) * LIGHT_RUN, (o[2] / r) * LIGHT_RUN]
+        press.miss = this.throwMiss(press.origin)
+      }
       this.lastDown = { x: -999, y: -999, t: -999, toggled: undefined }
     } else {
       this.lastDown = { x, y, t: e.timeStamp, toggled: undefined }
@@ -892,8 +1046,13 @@ export class Instrument {
     if (q.mode === 'aim' && q.origin) {
       const b = this.mats.basis
       this.branch()
-      this.world.add(this.aimMover(q, b.right, b.up))
-      this.announceText = this.kind === 'probe' ? 'Probe released' : 'Light released'
+      const p = this.world.add(this.aimMover(q, b.right, b.up))
+      // Light is ridden from the moment it is let go, until it is gone.
+      if (p.kind === 'light') {
+        this.rideOn(p.id)
+        return
+      }
+      this.announceText = 'Probe released'
       this.emit()
       return
     }
@@ -997,6 +1156,14 @@ function customColor(f: Field): string {
 
 function mix3(a: Vec3, b: Vec3, t: number): Vec3 {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+}
+
+/** `v` with its part along unit `f` taken out, as a unit vector; any square one if nothing is left. */
+function squareTo(v: Vec3, f: Vec3): Vec3 {
+  const a = dot(v, f)
+  const w: Vec3 = [v[0] - f[0] * a, v[1] - f[1] * a, v[2] - f[2] * a]
+  if (len(w) > 1e-6) return normalize(w)
+  return normalize(cross(f, Math.abs(f[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]))
 }
 
 /** An integer to [0, 1), well mixed. */

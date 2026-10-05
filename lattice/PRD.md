@@ -95,9 +95,9 @@ Same verbs as Lightbox wherever there is an equivalent.
 | --- | --- | --- |
 | Turn the room | Drag | Drag a sheet |
 | Zoom | Scroll or pinch | |
-| Release a particle | Double-click. A probe goes into a slightly eccentric orbit whose plane faces you; light goes sideways past the mass | Double-click takes a colour |
+| Release a particle | Double-click. A probe goes into a slightly eccentric orbit whose plane faces you. Light starts at least five units out and heads for the mass, missing it by a throw of the dice (about one in five hits), and is ridden | Double-click takes a colour |
 | Aim it | Double-click and keep holding, then drag. A faint dotted forecast shows the next three seconds | |
-| Ride a probe | Click it. The eye swings in behind it and travels with it, so the net streams past and the closest pass is felt, with its speed and clock pinned beside it. Drag looks around, scroll moves closer or further. <kbd>Esc</kbd> or a click anywhere else steps off | |
+| Ride a particle | Click a probe; released light is ridden from the moment it is let go. It is drawn as a ball and the eye sits on it, its top filling the bottom of the screen, looking where it goes and turned in toward the mass round the closest pass, with its speed and clock pinned above it. Riding light runs the room at a quarter speed. The ride ends when it hits or leaves, and light's as soon as it is on its way out past six units. Drag looks around, scroll moves back to following it. <kbd>Esc</kbd> or a click anywhere else steps off | |
 | Hold a light | Click it. Click again to let go | Click stops a sheet |
 | Read a particle | Hover it. A tab shows `PROBE 0.43 C · CLOCK 0.88×` | Hex tab on a sheet |
 | Stop time | <kbd>Space</kbd> | Same |
@@ -107,7 +107,7 @@ Same verbs as Lightbox wherever there is an equivalent.
 | Choose a body | <kbd>1</kbd> to <kbd>7</kbd>, or the body chip | |
 | Go to Lightbox | Its name, top left | Same, the other way |
 
-Up to eight particles at once. A ninth retires the oldest, which fades out. Particles that hit a surface, cross a horizon or leave the room fade out the same way.
+Up to eight particles at once. A ninth retires the oldest, which fades out. Particles that hit a surface, cross a horizon or leave the room fade out the same way. Where one strikes, a flash and three rings in its colour spread over the surface and fade, and the timeline replays them.
 
 **Every setup has an address.** The URL hash carries the body (`#sun`) or a custom mass and size (`#m=1.989e30&r=6.96e8`), so a link reproduces what you were looking at.
 
@@ -147,7 +147,7 @@ SPACE           stop time
 DOUBLE-CLICK    release, hold to aim
 ```
 
-While riding a probe it reads `DRAG look around`, `SPACE stop time`, `ESC OR CLICK step off`.
+While riding it reads `DRAG look around`, `SPACE stop time`, `ESC OR CLICK step off`.
 
 **Particle colours.** Light is always gold, and nothing else in the room is. Probes take the Lightbox roll at film strength, minus its amber, so the only saturated colour in the room is on the particles and the chip. Probe trails are dots every 0.1 s for 4 s. Light is a streak with no head: widest and hottest where it has just been, narrowing and fading over 1.5 s, so a glance tells it from a probe's dots.
 

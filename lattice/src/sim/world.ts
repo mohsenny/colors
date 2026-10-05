@@ -10,7 +10,7 @@
  * resuming from a scrubbed frame continues exactly as it would have.
  */
 
-import { radiusOf, step } from '../physics/motion'
+import { dot, len, radiusOf, step } from '../physics/motion'
 import type { Kind, Mover, Vec3 } from '../physics/motion'
 
 export const DT = 1 / 60
@@ -44,6 +44,16 @@ export interface Particle extends Mover {
   fade: number
 }
 
+/** Something reaching the surface or the horizon, kept as long as the history. */
+export interface Impact {
+  /** Where it struck, as a unit vector from the centre. */
+  at: Vec3
+  kind: Kind
+  hue: number
+  /** The tick it struck on. */
+  tick: number
+}
+
 export interface WorldField {
   rs: number
   /** Surface or horizon, room units. */
@@ -62,6 +72,9 @@ export class World {
   private head = -1
   /** Frames recorded, up to HISTORY_FRAMES. */
   count = 0
+  /** Ticks since the room was dealt, less any rewound: the newest frame's number. */
+  ticks = 0
+  impacts: Impact[] = []
 
   add(m: Mover): Particle {
     const live = this.slots.filter((p): p is Particle => p !== null && p.fade === 0)
@@ -85,10 +98,14 @@ export class World {
     this.slots.fill(null)
     this.count = 0
     this.head = -1
+    this.ticks = 0
+    this.impacts = []
   }
 
   tick(field: WorldField): void {
     const dt = DT * field.rate
+    this.ticks++
+    if (this.impacts.length > 0 && this.ticks - this.impacts[0].tick >= HISTORY_FRAMES) this.impacts.shift()
     for (let i = 0; i < SLOTS; i++) {
       const p = this.slots[i]
       if (!p) continue
@@ -98,9 +115,13 @@ export class World {
         continue
       }
       if (p.held) continue
+      const from: Vec3 = [p.pos[0], p.pos[1], p.pos[2]]
       const ok = step(p, field.rs, dt)
       const r = radiusOf(p)
-      if (!ok || r <= field.radius || r > ESCAPE_R) p.fade = 1e-6
+      if (!ok || r <= field.radius) {
+        p.fade = 1e-6
+        this.impacts.push({ at: landing(from, p.pos, field.radius), kind: p.kind, hue: p.hue, tick: this.ticks })
+      } else if (r > ESCAPE_R) p.fade = 1e-6
     }
     this.record()
   }
@@ -211,5 +232,23 @@ export class World {
     }
     this.head = this.index(back)
     this.count -= back
+    this.ticks -= back
+    this.impacts = this.impacts.filter((s) => s.tick <= this.ticks)
   }
+}
+
+/**
+ * Where a step from `a` to `b` first crosses the sphere of `radius`, as a unit
+ * vector. A step is long next to a ring a few pixels wide, so the end of it
+ * would put the ring visibly past where the particle went in.
+ */
+function landing(a: Vec3, b: Vec3, radius: number): Vec3 {
+  const d: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+  const qa = dot(d, d)
+  const qb = dot(a, d)
+  const disc = qb * qb - qa * (dot(a, a) - radius * radius)
+  const t = qa > 1e-12 && disc >= 0 ? Math.max(0, Math.min(1, (-qb - Math.sqrt(disc)) / qa)) : 1
+  const p: Vec3 = [a[0] + d[0] * t, a[1] + d[1] * t, a[2] + d[2] * t]
+  const n = len(p) || 1
+  return [p[0] / n, p[1] / n, p[2] / n]
 }

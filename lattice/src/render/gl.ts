@@ -1,6 +1,6 @@
 /*
  * WebGL2, directly. What is on screen is a net of ribbons, a set of points and
- * one sphere drawn per pixel, which a 3D library would only add weight to.
+ * a sphere or two drawn per pixel, which a 3D library would only add weight to.
  *
  * The canvas is transparent and sits on the lit CSS surface, so the room is
  * drawn on the same lightbox the sheets in Lightbox lie on. Everything is
@@ -134,6 +134,9 @@ void main() {
   gl_Position = vec4(aPos, 0.0, 1.0);
 }`
 
+/** Strikes ringing at once, the newest kept. */
+const MAX_IMPACTS = 8
+
 const SPHERE_FS = `#version 300 es
 precision highp float;
 in vec2 vNdc;
@@ -141,28 +144,42 @@ uniform mat4 uInv;
 uniform mat4 uVP;
 uniform vec3 uEye;
 uniform vec3 uLight;
+uniform vec3 uCenter;
 uniform float uR;
 uniform vec3 uColor;
+uniform vec3 uHot;
 uniform float uHole;
+uniform float uGlow;
+uniform float uAlpha;
+uniform float uDpr;
+// Strikes: where, as a unit vector from the centre, and how far through
+// (0 to 1), then the colour of what struck.
+uniform vec4 uHit[${MAX_IMPACTS}];
+uniform vec3 uHitInk[${MAX_IMPACTS}];
+uniform int uHits;
 out vec4 o;
 void main() {
   vec4 far = uInv * vec4(vNdc, 1.0, 1.0);
   vec3 dir = normalize(far.xyz / far.w - uEye);
-  float b = dot(uEye, dir);
-  float c = dot(uEye, uEye) - uR * uR;
+  vec3 rel = uEye - uCenter;
+  float b = dot(rel, dir);
+  float c = dot(rel, rel) - uR * uR;
   float disc = b * b - c;
   float w = fwidth(disc);
-  if (disc < -w) discard;
+  if (disc < -w || -b < 0.0) discard;
   float edge = clamp(disc / w + 1.0, 0.0, 1.0);
   float t = -b - sqrt(max(disc, 0.0));
   vec3 hit = uEye + dir * t;
-  vec3 n = normalize(hit);
+  vec3 n = normalize(hit - uCenter);
   float facing = max(dot(n, -dir), 0.0);
   float rim = pow(1.0 - facing, 3.0);
   vec3 col;
   if (uHole > 0.5) {
     // Ink, with a faint cool rim so it stays a sphere and not a hole in the screen.
     col = mix(vec3(0.063, 0.063, 0.078), vec3(0.40, 0.44, 0.56), rim * 0.6);
+  } else if (uGlow > 0.5) {
+    // Light has no surface for the lamps to shade: hot in the middle, gold at the rim.
+    col = mix(uColor, uHot, facing * facing);
   } else {
     // The lamps are upper left, as they are in Lightbox; the shadow side goes
     // cool, as the shadows there do.
@@ -172,9 +189,34 @@ void main() {
     col = mix(col * vec3(0.80, 0.84, 0.95), col, l);
     col = mix(col, vec3(1.0), rim * 0.16);
   }
+  // Where something struck, a flash, then three rings a beat apart that
+  // spread over the surface, thinning and fading as they go. A pixel or two
+  // wide however near the eye is, with a white-hot core so they show on a
+  // body the colour of what hit it.
+  for (int i = 0; i < ${MAX_IMPACTS}; i++) {
+    if (i >= uHits) break;
+    float u = uHit[i].w;
+    float ang = acos(clamp(dot(n, uHit[i].xyz), -1.0, 1.0));
+    float px = max(fwidth(ang), 1e-5);
+    float ink = 0.0;
+    float core = 0.0;
+    for (int k = 0; k < 3; k++) {
+      float s = (u - 0.14 * float(k)) / 0.72;
+      if (s <= 0.0 || s >= 1.0) continue;
+      float reach = 1.15 * (1.0 - pow(1.0 - s, 2.2));
+      float d = abs(ang - reach) / px;
+      float hw = uDpr * mix(1.6, 0.6, s);
+      float fade = pow(1.0 - s, 1.3);
+      ink = max(ink, fade * (1.0 - smoothstep(hw, hw + 1.0, d)));
+      core = max(core, fade * (1.0 - smoothstep(0.0, hw, d)));
+    }
+    float flash = (1.0 - smoothstep(0.0, 0.14, u)) * (1.0 - smoothstep(0.0, 0.08 + 0.5 * u, ang));
+    vec3 ring = mix(uHitInk[i], vec3(1.0), 0.6 * max(core, flash));
+    col = mix(col, ring, max(ink, flash));
+  }
   vec4 clip = uVP * vec4(hit, 1.0);
   gl_FragDepth = clip.z / clip.w * 0.5 + 0.5;
-  o = vec4(col * edge, edge);
+  o = vec4(col * edge * uAlpha, edge * uAlpha);
 }`
 
 const POINTS_VS = `#version 300 es
@@ -276,6 +318,25 @@ export interface BodyDraw {
   hole: boolean
 }
 
+/** A ring spreading from where something struck the body. */
+export interface ImpactDraw {
+  /** Unit vector from the body's centre. */
+  at: Vec3
+  color: Vec3
+  /** 0 as it strikes, 1 when the last ring is gone. */
+  age: number
+}
+
+/** What is being ridden, drawn as a ball, since the eye sits right on it. */
+export interface SeatDraw {
+  center: Vec3
+  radius: number
+  color: Vec3
+  /** Light: lit from inside, in the beam's colours. */
+  glow: boolean
+  alpha: number
+}
+
 export interface FrameDraw {
   viewProj: Mat4
   inverse: Mat4
@@ -285,6 +346,8 @@ export interface FrameDraw {
   detail: number
   lens: number
   body: BodyDraw
+  impacts: ImpactDraw[]
+  seat: SeatDraw | null
   /** x y z, r g b a, size px, ring flag. */
   points: Float32Array
   pointCount: number
@@ -332,6 +395,8 @@ export class Renderer {
   private beamVao: WebGLVertexArrayObject
   private beamBuf: WebGLBuffer
   private dpr = 1
+  private hitBuf = new Float32Array(MAX_IMPACTS * 4)
+  private hitInkBuf = new Float32Array(MAX_IMPACTS * 3)
   private canvas: HTMLCanvasElement
 
   constructor(canvas: HTMLCanvasElement) {
@@ -450,17 +515,40 @@ export class Renderer {
     gl.enable(gl.DEPTH_TEST)
     gl.depthFunc(gl.LEQUAL)
 
-    // The body first, writing depth, so ropes and particles behind it are hidden.
-    gl.useProgram(this.sphere)
-    gl.uniformMatrix4fv(gl.getUniformLocation(this.sphere, 'uInv'), false, f.inverse)
-    gl.uniformMatrix4fv(gl.getUniformLocation(this.sphere, 'uVP'), false, f.viewProj)
-    gl.uniform3fv(gl.getUniformLocation(this.sphere, 'uEye'), f.eye)
-    gl.uniform3fv(gl.getUniformLocation(this.sphere, 'uLight'), f.light)
-    gl.uniform1f(gl.getUniformLocation(this.sphere, 'uR'), f.body.radius)
-    gl.uniform3fv(gl.getUniformLocation(this.sphere, 'uColor'), f.body.color)
-    gl.uniform1f(gl.getUniformLocation(this.sphere, 'uHole'), f.body.hole ? 1 : 0)
+    // The body first, writing depth, so ropes and particles behind it are
+    // hidden, then whatever is being ridden, the same way.
+    const sp = this.sphere
+    const ball = (center: Vec3, radius: number, color: Vec3, hole: boolean, glow: boolean, alpha: number, hits: number): void => {
+      gl.uniform3fv(gl.getUniformLocation(sp, 'uCenter'), center)
+      gl.uniform1f(gl.getUniformLocation(sp, 'uR'), radius)
+      gl.uniform3fv(gl.getUniformLocation(sp, 'uColor'), color)
+      gl.uniform1f(gl.getUniformLocation(sp, 'uHole'), hole ? 1 : 0)
+      gl.uniform1f(gl.getUniformLocation(sp, 'uGlow'), glow ? 1 : 0)
+      gl.uniform1f(gl.getUniformLocation(sp, 'uAlpha'), alpha)
+      gl.uniform1i(gl.getUniformLocation(sp, 'uHits'), hits)
+      gl.drawArrays(gl.TRIANGLES, 0, 3)
+    }
+    gl.useProgram(sp)
+    gl.uniformMatrix4fv(gl.getUniformLocation(sp, 'uInv'), false, f.inverse)
+    gl.uniformMatrix4fv(gl.getUniformLocation(sp, 'uVP'), false, f.viewProj)
+    gl.uniform3fv(gl.getUniformLocation(sp, 'uEye'), f.eye)
+    gl.uniform3fv(gl.getUniformLocation(sp, 'uLight'), f.light)
+    gl.uniform3fv(gl.getUniformLocation(sp, 'uHot'), f.beamHot)
+    gl.uniform1f(gl.getUniformLocation(sp, 'uDpr'), this.dpr)
+    const hits = f.impacts.slice(-MAX_IMPACTS)
+    hits.forEach((h, i) => {
+      this.hitBuf.set([h.at[0], h.at[1], h.at[2], h.age], i * 4)
+      this.hitInkBuf.set(h.color, i * 3)
+    })
+    gl.uniform4fv(gl.getUniformLocation(sp, 'uHit'), this.hitBuf)
+    gl.uniform3fv(gl.getUniformLocation(sp, 'uHitInk'), this.hitInkBuf)
     gl.bindVertexArray(this.quadVao)
-    gl.drawArrays(gl.TRIANGLES, 0, 3)
+    ball([0, 0, 0], f.body.radius, f.body.color, f.body.hole, false, 1, hits.length)
+    if (f.seat && f.seat.alpha > 0) {
+      // Fading, it stops hiding what is behind it.
+      gl.depthMask(f.seat.alpha >= 1)
+      ball(f.seat.center, f.seat.radius, f.seat.color, false, f.seat.glow, f.seat.alpha, 0)
+    }
 
     gl.depthMask(false)
 

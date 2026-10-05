@@ -4,6 +4,7 @@ import { LEVELS, buildNet, deform, levelView, radialMap } from './lattice'
 import { DIST_MAX, DIST_MIN } from '../render/camera'
 import { circularSpeed, clockRate, localSpeed, makeLight, makeProbe, radiusOf, step } from './motion'
 import type { Mover } from './motion'
+import { World } from '../sim/world'
 
 const DT = 1 / 60
 
@@ -186,5 +187,21 @@ describe('lattice', () => {
         seen.add(key)
       }
     }
+  })
+})
+
+describe('world', () => {
+  it('rings where light strikes the surface, and forgets it on rewinding past it', () => {
+    const w = new World()
+    w.add(makeLight([4, 0.3, 0], [-1, 0, 0]))
+    const field = { rs: 0.05, radius: 1, rate: 9 }
+    for (let i = 0; i < 60; i++) w.tick(field)
+    expect(w.impacts).toHaveLength(1)
+    const [hit] = w.impacts
+    // On the near side, where a line in at 0.3 off the middle meets the sphere.
+    expect(hit.at[0]).toBeGreaterThan(0.9)
+    expect(Math.hypot(...hit.at)).toBeCloseTo(1, 6)
+    w.rewind(w.ticks - hit.tick + 1)
+    expect(w.impacts).toHaveLength(0)
   })
 })
