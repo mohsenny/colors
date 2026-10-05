@@ -1,21 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { Snapshot } from '../app/instrument'
-import { TOP } from '../app/time'
 import type { BodyId } from '../sky/bodies'
 import type { Eclipse } from '../sky/eclipses'
 import { Bodies } from './Bodies'
-import { FasterIcon, PauseIcon, PlayIcon, PlusIcon, SlowerIcon } from './Icons'
+import { PauseIcon, PlayIcon, PlusIcon } from './Icons'
 import { Options } from './Options'
+import { Speed } from './Speed'
 import { Sphere } from './Sphere'
+import { Timeline } from './Timeline'
+import type { TimelineProps } from './Timeline'
 
 export interface DockProps {
   snap: Snapshot
   /** Hands the instrument the two spans it writes the date and time into every frame. */
   attachClock(day: HTMLElement | null, time: HTMLElement | null): void
+  timeline: TimelineProps
   onTogglePlay(): void
-  onSlower(): void
-  onFaster(): void
+  onRung(rung: number): void
   onBecome(id: BodyId): void
   onWatch(e: Eclipse): void
   onNow(): void
@@ -24,15 +26,16 @@ export interface DockProps {
 /** Quiet time before the chrome recedes, as in Lightbox. */
 const IDLE_MS = 2400
 
-type Drawer = 'bodies' | 'options' | null
+type Drawer = 'bodies' | 'speed' | 'options' | null
 
 export function Dock(props: DockProps): ReactElement {
-  const { snap, attachClock, onTogglePlay, onSlower, onFaster, onBecome, onWatch, onNow } = props
+  const { snap, attachClock, timeline, onTogglePlay, onRung, onBecome, onWatch, onNow } = props
   const { playing } = snap
   const [idle, setIdle] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLButtonElement | null>(null)
+  const speedRef = useRef<HTMLButtonElement | null>(null)
   const moreRef = useRef<HTMLButtonElement | null>(null)
   const dayRef = useRef<HTMLSpanElement | null>(null)
   const timeRef = useRef<HTMLSpanElement | null>(null)
@@ -78,7 +81,7 @@ export function Dock(props: DockProps): ReactElement {
     const escape = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
-      ;(drawer === 'bodies' ? bodyRef : moreRef).current?.focus()
+      ;({ bodies: bodyRef, speed: speedRef, options: moreRef })[drawer].current?.focus()
       setDrawer(null)
     }
     window.addEventListener('pointerdown', away)
@@ -92,7 +95,10 @@ export function Dock(props: DockProps): ReactElement {
   const toggle = (d: Exclude<Drawer, null>): void => setDrawer((v) => (v === d ? null : d))
 
   return (
-    <div ref={rootRef} className={`lb-dock${idle && playing ? ' is-idle' : ''}`}>
+    <div
+      ref={rootRef}
+      className={`lb-dock${idle && playing ? ' is-idle' : ''}${timeline.expanded ? ' is-expanded' : ''}`}
+    >
       {/* First, as New is in Lightbox: where you are is what the instrument is about. */}
       <button
         ref={bodyRef}
@@ -119,18 +125,20 @@ export function Dock(props: DockProps): ReactElement {
         <span className="sl-clock-zone">UTC</span>
       </div>
 
-      <div className="sl-rate" role="group" aria-label="Speed">
-        <button type="button" className="lb-btn sl-step" aria-label="Slower" disabled={snap.rung <= -TOP} onClick={onSlower}>
-          <SlowerIcon />
-        </button>
-        <span className={`sl-rate-name${snap.reverse ? ' is-back' : ''}`} aria-live="off">
+      <Timeline {...timeline} />
+
+      <button
+        ref={speedRef}
+        type="button"
+        className={`sl-rate${drawer === 'speed' ? ' is-on' : ''}`}
+        aria-label={`Speed: ${snap.rate}${snap.reverse ? ', backward' : ''}. Change it`}
+        aria-expanded={drawer === 'speed'}
+        onClick={() => toggle('speed')}
+      >
+        <span className={`sl-rate-name${snap.reverse ? ' is-back' : ''}`} aria-hidden="true">
           {snap.rate}
-          {snap.reverse && <span className="lb-sr"> backward</span>}
         </span>
-        <button type="button" className="lb-btn sl-step" aria-label="Faster" disabled={snap.rung >= TOP} onClick={onFaster}>
-          <FasterIcon />
-        </button>
-      </div>
+      </button>
 
       <button
         ref={moreRef}
@@ -148,6 +156,15 @@ export function Dock(props: DockProps): ReactElement {
         seat={snap.seat.id}
         onSelect={(id) => {
           onBecome(id)
+          setDrawer(null)
+        }}
+      />
+      <Speed
+        open={drawer === 'speed'}
+        rung={snap.rung}
+        onTurn={onRung}
+        onSelect={(rung) => {
+          onRung(rung)
           setDrawer(null)
         }}
       />

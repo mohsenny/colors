@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { AU_KM, LIGHT_KM_S } from '../sky/bodies'
 import { covered, distanceLabel, lightLabel, sizeLabel } from './instrument'
+import { TAPE_S, Tape } from './tape'
 import { TOP, clampRung, clockLabel, dayLabel, minuteLabel, rateName, rateOf } from './time'
 
 describe('the clock', () => {
@@ -20,6 +21,79 @@ describe('the clock', () => {
     expect(dayLabel(ms)).toBe('5 Oct 2026')
     expect(clockLabel(ms)).toBe('08:04:09')
     expect(minuteLabel(ms)).toBe('08:04')
+  })
+})
+
+describe('the tape', () => {
+  const HOUR = 3_600_000
+
+  /** Plays for `s` seconds at 60 frames a second, the clock moving `rate` ms each second. */
+  function play(tape: Tape, from: number, s: number, rate: number): number {
+    let ms = from
+    for (let i = 0; i < s * 60; i++) {
+      ms += rate / 60
+      tape.record(1 / 60, ms)
+    }
+    tape.seal(ms)
+    return ms
+  }
+
+  it('finds a moment that has gone by', () => {
+    const tape = new Tape()
+    tape.jump(0)
+    const end = play(tape, 0, 10, HOUR)
+    expect(tape.at(0)).toBe(0)
+    expect(tape.at(1)).toBe(end)
+    expect(tape.at(0.5)).toBeCloseTo(end / 2, 3)
+  })
+
+  it('holds two minutes of watching, whatever the speed', () => {
+    const tape = new Tape()
+    tape.jump(0)
+    const half = play(tape, 0, TAPE_S / 2, 1000)
+    expect(tape.filled).toBeCloseTo(0.5, 2)
+    const end = play(tape, half, TAPE_S, 1000)
+    expect(tape.filled).toBe(1)
+    expect(end - tape.at(0)).toBeCloseTo(TAPE_S * 1000, -2)
+  })
+
+  it('plays on from a scrubbed moment, forgetting what came after', () => {
+    const tape = new Tape()
+    tape.jump(0)
+    play(tape, 0, 10, HOUR)
+    const ms = tape.at(0.25)
+    tape.cut(0.25)
+    expect(tape.at(0)).toBe(0)
+    expect(tape.at(1)).toBe(ms)
+    expect(tape.filled).toBeLessThan(0.03)
+  })
+
+  it('keeps a jump a jump, with no years in between', () => {
+    const tape = new Tape()
+    tape.jump(0)
+    const a = play(tape, 0, 1, HOUR)
+    tape.jump(1e12)
+    play(tape, 1e12, 1, HOUR)
+    for (let p = 0; p <= 1; p += 0.005) {
+      const ms = tape.at(p)
+      expect(ms <= a || ms >= 1e12).toBe(true)
+    }
+  })
+
+  it('marks the eclipse peaks it runs through, either way', () => {
+    const tape = new Tape()
+    const peak = 5.5 * HOUR
+    tape.know(peak)
+    tape.jump(0)
+    const end = play(tape, 0, 10, HOUR)
+    expect(tape.markings).toHaveLength(1)
+    expect(tape.at(tape.markings[0])).toBeCloseTo(peak, 3)
+    play(tape, end, 10, -HOUR)
+    expect(tape.markings).toHaveLength(2)
+    for (const m of tape.markings) expect(tape.at(m)).toBeCloseTo(peak, 3)
+    // Cut before the peak, the marks after it go too.
+    tape.cut(0.2)
+    expect(tape.markings).toHaveLength(0)
   })
 })
 

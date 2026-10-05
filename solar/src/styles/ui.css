@@ -1,8 +1,8 @@
 /*
  * The floating chrome, copied from Lattice (which copied it from Lightbox)
  * with the lb- and lt- names kept so the three can be diffed. Solar's own
- * additions are sl- and sit at the end: the clock, the speed stepper and the
- * eclipse drawer.
+ * additions are sl- and sit at the end: the clock, the speed, the marks on
+ * the tape and the eclipse drawer.
  *
  * The values are the dark side of the same glass: smoked panels, white ink,
  * washes of white where the light rooms use washes of graphite.
@@ -46,6 +46,10 @@
 /* -------------------------------------------------------------------- dock */
 
 .lb-dock {
+  /* The two tape widths live here because the dock needs the difference to
+     compute its own offset. */
+  --lb-tl-w: 112px;
+  --lb-tl-open: 260px;
   position: fixed;
   left: 50%;
   bottom: calc(18px + env(safe-area-inset-bottom, 0px));
@@ -65,7 +69,23 @@
     var(--lb-shadow-float, 0 10px 30px rgba(0, 0, 0, 0.46)),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transform: translateX(-50%);
-  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+  transition:
+    opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* Pausing widens the tape. Offsetting by half the growth pins the left edge,
+   so the play button stays under the pointer that just clicked it. */
+.lb-dock.is-expanded {
+  transform: translateX(calc(-50% + (var(--lb-tl-open) - var(--lb-tl-w)) / 2));
+}
+
+/* There has to be room on the right to absorb the shift. Under this the dock
+   grows from the centre, rather than off the edge of the screen. */
+@media (max-width: 879px) {
+  .lb-dock.is-expanded {
+    transform: translateX(-50%);
+  }
 }
 
 .lb-dock.is-idle {
@@ -123,6 +143,170 @@
 .lb-btn-more.is-on {
   color: var(--lb-ink-strong, #fff);
   background: var(--sl-on, rgba(255, 255, 255, 0.1));
+}
+
+/* ------------------------------------------------------- segmented control */
+
+.lb-seg {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.lb-seg-indicator {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  height: calc(100% - 4px);
+  border-radius: var(--lb-r-pill, 999px);
+  background: var(--sl-on, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 0 0 0.5px var(--lb-hairline-soft, rgba(255, 255, 255, 0.06));
+  transition: transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-seg[data-mode='back'] .lb-seg-indicator {
+  transform: translateX(100%);
+}
+
+.lb-seg-btn {
+  position: relative;
+  z-index: 1;
+  padding: 4px 9px;
+  border-radius: var(--lb-r-pill, 999px);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+  transition: color var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-seg-btn:hover {
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+}
+
+.lb-seg-btn[aria-pressed='true'] {
+  color: var(--lb-ink-strong, #fff);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- timeline */
+
+.lb-timeline {
+  position: relative;
+  flex: none;
+  width: var(--lb-tl-w, 112px);
+  height: 24px;
+  margin: 0 2px;
+  transition: width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-timeline.is-expanded {
+  width: var(--lb-tl-open, 260px);
+}
+
+/* Visually hidden but fully operative: keyboard stepping, AT value reporting and
+   pointer drag all come from the native control. */
+.lb-timeline-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  touch-action: none;
+}
+
+.lb-timeline-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 24px;
+}
+
+.lb-timeline-input::-moz-range-thumb {
+  width: 16px;
+  height: 24px;
+  border: 0;
+}
+
+.lb-timeline-visual {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lb-timeline-input:focus-visible ~ .lb-timeline-visual {
+  outline: 2px solid var(--lb-focus, rgba(255, 255, 255, 0.6));
+  outline-offset: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+}
+
+.lb-timeline-track,
+.lb-timeline-recorded {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+  transform: translateY(-50%);
+  transition: height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-timeline-track {
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* What has been watched abuts the newest end, so it grows leftwards from the right. */
+.lb-timeline-recorded {
+  left: var(--lb-tl-rec-left, 100%);
+  width: var(--lb-tl-rec-width, 0%);
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.lb-timeline-head {
+  position: absolute;
+  top: 50%;
+  left: var(--lb-tl-pos, 100%);
+  width: 2px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  transform: translate(-50%, -50%);
+  transition:
+    width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    background-color var(--lb-t-grow, 180ms) ease,
+    box-shadow var(--lb-t-grow, 180ms) ease,
+    border-radius var(--lb-t-grow, 180ms) ease;
+}
+
+.lb-timeline.is-expanded .lb-timeline-track,
+.lb-timeline.is-expanded .lb-timeline-recorded {
+  height: 4px;
+}
+
+/* Paused or scrubbing: the hairline tick becomes a real handle. */
+.lb-timeline.is-expanded .lb-timeline-head {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.lb-timeline:hover .lb-timeline-head {
+  background: var(--lb-ink-strong, #fff);
 }
 
 /* ----------------------------------------------------------- options panel */
@@ -380,7 +564,7 @@
 
 /* ----------------------------------------------------------------- clock */
 
-/* The clock is the timeline here: it says where in time the sky is. */
+/* Where in time the sky is, the moment under the head of the tape. */
 .sl-clock {
   display: flex;
   align-items: baseline;
@@ -411,22 +595,54 @@
   color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
 }
 
+/* ------------------------------------------------------------------ marks */
+
+/* An eclipse peak the clock ran through: the Sun's gold, so it reads as one. */
+.sl-mark {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 214, 140, 0.92);
+  box-shadow: 0 0 4px rgba(255, 190, 90, 0.55);
+  transform: translate(-50%, -50%);
+  transition:
+    width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-timeline.is-expanded .sl-mark {
+  width: 6px;
+  height: 6px;
+}
+
 /* ----------------------------------------------------------------- speed */
 
 .sl-rate {
   display: flex;
   align-items: center;
-  padding: 0 1px;
+  height: 26px;
+  padding: 0 10px;
   border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
   background: rgba(255, 255, 255, 0.045);
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
 }
 
-.sl-step {
-  width: 22px;
-  height: 22px;
+.sl-rate:hover {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
 }
 
-/* Wide enough for "Real time", the longest name, so the arrows hold still. */
+.sl-rate.is-on {
+  color: var(--lb-ink-strong, #fff);
+  background: var(--sl-on, rgba(255, 255, 255, 0.1));
+}
+
+/* Wide enough for "Real time", the longest name, so the dock holds still. */
 .sl-rate-name {
   display: flex;
   align-items: center;
@@ -438,7 +654,6 @@
   letter-spacing: 0.11em;
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
 }
 
 /* Running back: a small left-pointing mark ahead of the speed. */
@@ -449,6 +664,31 @@
   border-top: 3.5px solid transparent;
   border-bottom: 3.5px solid transparent;
   border-right: 5px solid currentColor;
+}
+
+/* The speed drawer sits over the right end of the dock, where its button is. */
+.sl-speed {
+  left: auto;
+  right: 0;
+  gap: 1px;
+  padding: 5px;
+  min-width: 176px;
+  transform: translate(0, 6px) scale(0.97);
+  transform-origin: bottom right;
+}
+
+.sl-speed.is-open {
+  transform: translate(0, 0) scale(1);
+}
+
+.sl-way {
+  margin-bottom: 4px;
+}
+
+.sl-way .lb-seg-btn {
+  flex: 1 1 0;
+  padding-inline: 0;
+  text-align: center;
 }
 
 /* --------------------------------------------------------------- eclipses */
@@ -536,8 +776,14 @@
   }
 
   .lb-dock {
+    --lb-tl-w: 48px;
+    --lb-tl-open: min(260px, calc(100vw - 268px));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
+  }
+
+  .sl-rate {
+    padding: 0 8px;
   }
 
   .lt-chip {

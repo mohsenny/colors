@@ -38,22 +38,6 @@ export function PauseIcon(): ReactElement {
   )
 }
 
-export function SlowerIcon(): ReactElement {
-  return (
-    <Icon>
-      <path d="M8.6 3.4 5 7l3.6 3.6" />
-    </Icon>
-  )
-}
-
-export function FasterIcon(): ReactElement {
-  return (
-    <Icon>
-      <path d="M5.4 3.4 9 7l-3.6 3.6" />
-    </Icon>
-  )
-}
-
 /** The plus, and the cross it becomes. */
 export function PlusIcon({ open }: { open: boolean }): ReactElement {
   return (

@@ -4,7 +4,8 @@
  *
  * Looking at something else, you sit just above the seat with its horizon
  * along the bottom of the frame and the other body in the middle, the way a
- * planet's own sky would show it. Zooming in narrows the lens like a
+ * planet's own sky would show it. Dragging swings the eye round the seat, so
+ * it stays under you while the sky turns. Zooming in narrows the lens like a
  * telescope; zooming out backs away from the seat until whole orbits fit.
  *
  * Looking at the seat itself, you circle it as a globe.
@@ -15,6 +16,7 @@
  * give them.
  */
 
+import { AU_KM } from '../sky/bodies'
 import type { Vec3 } from '../sky/ephemeris'
 
 export type Mat4 = Float32Array
@@ -86,23 +88,29 @@ export const FOV = (46 * Math.PI) / 180
 export const FOV_MIN = (0.05 * Math.PI) / 180
 /** How far above the seat's centre you sit, in its radii, before backing away. */
 export const BACK = 1.6
-/** The farthest you can back away, in the seat's radii. */
-export const BACK_MAX = 4e4
+/** The farthest you can back away from any seat, km: Neptune's whole orbit fits, with room round it. */
+export const FAR = 100 * AU_KM
 /** The globe view's resting distance and its nearest, in radii. */
 export const GLOBE = 3.4
 export const GLOBE_MIN = 1.08
-export const GLOBE_MAX = 4e4
 
 /** The zoom axis: below zero the lens narrows, above it you back away. */
 export const Z_MIN = Math.log(FOV_MIN / FOV)
-export const Z_MAX = Math.log(BACK_MAX / BACK)
 export const ZG_MIN = Math.log(GLOBE_MIN / GLOBE)
-export const ZG_MAX = Math.log(GLOBE_MAX / GLOBE)
+
+/** The far end of the zoom axis on a seat this big, where backing away reaches `FAR`. */
+export function zMax(radius: number): number {
+  return Math.log(FAR / (BACK * radius))
+}
+
+export function zgMax(radius: number): number {
+  return Math.log(FAR / (GLOBE * radius))
+}
 
 /** How far below the middle of the frame the seat's horizon sits, as a share of half the height. */
 export const LOW = 0.56
-export const LOW_MIN = 0.08
-export const LOW_MAX = 0.94
+/** How far above or below the ecliptic you can turn to face, radians. */
+export const RISE_MAX = 1.4
 
 export interface Eye {
   at: Vec3
@@ -121,16 +129,31 @@ export function backOf(z: number): number {
 }
 
 /**
- * Sitting on the seat looking at a target. `turn` walks the eye round the
- * line from the seat to the target, `low` sets where the horizon falls. `air`
- * is the depth of the seat's air, in radii.
+ * The way you face: the way to the target, swung round the ecliptic pole by
+ * `swing` and raised toward it by `rise`.
  */
-export function seatEye(seat: Vec3, radius: number, target: Vec3, z: number, turn: number, low: number, air = 0): Eye {
+export function facing(to: Vec3, swing: number, rise: number): Vec3 {
+  const d = norm(to)
+  if (swing === 0 && rise === 0) return d
+  const lon = Math.atan2(d[1], d[0]) + swing
+  const lat = Math.max(-RISE_MAX, Math.min(RISE_MAX, Math.asin(d[2]) + rise))
+  const c = Math.cos(lat)
+  return [c * Math.cos(lon), c * Math.sin(lon), Math.sin(lat)]
+}
+
+/**
+ * Sitting on the seat facing a target, or turned away from it by `swing` and
+ * `rise`: the eye goes round the seat, which stays under you. `air` is the
+ * depth of the seat's air and `low` where its horizon falls.
+ */
+export function seatEye(seat: Vec3, radius: number, target: Vec3, z: number, swing: number, rise: number, air = 0, low = LOW): Eye {
   const fov = fovOf(z)
   const back = backOf(z)
   const to = sub(target, seat)
-  const u = norm(to)
-  const q = rotate(across(NORTH, u, EQUINOX), u, turn)
+  const reach = len(to)
+  const u = facing(to, swing, rise)
+  const aim = add(seat, scale(u, reach))
+  const q = across(NORTH, u, EQUINOX)
   const limb = Math.asin(Math.min(1, 1 / back))
   const lift = Math.atan(low * Math.tan(fov / 2))
   // Air glows above the horizon. When the lens is too narrow to keep that
@@ -142,10 +165,10 @@ export function seatEye(seat: Vec3, radius: number, target: Vec3, z: number, tur
   // little toward the seat's centre, enough to sink it below the Sun's limb
   // in a narrow lens, so step round by that much more. Taken at the nearest
   // sitting, so backing away never swings the eye about.
-  const a = g + Math.asin(Math.min(1, (BACK * Math.sin(g) * radius) / len(to)))
+  const a = g + Math.asin(Math.min(1, (BACK * Math.sin(g) * radius) / reach))
   const e = add(scale(u, -Math.cos(a)), scale(q, Math.sin(a)))
   const at = add(seat, scale(e, back * radius))
-  const forward = norm(sub(target, at))
+  const forward = norm(sub(aim, at))
   return { at, forward, up: across(q, forward, NORTH), fov }
 }
 

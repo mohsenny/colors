@@ -49,9 +49,18 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
       <Dock
         snap={snap}
         attachClock={attachClock}
+        timeline={{
+          position: snap.position,
+          filled: snap.filled,
+          marks: snap.marks,
+          expanded: snap.expanded,
+          moment: snap.moment,
+          onScrub: (p) => instrument.scrub(p),
+          onScrubStart: () => instrument.scrubStart(),
+          onScrubEnd: () => instrument.scrubEnd(),
+        }}
         onTogglePlay={() => instrument.togglePlay()}
-        onSlower={() => instrument.slower()}
-        onFaster={() => instrument.faster()}
+        onRung={(rung) => instrument.setRung(rung)}
         onBecome={(id) => instrument.become(id)}
         onWatch={(e) => instrument.watch(e)}
         onNow={() => instrument.now()}

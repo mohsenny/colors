@@ -15,12 +15,9 @@ import { unpackStars } from '../sky/stars'
 import {
   FOV,
   FOV_MIN,
-  LOW,
-  LOW_MAX,
-  LOW_MIN,
-  ZG_MAX,
+  GLOBE,
+  RISE_MAX,
   ZG_MIN,
-  Z_MAX,
   Z_MIN,
   NORTH,
   across,
@@ -36,11 +33,14 @@ import {
   slerp,
   sub,
   unproject,
+  zMax,
+  zgMax,
 } from '../render/camera'
 import type { Eye, Frame } from '../render/camera'
 import { ORBIT_UNIT, Renderer } from '../render/gl'
 import type { BodyDraw, OrbitDraw, Shade } from '../render/gl'
 import { EARTH_CLOUDS, EARTH_NIGHT, SATURN_RING, STARS, SURFACE } from '../render/maps'
+import { Tape } from './tape'
 import { clampRung, clockLabel, dayLabel, rateName, rateOf } from './time'
 
 export interface Snapshot {
@@ -56,6 +56,16 @@ export interface Snapshot {
   solar: Eclipse | null
   lunar: Eclipse | null
   announce: string
+  /** Where the clock is on the tape, 1 its newest moment. */
+  position: number
+  /** How much of the tape has been watched, 0 to 1. */
+  filled: number
+  /** The eclipse peaks the tape ran through, as places on it. */
+  marks: number[]
+  /** Paused or scrubbing: the tape opens out. */
+  expanded: boolean
+  /** The moment on the clock, in words. */
+  moment: string
 }
 
 const SHADES: Record<BodyId, Shade> = {
@@ -80,6 +90,8 @@ const SNAP_MS = 125
 const CLICK_PX = 5
 /** How near a dot a click still counts as on it. */
 const PICK_PX = 14
+/** Whose name stays when two would run into each other, after the one you are looking at. */
+const BY_SIZE: BodyId[] = [...BODIES].sort((a, b) => b.radius - a.radius).map((b) => b.id)
 
 interface Flight {
   from: Eye
@@ -170,8 +182,9 @@ export class Instrument {
   private seat: BodyId = 'earth'
   private look: BodyId = 'moon'
   private z = 0
-  private turn = 0
-  private low = LOW
+  /** How far round the seat the eye has been swung from the target, along and up the sky, radians. */
+  private swing = 0
+  private rise = 0
   private zg = 0
   private yaw = 0
   private pitch = 0.3
@@ -185,6 +198,7 @@ export class Instrument {
   private moonOrbit: Orbit | null = null
   private moonOrbitAt = 0
   private labelEls = new Map<BodyId, HTMLSpanElement>()
+  private labelWidths = new Map<BodyId, number>()
   private placed = new Map<BodyId, { dir: Vec3; ang: number; d: number; x: number; y: number; r: number; shown: boolean }>()
   private clockEls: { day: HTMLElement; time: HTMLElement } | null = null
   private eclipses: { solar: Eclipse | null; lunar: Eclipse | null; from: number; at: number } = {
@@ -194,6 +208,11 @@ export class Instrument {
     at: 0,
   }
   private drag: { x: number; y: number; id: number; moved: boolean } | null = null
+  private tape = new Tape()
+  /** Where on the tape the clock is, 1 its newest moment. Below 1 only while paused or scrubbing. */
+  private back = 1
+  private scrubbing = false
+  private resumeAfterScrub = false
   private announce = ''
   private observer: ResizeObserver
 
@@ -202,6 +221,7 @@ export class Instrument {
     this.labels = labels
     this.renderer = new Renderer(canvas)
     this.poses = posesAt(this.ms)
+    this.tape.jump(this.ms)
     this.z = this.zoomFor(this.seat, this.look)
     this.eye = this.restingEye()
     for (const b of BODIES) {
@@ -298,6 +318,7 @@ export class Instrument {
         this.playing = false
         this.touch('The clock has reached the end of its range')
       } else this.ms = next
+      this.tape.record(dt, this.ms)
     }
     this.poses = posesAt(this.ms)
     this.refreshOrbits(now)
@@ -336,7 +357,7 @@ export class Instrument {
   private restingEye(): Eye {
     if (this.seat === this.look) return globeEye(this.at(this.seat), this.radius(this.seat), this.zg, this.yaw, this.pitch)
     const air = (bodyById(this.seat) as Body).air?.depth ?? 0
-    return seatEye(this.at(this.seat), this.radius(this.seat), this.at(this.look), this.z, this.turn, this.low, air)
+    return seatEye(this.at(this.seat), this.radius(this.seat), this.at(this.look), this.z, this.swing, this.rise, air)
   }
 
   private flownEye(now: number): Eye {
@@ -396,13 +417,22 @@ export class Instrument {
 
   /** Turn to look at a body from where you sit. Looking at the seat itself circles it. */
   lookAt(id: BodyId): void {
-    if (id === this.look) return
+    if (id === this.look) {
+      // Looking at it again, after swinging away, brings it back to the middle.
+      if (id !== this.seat && (this.swing !== 0 || this.rise !== 0)) {
+        this.fly(700)
+        this.swing = 0
+        this.rise = 0
+      }
+      return
+    }
     this.fly(900)
     this.look = id
     if (id === this.seat) this.enterGlobe()
     else {
       this.z = this.zoomFor(this.seat, id)
-      this.low = LOW
+      this.swing = 0
+      this.rise = 0
     }
     this.touch(`Looking at ${(bodyById(id) as Body).name}`)
     this.emit(true)
@@ -422,8 +452,8 @@ export class Instrument {
     if (this.look === this.seat) this.enterGlobe()
     else {
       this.z = this.zoomFor(id, this.look)
-      this.turn = 0
-      this.low = LOW
+      this.swing = 0
+      this.rise = 0
     }
     this.touch(`On ${(bodyById(id) as Body).name}, looking at ${(bodyById(this.look) as Body).name}`)
     this.emit(true)
@@ -443,8 +473,24 @@ export class Instrument {
 
   // ------------------------------------------------------------ time
 
+  /** Leaving a scrubbed moment for a new future: what the tape held after it is gone. */
+  private branch(): void {
+    if (this.back < 1) this.tape.cut(this.back)
+    this.back = 1
+  }
+
+  private play(): void {
+    if (this.scrubbing) {
+      this.resumeAfterScrub = true
+      return
+    }
+    this.branch()
+    this.playing = true
+  }
+
   togglePlay(): void {
-    this.playing = !this.playing
+    if (this.playing) this.playing = false
+    else this.play()
     this.touch(this.playing ? 'Playing' : 'Paused')
     this.emit(true)
   }
@@ -453,7 +499,7 @@ export class Instrument {
     const r = clampRung(rung)
     if (r === this.rung) return
     this.rung = r
-    this.playing = true
+    this.play()
     this.touch(`${rateName(r)}${r < 0 ? ', backward' : ''}`)
     this.emit(true)
   }
@@ -467,7 +513,9 @@ export class Instrument {
   }
 
   now(): void {
+    this.branch()
     this.ms = Date.now()
+    this.tape.jump(this.ms)
     this.rung = 0
     this.playing = true
     this.touch('Now, at real speed')
@@ -477,21 +525,50 @@ export class Instrument {
   /** Arrive a little before an eclipse, placed to watch it happen. */
   watch(e: Eclipse): void {
     const solar = e.type === 'solar'
+    this.branch()
     this.ms = e.peak - (solar ? 90 : 120) * 60_000
+    this.tape.jump(this.ms)
+    this.tape.know(e.peak)
     this.rung = 2
     this.playing = true
     this.poses = posesAt(this.ms)
     this.fly(1600)
     this.seat = solar ? 'moon' : 'earth'
     this.look = solar ? 'earth' : 'moon'
-    this.turn = 0
-    this.low = LOW
+    this.swing = 0
+    this.rise = 0
     // Close enough on the target to see the shadow cross it.
     const d = len(sub(this.at(this.look), this.at(this.seat)))
     const across = 2 * Math.asin(this.radius(this.look) / d)
     this.z = Math.log(Math.max(FOV_MIN, Math.min(FOV, across * (solar ? 2.2 : 3.2))) / FOV)
     this.eclipses.from = NaN
     this.touch(`${e.kind} ${e.type} eclipse, ${dayLabel(e.peak)}`)
+    this.emit(true)
+  }
+
+  /** Taking hold of the tape: the clock stops while a moment is found. */
+  scrubStart(): void {
+    if (this.scrubbing) return
+    if (this.back === 1) this.tape.seal(this.ms)
+    this.scrubbing = true
+    this.resumeAfterScrub = this.playing
+    this.playing = false
+    this.emit(true)
+  }
+
+  scrub(position: number): void {
+    if (!this.scrubbing) return
+    this.back = Math.max(0, Math.min(1, position))
+    this.ms = this.tape.at(this.back)
+    this.dirty = true
+  }
+
+  /** Letting go: if it was playing it plays on from there. */
+  scrubEnd(): void {
+    if (!this.scrubbing) return
+    this.scrubbing = false
+    if (this.resumeAfterScrub) this.play()
+    this.resumeAfterScrub = false
     this.emit(true)
   }
 
@@ -517,13 +594,19 @@ export class Instrument {
     d.x = e.clientX
     d.y = e.clientY
     if (this.seat === this.look) {
-      this.yaw -= dx * 0.005
-      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + dy * 0.005))
+      // Grabbing the globe, slower near the ground so it keeps up with the hand.
+      const k = 0.005 * Math.min(1, (GLOBE * Math.exp(this.zg) - 1) / (GLOBE - 1))
+      this.yaw -= dx * k
+      this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + dy * k))
     } else {
-      // Grabbing the sky: a sideways drag walks you round the line to the
-      // target, a vertical one lifts or lowers the horizon.
-      this.turn += dx * 0.004
-      this.low = Math.max(LOW_MIN, Math.min(LOW_MAX, this.low + (dy / this.height) * 2))
+      // Grabbing the sky: the eye swings round the seat, which stays under
+      // you, and the sky moves with the hand. Wide, a drag across the screen
+      // turns you more than half way round; through a telescope the sky moves
+      // at most ten times as fast as the hand, so it can still be aimed.
+      const k = Math.min(0.003, (20 * Math.tan(this.eye.fov / 2)) / this.height)
+      const lat0 = Math.asin(norm(sub(this.at(this.look), this.at(this.seat)))[2])
+      this.swing += dx * k
+      this.rise = Math.max(-RISE_MAX - lat0, Math.min(RISE_MAX - lat0, this.rise + dy * k))
     }
   }
 
@@ -547,8 +630,9 @@ export class Instrument {
     e.preventDefault()
     const k = e.deltaMode === 1 ? 0.06 : 0.002
     const step = e.deltaY * k
-    if (this.seat === this.look) this.zg = Math.max(ZG_MIN, Math.min(ZG_MAX, this.zg + step))
-    else this.z = Math.max(Z_MIN, Math.min(Z_MAX, this.z + step))
+    const r = this.radius(this.seat)
+    if (this.seat === this.look) this.zg = Math.max(ZG_MIN, Math.min(zgMax(r), this.zg + step))
+    else this.z = Math.max(Z_MIN, Math.min(zMax(r), this.z + step))
   }
 
   private attachPointer(): void {
@@ -745,7 +829,6 @@ export class Instrument {
       discs.push({ id: b.id, dir: scale(rel, 1 / d), ang: Math.asin(Math.min(1, b.radius / d)), d })
     }
     for (const disc of discs) {
-      const el = this.labelEls.get(disc.id) as HTMLSpanElement
       const at = project(fr, disc.dir, this.width, this.height)
       const r = disc.ang / pxAngle
       let shown = at !== null && disc.id !== this.seat && r < 26
@@ -761,10 +844,34 @@ export class Instrument {
         }
       }
       this.placed.set(disc.id, { dir: disc.dir, ang: disc.ang, d: disc.d, x: at ? at[0] : NaN, y: at ? at[1] : NaN, r, shown })
-      el.classList.toggle('is-shown', shown)
-      el.classList.toggle('is-look', disc.id === this.look)
-      if (shown && at) el.style.transform = `translate(${(at[0] + Math.max(r, 2) + 7).toFixed(1)}px, ${(at[1] - 6).toFixed(1)}px)`
     }
+    // Names that would run into each other, as the inner planets' do from far
+    // out: the one you are looking at keeps its name, then the biggest body.
+    const kept: Array<[number, number, number, number]> = []
+    for (const id of [this.look, ...BY_SIZE.filter((b) => b !== this.look)]) {
+      const p = this.placed.get(id)
+      if (!p?.shown) continue
+      const x = p.x + Math.max(p.r, 2) + 7
+      const box: [number, number, number, number] = [x - 4, p.y - 9, x + this.labelWidth(id) + 4, p.y + 9]
+      if (kept.some((k) => box[0] < k[2] && k[0] < box[2] && box[1] < k[3] && k[1] < box[3])) p.shown = false
+      else kept.push(box)
+    }
+    for (const [id, p] of this.placed) {
+      const el = this.labelEls.get(id) as HTMLSpanElement
+      el.classList.toggle('is-shown', p.shown)
+      el.classList.toggle('is-look', id === this.look)
+      if (p.shown) el.style.transform = `translate(${(p.x + Math.max(p.r, 2) + 7).toFixed(1)}px, ${(p.y - 6).toFixed(1)}px)`
+    }
+  }
+
+  /** How wide a name is on screen, measured once it has been laid out. */
+  private labelWidth(id: BodyId): number {
+    let w = this.labelWidths.get(id) ?? 0
+    if (w === 0) {
+      w = (this.labelEls.get(id) as HTMLSpanElement).offsetWidth
+      this.labelWidths.set(id, w)
+    }
+    return w
   }
 
   // ------------------------------------------------------------ snapshot
@@ -781,6 +888,7 @@ export class Instrument {
     if (stale && (Number.isNaN(e.from) || now - e.at > 500)) {
       try {
         this.eclipses = { solar: nextEclipse('solar', this.ms), lunar: nextEclipse('lunar', this.ms), from: this.ms, at: now }
+        for (const next of [this.eclipses.solar, this.eclipses.lunar]) if (next) this.tape.know(next.peak)
       } catch {
         this.eclipses = { solar: null, lunar: null, from: this.ms, at: now }
       }
@@ -827,6 +935,11 @@ export class Instrument {
       solar,
       lunar,
       announce: this.announce,
+      position: this.back,
+      filled: this.tape.filled,
+      marks: this.tape.markings,
+      expanded: !this.playing || this.scrubbing,
+      moment: `${dayLabel(this.ms)}, ${clockLabel(this.ms)} UTC`,
     }
   }
 }
