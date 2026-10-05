@@ -1,0 +1,829 @@
+/*
+ * WebGL2, directly. Every body is drawn per pixel by a ray meeting a sphere,
+ * squashed at the poles where the body is, so a globe stays perfectly round
+ * from a thousand km or a billion. Nothing is ever a mesh, and nothing is ever
+ * placed in world space on the GPU: each body gets its own frame, centred on
+ * the line from the eye to it and measured in its own radii, worked out on
+ * the CPU in double precision. That is what lets true scale draw at all.
+ *
+ * The Sun is the only lamp. Night sides are dark, terminators are soft, the
+ * Earth's cities come on as its ground turns away from the Sun, and the Earth
+ * and the Moon cast real shadows on each other, so an eclipse is drawn by the
+ * same light as everything else.
+ */
+
+import type { Eye } from './camera'
+import { across, cross, dot, len, norm, perspective, scale, viewRotation } from './camera'
+import type { BodyId } from '../sky/bodies'
+import type { Vec3 } from '../sky/ephemeris'
+import type { Stars } from '../sky/stars'
+
+/** How a body is lit. */
+export type Shade = 'rock' | 'moon' | 'earth' | 'gas' | 'sun'
+
+const SHADE: Record<Shade, number> = { rock: 0, moon: 1, earth: 2, gas: 3, sun: 4 }
+
+export interface BodyDraw {
+  id: BodyId
+  shade: Shade
+  /** Centre from the eye, km. */
+  rel: Vec3
+  radius: number
+  flat: number
+  /** Toward its prime meridian, 90 degrees east of that, and its north pole. */
+  axes: [Vec3, Vec3, Vec3]
+  /** The Sun's centre from this body's, km. */
+  sun: Vec3
+  /** The body that can shadow this one, from this one's centre, km. */
+  occ: { rel: Vec3; radius: number } | null
+  /** For the Moon: toward the Earth, and how much of the Earth's day side faces it. */
+  shine: { dir: Vec3; k: number } | null
+  air: { depth: number; tint: readonly [number, number, number] } | null
+  rings: { inner: number; outer: number } | null
+  /** What the body looks like when it is too far to be more than a point. */
+  dot: readonly [number, number, number]
+}
+
+export interface OrbitDraw {
+  /** Points from the eye, in thousands of km, three floats each. */
+  points: Float32Array
+  alpha: Float32Array
+  count: number
+  ink: number
+}
+
+export interface FrameDraw {
+  eye: Eye
+  /** Farthest first. */
+  bodies: BodyDraw[]
+  /** How much of the Sun's disc the eye can see, and what covers the rest. */
+  sunSeen: number
+  cover: { rel: Vec3; radius: number } | null
+  orbits: OrbitDraw[]
+  /** Real seconds, for the Sun's surface to boil on. */
+  clock: number
+}
+
+/*
+ * One quad per body, laid in the plane one unit in front of the eye along the
+ * line to the body's centre, so interpolation hands each pixel the exact
+ * direction of its ray in the body's own frame. A body too close for that
+ * plane to hold it is drawn over the whole screen instead.
+ */
+const BODY_VS = `#version 300 es
+layout(location = 0) in vec2 aCorner;
+uniform mat4 uProj;
+uniform mat3 uLocal;
+uniform float uExt;
+uniform float uFull;
+uniform vec2 uTan;
+out vec3 vRay;
+void main() {
+  if (uFull > 0.5) {
+    vRay = transpose(uLocal) * vec3(aCorner.x * uTan.x, aCorner.y * uTan.y, -1.0);
+    gl_Position = vec4(aCorner, 0.0, 1.0);
+  } else {
+    vRay = vec3(aCorner * uExt, 1.0);
+    gl_Position = uProj * vec4(uLocal * vRay, 1.0);
+  }
+}`
+
+const COMMON = `
+const float PI = 3.14159265;
+const float TAU = 6.28318531;
+
+// How much of the Sun's disc a body leaves showing, seen from a point: the
+// overlap of two discs. Partial gives the penumbra, none the umbra.
+float sunlit(vec3 toSun, float sunR, vec3 toOcc, float occR) {
+  float ds = length(toSun);
+  float dO = length(toOcc);
+  float rs = asin(min(1.0, sunR / ds));
+  float ro = asin(min(1.0, occR / dO));
+  vec3 a = toSun / ds;
+  vec3 b = toOcc / dO;
+  float sep = atan(length(cross(a, b)), dot(a, b));
+  if (sep >= rs + ro) return 1.0;
+  if (sep <= ro - rs) return 0.0;
+  if (sep <= rs - ro) return 1.0 - (ro * ro) / (rs * rs);
+  float r1 = rs;
+  float r2 = ro;
+  float d = sep;
+  float a1 = r1 * r1 * acos(clamp((d * d + r1 * r1 - r2 * r2) / (2.0 * d * r1), -1.0, 1.0));
+  float a2 = r2 * r2 * acos(clamp((d * d + r2 * r2 - r1 * r1) / (2.0 * d * r2), -1.0, 1.0));
+  float a3 = 0.5 * sqrt(max(0.0, (-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2)));
+  return clamp(1.0 - (a1 + a2 - a3) / (PI * r1 * r1), 0.0, 1.0);
+}
+
+vec3 encode(vec3 c) {
+  // A shoulder rather than a hard clip, so a highlight rolls off instead of flattening.
+  vec3 s = mix(c, 1.0 - 0.2 * exp(-(c - 0.8) / 0.2), step(0.8, c));
+  return pow(max(s, 0.0), vec3(1.0 / 2.2));
+}
+`
+
+const BODY_FS = `#version 300 es
+precision highp float;
+in vec3 vRay;
+out vec4 o;
+uniform float uD;
+uniform vec3 uPole;
+uniform vec3 uAxX;
+uniform vec3 uAxY;
+uniform float uK;
+uniform vec3 uSun;
+uniform float uSunR;
+uniform vec3 uOcc;
+uniform float uOccR;
+uniform vec3 uShine;
+uniform float uShineK;
+uniform int uShade;
+uniform vec4 uAir;
+uniform vec2 uRing;
+uniform float uPx;
+uniform vec3 uDot;
+uniform float uDotMix;
+uniform float uDotR;
+uniform float uClock;
+uniform sampler2D uMap;
+uniform sampler2D uNight;
+uniform sampler2D uClouds;
+uniform sampler2D uRings;
+${COMMON}
+const vec3 SUNLIGHT = vec3(1.0, 0.97, 0.92);
+const vec3 DUSK = vec3(1.0, 0.42, 0.16);
+
+// Into the space where the body is a unit sphere, and back.
+vec3 stretch(vec3 x) { return x + (uK - 1.0) * dot(uPole, x) * uPole; }
+vec3 squash(vec3 x) { return x + (1.0 / uK - 1.0) * dot(uPole, x) * uPole; }
+
+float hash(vec3 p) {
+  p = fract(p * 0.3183099 + 0.1);
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+float noise(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(mix(hash(i), hash(i + vec3(1, 0, 0)), f.x), mix(hash(i + vec3(0, 1, 0)), hash(i + vec3(1, 1, 0)), f.x), f.y),
+    mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x), mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y),
+    f.z);
+}
+
+// Distance to the nearest of a lattice of points, each wandering slowly about
+// its cell: bright granules with dark lanes between, boiling.
+float cells(vec3 x, float t) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  float d = 8.0;
+  for (int k = 0; k < 27; k++) {
+    vec3 g = vec3(float(k % 3 - 1), float((k / 3) % 3 - 1), float(k / 9 - 1));
+    vec3 h = vec3(hash(i + g), hash(i + g + 17.0), hash(i + g + 41.0));
+    vec3 r = g + 0.5 + 0.38 * sin(t + TAU * h) - f;
+    d = min(d, dot(r, r));
+  }
+  return sqrt(d);
+}
+
+void main() {
+  vec3 dl = normalize(vRay);
+
+  // The ray against the body, with the centre at (0, 0, uD). Worked through
+  // cross products throughout, so nothing is the small difference of two
+  // large numbers however far away the body is.
+  vec3 ds = stretch(dl);
+  float L = length(ds);
+  vec3 dn = ds / L;
+  vec3 m = (uD * uK / L) * squash(vec3(-dl.y, dl.x, 0.0));
+  float p2 = dot(m, m);
+  float p = sqrt(p2);
+  vec3 q = cross(m, dn);
+  float h = sqrt(max(0.0, 1.0 - p2));
+  vec3 Ps = q - h * dn;
+  vec3 P = squash(Ps);
+  vec3 N = normalize(stretch(Ps));
+  // Drawn over the whole screen, a ray can point away from the body and still
+  // pass the right distance from its centre: that is a body behind the eye.
+  float ahead = step(0.0, dl.z);
+  float cov = clamp((1.0 - p) / max(fwidth(p), 1e-6) + 0.5, 0.0, 1.0) * ahead;
+
+  vec3 nb = normalize(P);
+  float lon = atan(dot(nb, uAxY), dot(nb, uAxX));
+  float lat = asin(clamp(dot(nb, uPole), -1.0, 1.0));
+  vec2 uv = vec2(0.5 + lon / TAU, 0.5 - lat / PI);
+  // The Sun's map is smeared pale at the poles, which is just what sitting on
+  // it looks over: stop short of them.
+  if (uShade == 4) uv.y = 0.5 + (uv.y - 0.5) * 0.86;
+  vec2 gx = dFdx(uv);
+  vec2 gy = dFdy(uv);
+  // Across the seam at the back the longitude jumps a whole turn: take the short way.
+  gx.x -= floor(gx.x + 0.5);
+  gy.x -= floor(gy.x + 0.5);
+  vec3 albedo = textureGrad(uMap, uv, gx, gy).rgb;
+
+  vec3 V = -dl;
+  vec3 toSun = uSun - P;
+  vec3 Ls = normalize(toSun);
+  float cosI = dot(N, Ls);
+  float cosE = max(dot(N, V), 0.0);
+  float shade = uOccR > 0.0 ? sunlit(toSun, uSunR, uOcc - P, uOccR) : 1.0;
+
+  // The rings' shadow on the globe.
+  if (uRing.y > 0.0) {
+    float sd = dot(uPole, Ls);
+    float s = -dot(uPole, P) / (abs(sd) > 1e-4 ? sd : 1e-4);
+    if (s > 0.0) {
+      float ru = (length(P + s * Ls) - uRing.x) / (uRing.y - uRing.x);
+      if (ru > 0.0 && ru < 1.0) shade *= 1.0 - 0.88 * textureLod(uRings, vec2(ru, 0.5), 2.0).a;
+    }
+  }
+
+  vec3 lin = vec3(0.0);
+  vec3 glow = vec3(0.0);
+  bool sun = uShade == 4;
+  vec3 disc = vec3(0.0);
+
+  if (sun) {
+    // The map's own fire, boiling slowly, with granules the size of a country
+    // once you are near enough to see them. Hotter and yellower in the
+    // middle, darker and redder toward the limb, where the eye only reaches
+    // the cooler gas higher up.
+    float mu = cosE;
+    float n = noise(nb * 26.0 + vec3(uClock * 0.05)) * 0.6 + noise(nb * 70.0 - vec3(uClock * 0.09)) * 0.4;
+    vec3 gp = nb * 900.0;
+    float close = 1.0 - smoothstep(0.25, 0.8, length(fwidth(gp)));
+    float gran = close > 0.0 ? (0.5 - cells(gp, uClock * 0.25)) * close : 0.0;
+    vec3 c = albedo * (0.82 + 0.36 * n) * (1.0 + 0.9 * gran);
+    c *= (0.34 + 0.66 * sqrt(mu)) * vec3(1.0, 0.86 + 0.14 * mu, 0.7 + 0.3 * mu);
+    // Toward yellow in the middle, by shifting the hue rather than adding
+    // white, so it never goes pink.
+    float heat = smoothstep(0.45, 1.0, mu);
+    c.g += c.r * 0.18 * heat;
+    c.b += c.r * 0.03 * heat;
+    disc = encode(c * 1.3);
+  } else if (uShade == 1) {
+    // The Moon: dust, which throws light straight back, so a full Moon is a
+    // flat disc rather than a ball.
+    float mu0 = max(cosI, 0.0);
+    lin = albedo * (2.0 * mu0 / (mu0 + cosE + 1e-4)) * shade * SUNLIGHT * 1.1;
+    // Inside the Earth's shadow, only light bent through the Earth's air
+    // arrives, and every sunset on the Earth at once turns it copper.
+    float umbra = pow(1.0 - shade, 3.0);
+    lin += albedo * vec3(0.55, 0.16, 0.06) * 0.42 * umbra * smoothstep(-0.05, 0.2, cosI);
+    // Earthshine on the night side.
+    lin += albedo * vec3(0.55, 0.68, 1.0) * uShineK * max(dot(N, uShine), 0.0);
+  } else if (uShade == 2) {
+    // The Earth: land and sea by day, cloud over both, cities by night.
+    float cloud = textureGrad(uClouds, uv, gx, gy).r;
+    vec3 lights = textureGrad(uNight, uv, gx, gy).rgb;
+    float lit = max(cosI, 0.0);
+    float sea = smoothstep(0.015, 0.06, albedo.b - albedo.r) * (1.0 - smoothstep(0.08, 0.2, dot(albedo, vec3(0.33))));
+    vec3 H = normalize(Ls + V);
+    float glint = pow(max(dot(N, H), 0.0), 90.0) * sea * (1.0 - cloud) * 0.9 * smoothstep(0.0, 0.1, cosI);
+    vec3 ground = albedo * lit + vec3(1.0, 0.9, 0.75) * glint;
+    ground = mix(ground, vec3(0.9) * lit, cloud * 0.9);
+    lin = ground * shade * SUNLIGHT;
+    float dark = 1.0 - smoothstep(-0.14, 0.04, cosI);
+    lin += lights * vec3(1.0, 0.76, 0.46) * 1.5 * dark * (1.0 - 0.75 * cloud);
+  } else if (uShade == 3) {
+    // Gas and cloud tops: darker toward the limb.
+    float mu0 = max(cosI, 0.0);
+    lin = albedo * mu0 * (0.68 + 0.32 * cosE) * shade * SUNLIGHT;
+  } else {
+    lin = albedo * max(cosI, 0.0) * shade * SUNLIGHT;
+  }
+
+  // Air. Looking down through it a little of the ground is lost and the
+  // air's own light is added, more the more slanted the look, which is what
+  // makes a limb glow. Off the limb the haze thins with height. Blue where the
+  // Sun is up, red where it is setting, nothing at night.
+  if (uAir.w > 0.0) {
+    vec3 tint = uAir.rgb;
+    float t = 1.0 - exp(-1.3 * uAir.w / max(cosE, 0.012));
+    vec3 sky = mix(DUSK, tint, smoothstep(-0.04, 0.3, cosI)) * smoothstep(-0.16, 0.1, cosI) * shade;
+    lin = mix(lin, sky * 0.85, t);
+    float alt = max(p - 1.0, 0.0) / uAir.w;
+    float haze = max(0.0, (exp(-5.0 * alt) - exp(-5.0)) / (1.0 - exp(-5.0)));
+    vec3 up = q / max(length(q), 1e-6);
+    float c = dot(up, normalize(uSun));
+    glow = mix(DUSK, tint, smoothstep(-0.04, 0.3, c)) * smoothstep(-0.2, 0.12, c) * haze * 0.85 * ahead;
+  }
+
+  vec3 shown = sun ? disc : encode(lin);
+  vec4 res = vec4(shown * cov, cov);
+
+  // Rings: the plane of the equator, from the C ring to the edge of the A.
+  if (uRing.y > 0.0) {
+    float nd = dot(uPole, dl);
+    nd = abs(nd) < 1e-6 ? 1e-6 : nd;
+    float tR = uD * uPole.z / nd;
+    vec3 X = vec3(tR * dl.x, tR * dl.y, -uD * (uPole.x * dl.x + uPole.y * dl.y) / nd);
+    float ru = (length(X) - uRing.x) / (uRing.y - uRing.x);
+    vec4 rs = textureGrad(uRings, vec2(ru, 0.5), vec2(dFdx(ru), 0.0), vec2(dFdy(ru), 0.0));
+    float tHit = dot(P, dl) + uD * dl.z;
+    bool inFront = p2 >= 1.0 || tR < tHit;
+    if (tR > 0.0 && ru > 0.0 && ru < 1.0 && inFront) {
+      vec3 Lr = normalize(uSun - X);
+      // The globe's shadow falls across the rings behind it.
+      float shadow = dot(X, Lr) < 0.0 ? smoothstep(0.96, 1.01, length(cross(X, Lr))) : 1.0;
+      float sunUp = dot(uPole, uSun);
+      bool litFace = sunUp * -uPole.z > 0.0;
+      float elev = abs(dot(uPole, Lr));
+      float lit = litFace ? 0.5 + 0.5 * sqrt(elev) : 0.06 + 0.4 * (1.0 - rs.a);
+      vec3 rc = encode(rs.rgb * lit * shadow * SUNLIGHT);
+      float ra = rs.a * 0.95;
+      res = vec4(rc * ra, ra) + res * (1.0 - ra);
+    }
+  }
+
+  res.rgb += encode(glow) * (1.0 - res.a);
+
+  // Too far to be more than a point: a point, in the colour it shows.
+  float ang = asin(clamp(length(dl.xy), 0.0, 1.0));
+  float r = ang / uPx;
+  float pt = exp(-(r * r) / (uDotR * uDotR));
+  vec4 point = vec4(uDot * pt, pt);
+  o = mix(res, point, uDotMix);
+}`
+
+/*
+ * The light around the Sun: a soft halo, or a point when the disc is smaller
+ * than a pixel, and the corona when something covers it.
+ */
+const GLOW_FS = `#version 300 es
+precision highp float;
+in vec3 vRay;
+out vec4 o;
+uniform float uAng;
+uniform float uPx;
+uniform float uSeen;
+uniform float uCorona;
+uniform vec3 uCover;
+uniform float uCoverAng;
+void main() {
+  vec3 dl = normalize(vRay);
+  float th = atan(length(dl.xy), dl.z);
+  float x = th / uAng;
+  float px = uAng / uPx;
+  float small = 1.0 - smoothstep(0.8, 3.0, px);
+  float rc = max(uAng * 1.3, 2.4 * uPx);
+  float core = exp(-(th * th) / (rc * rc)) * small;
+  // From the very edge of the limb: a rim of fire hugging it, never more than
+  // a few dozen pixels deep, inside a wide soft halo that goes close up,
+  // where its glare would only wash over the sky.
+  float off = max(small, smoothstep(1.0 - 1.0 / max(px, 1e-3), 1.0 + 1.5 / max(px, 1e-3), x));
+  float rh = max(uAng * 2.2, 12.0 * uPx);
+  float near = 1.0 - smoothstep(0.3, 0.7, uAng);
+  float halo = pow(rh / (th + rh), 2.3) * off * near;
+  float rim = exp(-max(th - uAng, 0.0) / min(0.1 * uAng, 36.0 * uPx)) * off * (1.0 - small);
+  vec3 c = (vec3(1.0, 0.9, 0.7) * core * 1.3 + vec3(1.0, 0.7, 0.36) * halo * 0.5 + vec3(1.0, 0.6, 0.2) * rim * 0.4) * uSeen;
+  // A faint glow spread over hundreds of pixels steps visibly in eight bits: dither it.
+  c += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0 * step(0.002, c.r);
+  float cover = atan(length(cross(dl, uCover)), dot(dl, uCover));
+  float corona = smoothstep(1.0, 1.06, x) * exp(-(x - 1.0) * 1.9) * smoothstep(uCoverAng, uCoverAng * 1.03, cover);
+  c += vec3(0.82, 0.88, 1.0) * corona * uCorona * 0.8;
+  o = vec4(c, 0.0);
+}`
+
+const STARS_VS = `#version 300 es
+layout(location = 1) in vec3 aDir;
+layout(location = 2) in vec4 aLook;
+uniform mat4 uVP;
+uniform float uDpr;
+uniform float uDim;
+out vec4 vLook;
+void main() {
+  gl_Position = uVP * vec4(aDir, 1.0);
+  gl_PointSize = aLook.w * uDpr;
+  vLook = vec4(aLook.rgb * uDim, 1.0);
+}`
+
+const STARS_FS = `#version 300 es
+precision mediump float;
+in vec4 vLook;
+out vec4 o;
+void main() {
+  vec2 c = gl_PointCoord * 2.0 - 1.0;
+  float a = exp(-dot(c, c) * 3.2);
+  o = vec4(vLook.rgb * a, 0.0);
+}`
+
+const ORBIT_VS = `#version 300 es
+layout(location = 3) in vec3 aPos;
+layout(location = 4) in float aAlpha;
+uniform mat4 uVP;
+out float vAlpha;
+void main() {
+  gl_Position = uVP * vec4(aPos, 1.0);
+  vAlpha = aAlpha;
+}`
+
+const ORBIT_FS = `#version 300 es
+precision mediump float;
+in float vAlpha;
+uniform float uInk;
+out vec4 o;
+void main() {
+  float a = vAlpha * uInk;
+  o = vec4(vec3(a), a);
+}`
+
+function compile(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
+  const make = (type: number, src: string): WebGLShader => {
+    const s = gl.createShader(type) as WebGLShader
+    gl.shaderSource(s, src)
+    gl.compileShader(s)
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) ?? 'shader')
+    return s
+  }
+  const p = gl.createProgram() as WebGLProgram
+  gl.attachShader(p, make(gl.VERTEX_SHADER, vs))
+  gl.attachShader(p, make(gl.FRAGMENT_SHADER, fs))
+  gl.linkProgram(p)
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) ?? 'link')
+  return p
+}
+
+type Uniforms = Record<string, WebGLUniformLocation | null>
+
+function uniforms(gl: WebGL2RenderingContext, p: WebGLProgram): Uniforms {
+  const out: Uniforms = {}
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) as number
+  for (let i = 0; i < n; i++) {
+    const info = gl.getActiveUniform(p, i)
+    if (info) out[info.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, info.name)
+  }
+  return out
+}
+
+/** Past this, a body's quad would have to reach behind the eye. */
+const QUAD_MAX = 1.15
+/** The blur of a point, device px. */
+const DOT_R = 1.25
+/** Thousands of km: the unit orbit lines are handed over in. */
+export const ORBIT_UNIT = 1000
+
+export class Renderer {
+  private gl: WebGL2RenderingContext
+  private canvas: HTMLCanvasElement
+  private body: WebGLProgram
+  private glow: WebGLProgram
+  private starsProg: WebGLProgram
+  private orbitProg: WebGLProgram
+  private bu: Uniforms
+  private gu: Uniforms
+  private su: Uniforms
+  private ou: Uniforms
+  private quadVao: WebGLVertexArrayObject
+  private fullVao: WebGLVertexArrayObject
+  private starsVao: WebGLVertexArrayObject
+  private starCount = 0
+  private orbitVao: WebGLVertexArrayObject
+  private orbitPos: WebGLBuffer
+  private orbitAlpha: WebGLBuffer
+  private maps = new Map<string, WebGLTexture>()
+  private dpr = 1
+  private aniso = 0
+
+  constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas
+    const gl = canvas.getContext('webgl2', { alpha: false, premultipliedAlpha: true, antialias: true })
+    if (!gl) throw new Error('WebGL2 is not available')
+    this.gl = gl
+    this.body = compile(gl, BODY_VS, BODY_FS)
+    this.glow = compile(gl, BODY_VS, GLOW_FS)
+    this.starsProg = compile(gl, STARS_VS, STARS_FS)
+    this.orbitProg = compile(gl, ORBIT_VS, ORBIT_FS)
+    this.bu = uniforms(gl, this.body)
+    this.gu = uniforms(gl, this.glow)
+    this.su = uniforms(gl, this.starsProg)
+    this.ou = uniforms(gl, this.orbitProg)
+    const ext = gl.getExtension('EXT_texture_filter_anisotropic')
+    if (ext) this.aniso = Math.min(8, gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number)
+
+    this.quadVao = gl.createVertexArray() as WebGLVertexArrayObject
+    gl.bindVertexArray(this.quadVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+
+    this.fullVao = gl.createVertexArray() as WebGLVertexArrayObject
+    gl.bindVertexArray(this.fullVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+
+    this.starsVao = gl.createVertexArray() as WebGLVertexArrayObject
+
+    this.orbitVao = gl.createVertexArray() as WebGLVertexArrayObject
+    gl.bindVertexArray(this.orbitVao)
+    this.orbitPos = gl.createBuffer() as WebGLBuffer
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.orbitPos)
+    gl.enableVertexAttribArray(3)
+    gl.vertexAttribPointer(3, 3, gl.FLOAT, false, 0, 0)
+    this.orbitAlpha = gl.createBuffer() as WebGLBuffer
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.orbitAlpha)
+    gl.enableVertexAttribArray(4)
+    gl.vertexAttribPointer(4, 1, gl.FLOAT, false, 0, 0)
+    gl.bindVertexArray(null)
+
+    // Until a map arrives, a body is its own colour.
+    this.solid('blank', [128, 128, 128, 255])
+    this.solid('dark', [0, 0, 0, 0])
+  }
+
+  private solid(key: string, rgba: [number, number, number, number]): void {
+    const gl = this.gl
+    const t = gl.createTexture() as WebGLTexture
+    gl.bindTexture(gl.TEXTURE_2D, t)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(rgba))
+    this.maps.set(key, t)
+  }
+
+  /** A map by url. `linear` keeps its values as they are, for masks. */
+  load(key: string, url: string, linear = false, placeholder?: string): Promise<void> {
+    if (placeholder) {
+      const hex = placeholder.replace('#', '')
+      const n = parseInt(hex, 16)
+      this.solid(key, [(n >> 16) & 255, (n >> 8) & 255, n & 255, 255])
+    }
+    const img = new Image()
+    img.src = url
+    return img.decode().then(() => {
+      const gl = this.gl
+      const t = gl.createTexture() as WebGLTexture
+      gl.bindTexture(gl.TEXTURE_2D, t)
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE)
+      gl.texImage2D(gl.TEXTURE_2D, 0, linear ? gl.RGBA8 : gl.SRGB8_ALPHA8, gl.RGBA, gl.UNSIGNED_BYTE, img)
+      gl.generateMipmap(gl.TEXTURE_2D)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, key === 'rings' ? gl.CLAMP_TO_EDGE : gl.REPEAT)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      if (this.aniso > 1) gl.texParameterf(gl.TEXTURE_2D, 0x84fe, this.aniso)
+      const old = this.maps.get(key)
+      if (old) gl.deleteTexture(old)
+      this.maps.set(key, t)
+    })
+  }
+
+  setStars(stars: Stars): void {
+    const gl = this.gl
+    const look = new Float32Array(stars.count * 4)
+    for (let i = 0; i < stars.count; i++) {
+      // Each step of five magnitudes is a hundred times fainter.
+      const bright = Math.max(0, 6.8 - stars.mag[i]) * 1.33
+      const a = Math.min(1, 0.1 + 0.085 * bright)
+      const [r, g, b] = starColour(stars.bv[i])
+      look.set([r * a, g * a, b * a, 2.2 + 0.36 * bright], i * 4)
+    }
+    gl.bindVertexArray(this.starsVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
+    gl.bufferData(gl.ARRAY_BUFFER, stars.dir, gl.STATIC_DRAW)
+    gl.enableVertexAttribArray(1)
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0)
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
+    gl.bufferData(gl.ARRAY_BUFFER, look, gl.STATIC_DRAW)
+    gl.enableVertexAttribArray(2)
+    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0)
+    gl.bindVertexArray(null)
+    this.starCount = stars.count
+  }
+
+  resize(width: number, height: number, dpr: number): void {
+    this.dpr = dpr
+    this.canvas.width = Math.round(width * dpr)
+    this.canvas.height = Math.round(height * dpr)
+  }
+
+  draw(frame: FrameDraw): void {
+    const gl = this.gl
+    const w = this.canvas.width
+    const h = this.canvas.height
+    gl.viewport(0, 0, w, h)
+    gl.clearColor(0.004, 0.005, 0.009, 1)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+
+    const { eye } = frame
+    const aspect = w / h
+    const rot = viewRotation(eye)
+    const ty = Math.tan(eye.fov / 2)
+    const tx = ty * aspect
+    const px = (2 * ty) / h
+
+    // Stars and orbit lines, through one matrix with the eye at the origin.
+    const proj = perspective(eye.fov, aspect, 1e-3, 1e12)
+    const vp = mulRot(proj, rot)
+    if (this.starCount) {
+      gl.useProgram(this.starsProg)
+      gl.uniformMatrix4fv(this.su.uVP, false, vp)
+      gl.uniform1f(this.su.uDpr, this.dpr)
+      gl.uniform1f(this.su.uDim, 1)
+      gl.bindVertexArray(this.starsVao)
+      gl.drawArrays(gl.POINTS, 0, this.starCount)
+    }
+
+    if (frame.orbits.length) {
+      gl.useProgram(this.orbitProg)
+      gl.uniformMatrix4fv(this.ou.uVP, false, vp)
+      gl.bindVertexArray(this.orbitVao)
+      let total = 0
+      for (const o of frame.orbits) total += o.count
+      const pos = new Float32Array(total * 3)
+      const alpha = new Float32Array(total)
+      let at = 0
+      for (const o of frame.orbits) {
+        pos.set(o.points.subarray(0, o.count * 3), at * 3)
+        alpha.set(o.alpha.subarray(0, o.count), at)
+        at += o.count
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.orbitPos)
+      gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STREAM_DRAW)
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.orbitAlpha)
+      gl.bufferData(gl.ARRAY_BUFFER, alpha, gl.STREAM_DRAW)
+      at = 0
+      for (const o of frame.orbits) {
+        gl.uniform1f(this.ou.uInk, o.ink)
+        gl.drawArrays(gl.LINE_STRIP, at, o.count)
+        at += o.count
+      }
+    }
+
+    const bodyProj = perspective(eye.fov, aspect, 1e-3, 100)
+    const frameOf = (rel: Vec3): { D: number; local: Float32Array; u: Vec3; v: Vec3; w: Vec3 } => {
+      const D = len(rel)
+      const wv = scale(rel, 1 / D)
+      const v = across(eye.up, wv, eye.forward)
+      const u = cross(v, wv)
+      // Local to view: the view rotation applied to each axis.
+      const local = new Float32Array(9)
+      const put = (col: number, a: Vec3): void => {
+        local[col * 3] = rot[0] * a[0] + rot[4] * a[1] + rot[8] * a[2]
+        local[col * 3 + 1] = rot[1] * a[0] + rot[5] * a[1] + rot[9] * a[2]
+        local[col * 3 + 2] = rot[2] * a[0] + rot[6] * a[1] + rot[10] * a[2]
+      }
+      put(0, u)
+      put(1, v)
+      put(2, wv)
+      return { D, local, u, v, w: wv }
+    }
+    const inLocal = (a: Vec3, f: { u: Vec3; v: Vec3; w: Vec3 }, s = 1): [number, number, number] => [
+      dot(a, f.u) * s,
+      dot(a, f.v) * s,
+      dot(a, f.w) * s,
+    ]
+    const place = (u: Uniforms, f: { D: number; local: Float32Array }, reach: number): void => {
+      gl.uniformMatrix3fv(u.uLocal, false, f.local)
+      gl.uniformMatrix4fv(u.uProj, false, bodyProj)
+      gl.uniform2f(u.uTan, tx, ty)
+      const bound = f.D > reach * 1.0001 ? Math.asin(reach / f.D) : Math.PI
+      const wide = bound + 8 * px > QUAD_MAX
+      gl.uniform1f(u.uFull, wide ? 1 : 0)
+      gl.uniform1f(u.uExt, Math.tan(Math.min(bound, QUAD_MAX)) * 1.04 + 8 * px)
+      gl.bindVertexArray(wide ? this.fullVao : this.quadVao)
+    }
+    const drawShape = (full: boolean): void => {
+      if (full) gl.drawArrays(gl.TRIANGLES, 0, 3)
+      else gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+    }
+
+    const sunBody = frame.bodies.find((b) => b.id === 'sun')
+    const drawGlow = (b: BodyDraw, seen: number, corona: number): void => {
+      const f = frameOf(b.rel)
+      if (f.D <= b.radius) return
+      const ang = Math.asin(b.radius / f.D)
+      const reachAng = Math.min(Math.PI / 2, 16 * Math.max(ang * 2.2, 12 * px))
+      gl.useProgram(this.glow)
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+      place(this.gu, f, f.D * Math.sin(reachAng))
+      gl.uniform1f(this.gu.uAng, ang)
+      gl.uniform1f(this.gu.uPx, px)
+      gl.uniform1f(this.gu.uSeen, seen)
+      gl.uniform1f(this.gu.uCorona, corona)
+      const c = frame.cover
+      if (c) {
+        gl.uniform3fv(this.gu.uCover, inLocal(norm(c.rel), f))
+        gl.uniform1f(this.gu.uCoverAng, Math.asin(Math.min(1, c.radius / len(c.rel))))
+      } else {
+        gl.uniform3f(this.gu.uCover, 0, 0, -1)
+        gl.uniform1f(this.gu.uCoverAng, 0)
+      }
+      drawShape(full(f.D, f.D * Math.sin(reachAng), px))
+    }
+
+    gl.useProgram(this.body)
+    gl.uniform1i(this.bu.uMap, 0)
+    gl.uniform1i(this.bu.uNight, 1)
+    gl.uniform1i(this.bu.uClouds, 2)
+    gl.uniform1i(this.bu.uRings, 3)
+
+    for (const b of frame.bodies) {
+      const f = frameOf(b.rel)
+      const R = b.radius
+      if (f.D <= R * 1.001) continue
+      const u = this.bu
+      gl.useProgram(this.body)
+      const reach = Math.max(1 + (b.air ? b.air.depth * 1.2 : 0), b.rings ? b.rings.outer / R : 1) * R
+      const angR = Math.asin(R / f.D)
+      const rpx = angR / px
+      // Small bodies are drawn as points, which need room around them.
+      const dotMix = 1 - smoothstep(0.7, 2.2, rpx)
+      const room = Math.max(reach, f.D * Math.sin(Math.min(QUAD_MAX, 6 * DOT_R * this.dpr * px)))
+      place(u, f, room)
+      gl.uniform1f(u.uD, f.D / R)
+      gl.uniform3fv(u.uPole, inLocal(b.axes[2], f))
+      gl.uniform3fv(u.uAxX, inLocal(b.axes[0], f))
+      gl.uniform3fv(u.uAxY, inLocal(b.axes[1], f))
+      gl.uniform1f(u.uK, 1 / (1 - b.flat))
+      gl.uniform3fv(u.uSun, inLocal(b.sun, f, 1 / R))
+      gl.uniform1f(u.uSunR, 695_700 / R)
+      if (b.occ) {
+        gl.uniform3fv(u.uOcc, inLocal(b.occ.rel, f, 1 / R))
+        gl.uniform1f(u.uOccR, b.occ.radius / R)
+      } else gl.uniform1f(u.uOccR, 0)
+      if (b.shine) {
+        gl.uniform3fv(u.uShine, inLocal(b.shine.dir, f))
+        gl.uniform1f(u.uShineK, b.shine.k)
+      } else gl.uniform1f(u.uShineK, 0)
+      gl.uniform1i(u.uShade, SHADE[b.shade])
+      if (b.air) gl.uniform4f(u.uAir, b.air.tint[0], b.air.tint[1], b.air.tint[2], b.air.depth)
+      else gl.uniform4f(u.uAir, 0, 0, 0, 0)
+      if (b.rings) gl.uniform2f(u.uRing, b.rings.inner / R, b.rings.outer / R)
+      else gl.uniform2f(u.uRing, 0, 0)
+      gl.uniform1f(u.uPx, px)
+      gl.uniform3f(u.uDot, b.dot[0], b.dot[1], b.dot[2])
+      gl.uniform1f(u.uDotMix, dotMix)
+      gl.uniform1f(u.uDotR, DOT_R * this.dpr)
+      gl.uniform1f(u.uClock, frame.clock)
+      this.bind(0, b.id)
+      this.bind(1, b.id === 'earth' ? 'night' : 'dark')
+      this.bind(2, b.id === 'earth' ? 'clouds' : 'dark')
+      this.bind(3, b.rings ? 'rings' : 'dark')
+      drawShape(full(f.D, room, px))
+
+      // The Sun's light spills round whatever is behind it, and is covered by
+      // whatever is in front.
+      if (b === sunBody) drawGlow(b, frame.sunSeen, 0)
+    }
+
+    // The corona, over the body that covers the Sun.
+    if (sunBody && frame.cover && frame.sunSeen < 0.08) drawGlow(sunBody, 0, 1 - frame.sunSeen / 0.08)
+    gl.bindVertexArray(null)
+  }
+
+  private bind(unit: number, key: string): void {
+    const gl = this.gl
+    gl.activeTexture(gl.TEXTURE0 + unit)
+    gl.bindTexture(gl.TEXTURE_2D, this.maps.get(key) ?? (this.maps.get('blank') as WebGLTexture))
+  }
+}
+
+function full(D: number, reach: number, px: number): boolean {
+  const bound = D > reach * 1.0001 ? Math.asin(reach / D) : Math.PI
+  return bound + 8 * px > QUAD_MAX
+}
+
+function smoothstep(a: number, b: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+/** Projection after a pure rotation, column-major. */
+function mulRot(p: Float32Array, r: Float32Array): Float32Array {
+  const out = new Float32Array(16)
+  for (let c = 0; c < 4; c++) {
+    for (let row = 0; row < 4; row++) {
+      let s = 0
+      for (let k = 0; k < 4; k++) s += p[k * 4 + row] * r[c * 4 + k]
+      out[c * 4 + row] = s
+    }
+  }
+  return out
+}
+
+/** A star's colour from its B-V index, kept pale: stars look nearly white to the eye. */
+function starColour(bv: number): [number, number, number] {
+  const stops: Array<[number, [number, number, number]]> = [
+    [-0.3, [0.66, 0.76, 1]],
+    [0, [0.84, 0.89, 1]],
+    [0.6, [1, 0.96, 0.88]],
+    [1.2, [1, 0.84, 0.64]],
+    [2, [1, 0.7, 0.45]],
+  ]
+  if (bv <= stops[0][0]) return stops[0][1]
+  for (let i = 1; i < stops.length; i++) {
+    const [b1, c1] = stops[i]
+    const [b0, c0] = stops[i - 1]
+    if (bv <= b1) {
+      const t = (bv - b0) / (b1 - b0)
+      return [c0[0] + (c1[0] - c0[0]) * t, c0[1] + (c1[1] - c0[1]) * t, c0[2] + (c1[2] - c0[2]) * t]
+    }
+  }
+  return stops[stops.length - 1][1]
+}

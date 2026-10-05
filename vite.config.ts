@@ -10,17 +10,19 @@ export default defineConfig({
   // preview` and opening dist/index.html off the filesystem working.
   base: './',
   plugins: [react()],
-  // Two pages, one site: Lightbox at the root and Lattice under lattice/.
+  // Three pages, one site: Lightbox at the root, Lattice under lattice/ and
+  // Solar under solar/.
   build: {
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         lattice: fileURLToPath(new URL('./lattice/index.html', import.meta.url)),
+        solar: fileURLToPath(new URL('./solar/index.html', import.meta.url)),
       },
     },
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'lattice/src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'lattice/src/**/*.test.ts', 'solar/src/**/*.test.ts'],
   },
 })

@@ -72,9 +72,17 @@ More on all of it in [docs/design-notes.md](docs/design-notes.md).
 
 **[Open Lattice](https://mohsenny.github.io/colors/lattice/)**, the sibling instrument: a
 net of space pulled in by a mass, with probes and light moving through it. Same
-surface, same chrome. The two names in the top-left corner cross between them.
+surface, same chrome. The names in the top-left corner cross between the instruments.
 Its source is in [lattice/](lattice/) and what it does and why is in
 [lattice/PRD.md](lattice/PRD.md).
+
+## Solar
+
+**[Open Solar](https://mohsenny.github.io/colors/solar/)**, the third: the Sun, the
+planets and the Moon where they really are, at their true sizes and distances. Become
+any of them to see the others from there, run the clock up to a year a second either
+way, and jump to the next eclipse. Same chrome with the lights out. Its source is in
+[solar/](solar/) and the why is in [solar/PRD.md](solar/PRD.md).
 
 ## Running it locally
 
@@ -86,5 +94,6 @@ npm run dev
 Then open the URL it prints. Other scripts: `npm run build`, `npm test`,
 `npm run lint`, `npm run typecheck`.
 
-React, TypeScript and Vite. No runtime dependencies beyond React itself. Pushing to
-`main` builds and deploys to GitHub Pages.
+React, TypeScript and Vite. No runtime dependencies beyond React itself, except
+Astronomy Engine for Solar's ephemeris. Pushing to `main` builds and deploys to GitHub
+Pages.

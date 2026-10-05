@@ -1,0 +1,580 @@
+/*
+ * The floating chrome, copied from Lattice (which copied it from Lightbox)
+ * with the lb- and lt- names kept so the three can be diffed. Solar's own
+ * additions are sl- and sit at the end: the clock, the speed stepper and the
+ * eclipse drawer.
+ *
+ * The values are the dark side of the same glass: smoked panels, white ink,
+ * washes of white where the light rooms use washes of graphite.
+ */
+
+/* ------------------------------------------------------------------ legend */
+
+.lb-legend {
+  position: fixed;
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.lb-legend-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.lb-legend-gesture {
+  flex: 0 0 auto;
+  width: 98px;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+}
+
+.lb-legend-effect {
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+}
+
+/* -------------------------------------------------------------------- dock */
+
+.lb-dock {
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--lb-hairline, rgba(255, 255, 255, 0.1));
+  border-radius: var(--lb-r-pill, 999px);
+  background-color: var(--lb-panel, rgba(18, 20, 26, 0.6));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+  box-shadow:
+    var(--lb-shadow-float, 0 10px 30px rgba(0, 0, 0, 0.46)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateX(-50%);
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-dock.is-idle {
+  opacity: 0.35;
+}
+
+.lb-dock.is-idle:hover,
+.lb-dock.is-idle:focus-within {
+  opacity: 1;
+}
+
+.lb-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-btn:hover:not(:disabled) {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
+}
+
+.lb-btn:active:not(:disabled) {
+  background: var(--sl-press, rgba(255, 255, 255, 0.11));
+}
+
+.lb-btn:disabled {
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+  opacity: 0.5;
+}
+
+.lb-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.lb-icon.is-flipped {
+  transform: scaleX(-1);
+}
+
+.lb-plus {
+  transition: transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-plus.is-open {
+  transform: rotate(45deg);
+}
+
+.lb-btn-more.is-on {
+  color: var(--lb-ink-strong, #fff);
+  background: var(--sl-on, rgba(255, 255, 255, 0.1));
+}
+
+/* ----------------------------------------------------------- options panel */
+
+.lb-options {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--lb-hairline, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  background-color: var(--lb-panel, rgba(18, 20, 26, 0.6));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+  box-shadow:
+    var(--lb-shadow-float, 0 10px 30px rgba(0, 0, 0, 0.46)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 6px) scale(0.97);
+  transform-origin: bottom center;
+  transition:
+    opacity var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    visibility 0s linear var(--lb-t-grow, 180ms);
+}
+
+.lb-options.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0) scale(1);
+  transition-delay: 0s;
+}
+
+.lb-opt-label {
+  flex: 0 0 auto;
+  min-width: 44px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+}
+
+/* ------------------------------------------------------------- tray card */
+
+.lb-tray {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  z-index: 200;
+}
+
+.lb-tray-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid var(--lb-hairline, rgba(255, 255, 255, 0.1));
+  border-radius: var(--lb-r-chip, 7px);
+  background-color: var(--lb-panel, rgba(18, 20, 26, 0.6));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: blur(12px) saturate(1.04);
+  box-shadow:
+    var(--lb-shadow-soft, 0 6px 18px rgba(0, 0, 0, 0.42)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ---------------------------------------------------------------- sphere */
+
+.lt-sphere {
+  flex: none;
+  display: block;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0) 46%),
+    radial-gradient(circle at 70% 76%, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 62%),
+    var(--lt-body, #8a8a94);
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+}
+
+/* The Sun has no dark side. */
+.lt-sphere.is-star {
+  background: radial-gradient(circle at 50% 50%, #fff6dc 0%, #ffd27a 38%, var(--lt-body, #f4a63a) 100%);
+  box-shadow: 0 0 6px rgba(255, 190, 90, 0.55);
+}
+
+/* ------------------------------------------------------------- body chip */
+
+.lt-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px 0 6px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lt-chip:hover {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
+}
+
+.lt-chip.is-on {
+  color: var(--lb-ink-strong, #fff);
+  background: var(--sl-on, rgba(255, 255, 255, 0.1));
+}
+
+.lt-chip-label {
+  min-width: 52px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------- bodies drawer */
+
+.lt-bodies {
+  left: 0;
+  gap: 1px;
+  padding: 5px;
+  min-width: 220px;
+  transform: translate(0, 6px) scale(0.97);
+  transform-origin: bottom left;
+}
+
+.lt-bodies.is-open {
+  transform: translate(0, 0) scale(1);
+}
+
+.lt-body-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 5px;
+  text-align: left;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lt-body-row:hover {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
+}
+
+.lt-body-row[aria-pressed='true'] {
+  color: var(--lb-ink-strong, #fff);
+  background: var(--sl-on, rgba(255, 255, 255, 0.1));
+}
+
+.lt-body-name {
+  flex: 1 1 auto;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lt-body-kind,
+.lt-body-key {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+}
+
+.lt-body-key {
+  width: 10px;
+  font-family: var(--lb-font-mono, ui-monospace, monospace);
+  letter-spacing: 0;
+  text-align: right;
+}
+
+/* --------------------------------------------------------------- readout */
+
+.lt-readout .lb-tray-list {
+  gap: 2px;
+  padding: 8px 10px 9px;
+  min-width: 196px;
+}
+
+.lt-readout-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lb-ink-strong, #fff);
+}
+
+.lt-readout-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.lt-readout-label {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+}
+
+.lt-readout-value {
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+}
+
+.lt-fail {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+}
+
+/* ================================================================== solar */
+
+/* Where you are, after the name of what you are looking at. */
+.sl-from {
+  margin-left: auto;
+  padding-left: 10px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+}
+
+/* ----------------------------------------------------------------- clock */
+
+/* The clock is the timeline here: it says where in time the sky is. */
+.sl-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0 4px;
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  white-space: nowrap;
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+}
+
+/* Wide enough for the longest date, so the time never shifts as days pass. */
+.sl-clock-day {
+  min-width: 11ch;
+  text-align: right;
+}
+
+.sl-clock-time {
+  min-width: 8ch;
+}
+
+.sl-clock-zone {
+  font-family: var(--lb-font, system-ui, sans-serif);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+}
+
+/* ----------------------------------------------------------------- speed */
+
+.sl-rate {
+  display: flex;
+  align-items: center;
+  padding: 0 1px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.sl-step {
+  width: 22px;
+  height: 22px;
+}
+
+/* Wide enough for "Real time", the longest name, so the arrows hold still. */
+.sl-rate-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 72px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+}
+
+/* Running back: a small left-pointing mark ahead of the speed. */
+.sl-rate-name.is-back::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-right: 5px solid currentColor;
+}
+
+/* --------------------------------------------------------------- eclipses */
+
+.sl-options {
+  gap: 2px;
+  padding: 6px;
+  min-width: 300px;
+}
+
+.sl-next {
+  display: grid;
+  grid-template-columns: 92px auto 1fr;
+  align-items: baseline;
+  gap: 10px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.sl-next > * {
+  align-self: center;
+}
+
+.sl-next:hover:not(:disabled) {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
+}
+
+.sl-next-kind {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.sl-next-when {
+  justify-self: end;
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  white-space: nowrap;
+}
+
+.sl-now {
+  height: 28px;
+  margin-top: 2px;
+  border-radius: 6px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  background: rgba(255, 255, 255, 0.045);
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.sl-now:hover:not(:disabled) {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
+}
+
+.sl-now:disabled {
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+  background: none;
+}
+
+.sl-credit {
+  padding: 6px 8px 2px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+}
+
+/* ------------------------------------------------- small viewports (620px) */
+
+@media (max-width: 619px) {
+  .lb-legend {
+    display: none;
+  }
+
+  .lb-dock {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    gap: 2px;
+  }
+
+  .lt-chip {
+    justify-content: center;
+    width: 26px;
+    padding: 0;
+  }
+
+  .lt-chip-label,
+  .sl-clock-zone {
+    display: none;
+  }
+
+  .sl-clock {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    font-size: 9.5px;
+    line-height: 1.15;
+  }
+
+  .sl-rate-name {
+    min-width: 62px;
+    font-size: 9px;
+    letter-spacing: 0.09em;
+  }
+
+  .lt-readout {
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+
+  .lt-readout .lb-tray-list {
+    min-width: 0;
+  }
+
+  .sl-options {
+    min-width: min(300px, calc(100vw - 24px));
+  }
+}

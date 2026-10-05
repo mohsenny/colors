@@ -1,0 +1,69 @@
+/*
+ * The room is the sky: nothing behind the canvas but black, and nothing on it
+ * but the bodies, the stars and their names.
+ */
+
+.lb-stage {
+  position: fixed;
+  inset: 0;
+  width: 100dvw;
+  height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  margin: 0;
+  background: var(--lb-surface, #030407);
+}
+
+.sl-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.sl-canvas.is-over {
+  cursor: pointer;
+}
+
+.sl-canvas.is-dragging {
+  cursor: grabbing;
+}
+
+/* The names in the sky, set beside each body by the instrument every frame. */
+.sl-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sl-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 12px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.4);
+  opacity: 0;
+  will-change: transform;
+  transition:
+    opacity var(--lb-t-enter, 240ms) var(--lb-ease, ease),
+    color var(--lb-t-quick, 120ms) ease;
+}
+
+.sl-label.is-shown {
+  opacity: 1;
+}
+
+.sl-label.is-look {
+  color: rgba(255, 255, 255, 0.72);
+}

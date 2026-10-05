@@ -1,5 +1,6 @@
 /*
- * The two names in the top-left corner, shared by Lightbox and Lattice.
+ * The three names in the top-left corner, shared by Lightbox, Lattice and
+ * Solar. The two shades are properties so the dark room can turn them white.
  *
  * Big enough to read as the name of the page, small enough to stay type on the
  * lit surface rather than a header. No panel, like the legend in the opposite
@@ -7,7 +8,7 @@
  * is set at display sizes.
  *
  * The view transition name keeps the words still while the rooms crossfade
- * underneath, so only the two shades trade places.
+ * underneath, so only the shades trade places.
  */
 .lb-title {
   position: fixed;
@@ -27,13 +28,13 @@
 }
 
 .lb-title-name {
-  color: rgba(26, 26, 30, 0.26);
+  color: var(--lb-title-ink, rgba(26, 26, 30, 0.26));
   text-decoration: none;
   transition: color var(--lb-t-fade, 320ms) var(--lb-ease, ease);
 }
 
 .lb-title-name[aria-current='page'] {
-  color: rgba(26, 26, 30, 0.78);
+  color: var(--lb-title-ink-current, rgba(26, 26, 30, 0.78));
 }
 
 a.lb-title-name:hover {

@@ -1,14 +1,17 @@
 import type { MouseEvent, ReactElement } from 'react'
 
-type App = 'lightbox' | 'lattice'
+type App = 'lightbox' | 'lattice' | 'solar'
 
 const APPS: ReadonlyArray<{ id: App; name: string }> = [
   { id: 'lightbox', name: 'Lightbox' },
   { id: 'lattice', name: 'Lattice' },
+  { id: 'solar', name: 'Solar' },
 ]
 
-/** Where the other app lives, seen from this one. */
-const HREF: Record<App, string> = { lightbox: '../', lattice: 'lattice/' }
+/** Where another app lives, seen from this one: Lightbox at the root, the others a folder down. */
+function hrefOf(from: App, to: App): string {
+  return (from === 'lightbox' ? '' : '../') + (to === 'lightbox' ? '' : `${to}/`)
+}
 
 /**
  * When the other app is the page just behind or just ahead in this tab's
@@ -39,9 +42,9 @@ function stepAcross(e: MouseEvent<HTMLAnchorElement>): void {
 }
 
 /**
- * The two names in the top-left corner, and the only way across. The one you
- * are in is dark, the other is light, and clicking it goes there. Same weight
- * for both, so the words never move when the shades trade places.
+ * The three names in the top-left corner, and the only way across. The one
+ * you are in is strong, the others are faint, and clicking one goes there.
+ * Same weight for all, so the words never move when the shades trade places.
  */
 export function Title({ active }: { active: App }): ReactElement {
   return (
@@ -52,7 +55,7 @@ export function Title({ active }: { active: App }): ReactElement {
             {app.name}
           </span>
         ) : (
-          <a key={app.id} className="lb-title-name" href={HREF[app.id]} onClick={stepAcross}>
+          <a key={app.id} className="lb-title-name" href={hrefOf(active, app.id)} onClick={stepAcross}>
             {app.name}
           </a>
         ),
