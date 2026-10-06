@@ -19,8 +19,8 @@ export interface BodiesProps {
 
 /**
  * The drawer behind the seat chip: the Sun, the planets and Pluto, Sun
- * outward, the first ten on the number keys, and the moons of Jupiter, Saturn
- * and Pluto under what they go round.
+ * outward, each with its key, and the moons of Jupiter, Saturn and Pluto
+ * under what they go round.
  */
 export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {
   const tab = open ? undefined : -1
@@ -39,7 +39,7 @@ export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {
             <span className="lt-body-name">{b.name}</span>
             <span className="lt-body-kind">{KIND[b.kind]}</span>
             <span className="lt-body-key" aria-hidden="true">
-              {i < 10 ? (i + 1) % 10 : ''}
+              {i === 0 ? 'S' : i % 10}
             </span>
           </button>
           {MOONS.get(b.id)?.length ? (

@@ -37,9 +37,10 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         instrument.now()
       } else if (e.key === 'Escape') {
         instrument.lookHome()
+      } else if (e.key === 's' || e.key === 'S') {
+        instrument.become('sun')
       } else if (/^[0-9]$/.test(e.key)) {
-        const b = KEYED[(Number(e.key) + 9) % 10]
-        if (b) instrument.become(b.id)
+        instrument.become(KEYED[Number(e.key) || 10].id)
       }
     }
     window.addEventListener('keydown', onKey)

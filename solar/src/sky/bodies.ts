@@ -148,7 +148,7 @@ export const BODIES: readonly Body[] = [
   { id: 'charon', name: 'Charon', kind: 'moon', radius: 606, flat: 0, color: '#8f8b88', parent: 'pluto' },
 ]
 
-/** The eleven with a row of their own in the drawer, the first ten on the number keys. The other moons ride under what they go round. */
+/** The eleven with a row of their own in the drawer and a key: the Sun S, then 1 Mercury to 0 Pluto. The other moons ride under what they go round. */
 export const KEYED: readonly Body[] = BODIES.filter((b) => !b.parent || b.parent === 'earth')
 
 const BY_ID = new Map(BODIES.map((b) => [b.id, b]))
