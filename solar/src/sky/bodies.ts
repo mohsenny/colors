@@ -1,10 +1,32 @@
 /*
- * The ten bodies: the Sun, the eight planets and the Moon, at their real
- * sizes. Radii are the IAU 2015 equatorial ones, in km, with the flattening
- * that makes the giants visibly squat.
+ * The Sun, the eight planets, the Moon and the round moons of Jupiter and
+ * Saturn, at their real sizes. Radii are the IAU 2015 equatorial ones for the
+ * Sun and the planets, with the flattening that makes the giants visibly
+ * squat, and mean ones for the moons, in km.
  */
 
-export type BodyId = 'sun' | 'mercury' | 'venus' | 'earth' | 'moon' | 'mars' | 'jupiter' | 'saturn' | 'uranus' | 'neptune'
+export type BodyId =
+  | 'sun'
+  | 'mercury'
+  | 'venus'
+  | 'earth'
+  | 'moon'
+  | 'mars'
+  | 'jupiter'
+  | 'io'
+  | 'europa'
+  | 'ganymede'
+  | 'callisto'
+  | 'saturn'
+  | 'mimas'
+  | 'enceladus'
+  | 'tethys'
+  | 'dione'
+  | 'rhea'
+  | 'titan'
+  | 'iapetus'
+  | 'uranus'
+  | 'neptune'
 
 export type BodyKind = 'star' | 'planet' | 'moon'
 
@@ -20,9 +42,11 @@ export interface Body {
   color: string
   /** How far the haze reaches above the surface, in radii, and its colour by day. */
   air?: { depth: number; tint: readonly [number, number, number] }
+  /** The planet a moon goes round. */
+  parent?: BodyId
 }
 
-/** Sun first, then outward, the Moon after the Earth: the order of the drawer and the number keys. */
+/** Sun first, then outward, each moon after its planet, nearest first. */
 export const BODIES: readonly Body[] = [
   { id: 'sun', name: 'Sun', kind: 'star', radius: 695_700, flat: 0, color: '#f4a63a' },
   { id: 'mercury', name: 'Mercury', kind: 'planet', radius: 2_440.5, flat: 0, color: '#9c948c' },
@@ -44,7 +68,7 @@ export const BODIES: readonly Body[] = [
     color: '#4f7fb8',
     air: { depth: 0.014, tint: [0.32, 0.56, 1] },
   },
-  { id: 'moon', name: 'Moon', kind: 'moon', radius: 1_737.4, flat: 0, color: '#a8a49e' },
+  { id: 'moon', name: 'Moon', kind: 'moon', radius: 1_737.4, flat: 0, color: '#a8a49e', parent: 'earth' },
   {
     id: 'mars',
     name: 'Mars',
@@ -55,7 +79,27 @@ export const BODIES: readonly Body[] = [
     air: { depth: 0.008, tint: [0.95, 0.62, 0.42] },
   },
   { id: 'jupiter', name: 'Jupiter', kind: 'planet', radius: 71_492, flat: 0.06487, color: '#c9a682' },
+  { id: 'io', name: 'Io', kind: 'moon', radius: 1_821.6, flat: 0, color: '#c4a670', parent: 'jupiter' },
+  { id: 'europa', name: 'Europa', kind: 'moon', radius: 1_560.8, flat: 0, color: '#c6bbaf', parent: 'jupiter' },
+  { id: 'ganymede', name: 'Ganymede', kind: 'moon', radius: 2_631.2, flat: 0, color: '#8a8477', parent: 'jupiter' },
+  { id: 'callisto', name: 'Callisto', kind: 'moon', radius: 2_410.3, flat: 0, color: '#615b54', parent: 'jupiter' },
   { id: 'saturn', name: 'Saturn', kind: 'planet', radius: 60_268, flat: 0.09796, color: '#d9c18e' },
+  { id: 'mimas', name: 'Mimas', kind: 'moon', radius: 198.2, flat: 0, color: '#b3b2b0', parent: 'saturn' },
+  { id: 'enceladus', name: 'Enceladus', kind: 'moon', radius: 252.1, flat: 0, color: '#d3d5da', parent: 'saturn' },
+  { id: 'tethys', name: 'Tethys', kind: 'moon', radius: 531.1, flat: 0, color: '#cbcac8', parent: 'saturn' },
+  { id: 'dione', name: 'Dione', kind: 'moon', radius: 561.4, flat: 0, color: '#b7b6b5', parent: 'saturn' },
+  { id: 'rhea', name: 'Rhea', kind: 'moon', radius: 763.8, flat: 0, color: '#b6b2ab', parent: 'saturn' },
+  {
+    id: 'titan',
+    name: 'Titan',
+    kind: 'moon',
+    radius: 2_574.7,
+    flat: 0,
+    color: '#c99a55',
+    air: { depth: 0.1, tint: [1, 0.66, 0.3] },
+    parent: 'saturn',
+  },
+  { id: 'iapetus', name: 'Iapetus', kind: 'moon', radius: 734.5, flat: 0, color: '#8f7d6c', parent: 'saturn' },
   {
     id: 'uranus',
     name: 'Uranus',
@@ -75,6 +119,9 @@ export const BODIES: readonly Body[] = [
     air: { depth: 0.02, tint: [0.4, 0.55, 1] },
   },
 ]
+
+/** The ten with a row of their own in the drawer and a number key. The moons of the giants ride under their planet. */
+export const KEYED: readonly Body[] = BODIES.filter((b) => !b.parent || b.parent === 'earth')
 
 const BY_ID = new Map(BODIES.map((b) => [b.id, b]))
 

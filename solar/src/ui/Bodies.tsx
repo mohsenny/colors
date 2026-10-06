@@ -1,9 +1,15 @@
+import { Fragment } from 'react'
 import type { ReactElement } from 'react'
-import { BODIES } from '../sky/bodies'
-import type { BodyId, BodyKind } from '../sky/bodies'
+import { BODIES, KEYED } from '../sky/bodies'
+import type { Body, BodyId, BodyKind } from '../sky/bodies'
 import { Sphere } from './Sphere'
 
 const KIND: Record<BodyKind, string> = { star: 'Star', planet: 'Planet', moon: 'Moon' }
+
+/** The moons with no key of their own, under their planet. */
+const MOONS = new Map<BodyId, Body[]>(
+  KEYED.map((b) => [b.id, BODIES.filter((m) => m.parent === b.id && !KEYED.includes(m))]),
+)
 
 export interface BodiesProps {
   open: boolean
@@ -11,26 +17,47 @@ export interface BodiesProps {
   onSelect(id: BodyId): void
 }
 
-/** The drawer behind the seat chip: the ten bodies you can be, Sun outward, on the number keys. */
+/**
+ * The drawer behind the seat chip: the ten bodies you can be, Sun outward, on
+ * the number keys, and the moons of Jupiter and Saturn under their planet.
+ */
 export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {
+  const tab = open ? undefined : -1
   return (
     <div className={`lb-options lt-bodies${open ? ' is-open' : ''}`} aria-hidden={open ? undefined : 'true'}>
-      {BODIES.map((b, i) => (
-        <button
-          key={b.id}
-          type="button"
-          className="lt-body-row"
-          aria-pressed={seat === b.id}
-          tabIndex={open ? undefined : -1}
-          onClick={() => onSelect(b.id)}
-        >
-          <Sphere color={b.color} star={b.kind === 'star'} />
-          <span className="lt-body-name">{b.name}</span>
-          <span className="lt-body-kind">{KIND[b.kind]}</span>
-          <span className="lt-body-key" aria-hidden="true">
-            {(i + 1) % 10}
-          </span>
-        </button>
+      {KEYED.map((b, i) => (
+        <Fragment key={b.id}>
+          <button
+            type="button"
+            className="lt-body-row"
+            aria-pressed={seat === b.id}
+            tabIndex={tab}
+            onClick={() => onSelect(b.id)}
+          >
+            <Sphere color={b.color} star={b.kind === 'star'} />
+            <span className="lt-body-name">{b.name}</span>
+            <span className="lt-body-kind">{KIND[b.kind]}</span>
+            <span className="lt-body-key" aria-hidden="true">
+              {(i + 1) % 10}
+            </span>
+          </button>
+          {MOONS.get(b.id)?.length ? (
+            <div className="lt-moons" role="group" aria-label={`Moons of ${b.name}`}>
+              {MOONS.get(b.id)?.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className="lt-moon"
+                  aria-pressed={seat === m.id}
+                  tabIndex={tab}
+                  onClick={() => onSelect(m.id)}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </Fragment>
       ))}
     </div>
   )

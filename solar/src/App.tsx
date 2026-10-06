@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import type { ReactElement } from 'react'
 import { Instrument } from './app/instrument'
 import type { Snapshot } from './app/instrument'
-import { BODIES } from './sky/bodies'
+import { KEYED } from './sky/bodies'
 import { Dock } from './ui/Dock'
 import { Legend } from './ui/Legend'
 import { Readout } from './ui/Readout'
@@ -34,7 +34,7 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
       } else if (e.key === 'Escape') {
         instrument.lookHome()
       } else if (/^[0-9]$/.test(e.key)) {
-        const b = BODIES[(Number(e.key) + 9) % 10]
+        const b = KEYED[(Number(e.key) + 9) % 10]
         if (b) instrument.become(b.id)
       }
     }
@@ -60,7 +60,7 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
           onScrubEnd: () => instrument.scrubEnd(),
         }}
         onTogglePlay={() => instrument.togglePlay()}
-        onRung={(rung) => instrument.setRung(rung)}
+        onDial={(dial) => instrument.setDial(dial)}
         onBecome={(id) => instrument.become(id)}
         onWatch={(e) => instrument.watch(e)}
         onNow={() => instrument.now()}
@@ -93,7 +93,7 @@ export default function App(): ReactElement {
 
   return (
     <main className="lb-stage">
-      <canvas ref={canvasRef} className="sl-canvas" aria-label="The Sun, the planets and the Moon where they are now, at their true sizes and distances" />
+      <canvas ref={canvasRef} className="sl-canvas" aria-label="The Sun, the planets, the Moon and the moons of Jupiter and Saturn where they are now, at their true sizes and distances" />
       <div ref={labelsRef} className="sl-labels" aria-hidden="true" />
       <Title active="solar" />
       {failed && <p className="lt-fail">This needs WebGL2, which this browser does not offer.</p>}

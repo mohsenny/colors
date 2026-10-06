@@ -7,9 +7,9 @@
  * the CPU in double precision. That is what lets true scale draw at all.
  *
  * The Sun is the only lamp. Night sides are dark, terminators are soft, the
- * Earth's cities come on as its ground turns away from the Sun, and the Earth
- * and the Moon cast real shadows on each other, so an eclipse is drawn by the
- * same light as everything else.
+ * Earth's cities come on as its ground turns away from the Sun, and planets
+ * and moons cast real shadows on each other, so an eclipse, or a moon's
+ * shadow crossing Jupiter, is drawn by the same light as everything else.
  */
 
 import type { Eye } from './camera'
@@ -34,14 +34,18 @@ export interface BodyDraw {
   axes: [Vec3, Vec3, Vec3]
   /** The Sun's centre from this body's, km. */
   sun: Vec3
-  /** The body that can shadow this one, from this one's centre, km. */
-  occ: { rel: Vec3; radius: number } | null
-  /** For the Moon: toward the Earth, and how much of the Earth's day side faces it. */
-  shine: { dir: Vec3; k: number } | null
+  /** The bodies that can shadow this one, from this one's centre, km. Four at most. */
+  occ: Array<{ rel: Vec3; radius: number }>
+  /** In the shadow, light bent through the air of what casts it: the Moon in the Earth's turns copper. */
+  copper: boolean
+  /** For a moon: toward its planet, how bright the planet's day side is on it, and its colour. */
+  shine: { dir: Vec3; k: number; tint: readonly [number, number, number] } | null
   air: { depth: number; tint: readonly [number, number, number] } | null
   rings: { inner: number; outer: number } | null
   /** What the body looks like when it is too far to be more than a point. */
   dot: readonly [number, number, number]
+  /** How much of it shows, 0 to 1: a moon a pixel from its planet folds into the planet's point. */
+  fade: number
 }
 
 export interface OrbitDraw {
@@ -132,10 +136,14 @@ uniform vec3 uAxY;
 uniform float uK;
 uniform vec3 uSun;
 uniform float uSunR;
-uniform vec3 uOcc;
-uniform float uOccR;
+uniform vec3 uOcc[4];
+uniform float uOccR[4];
+uniform int uOccN;
+uniform float uCopper;
 uniform vec3 uShine;
 uniform float uShineK;
+uniform vec3 uShineTint;
+uniform float uFade;
 uniform int uShade;
 uniform vec4 uAir;
 uniform vec2 uRing;
@@ -228,7 +236,10 @@ void main() {
   vec3 Ls = normalize(toSun);
   float cosI = dot(N, Ls);
   float cosE = max(dot(N, V), 0.0);
-  float shade = uOccR > 0.0 ? sunlit(toSun, uSunR, uOcc - P, uOccR) : 1.0;
+  float shade = 1.0;
+  for (int i = 0; i < 4; i++) {
+    if (i < uOccN) shade *= sunlit(toSun, uSunR, uOcc[i] - P, uOccR[i]);
+  }
 
   // The rings' shadow on the globe.
   if (uRing.y > 0.0) {
@@ -264,16 +275,16 @@ void main() {
     c.b += c.r * 0.03 * heat;
     disc = encode(c * 1.3);
   } else if (uShade == 1) {
-    // The Moon: dust, which throws light straight back, so a full Moon is a
-    // flat disc rather than a ball.
+    // A moon: dust and frost, which throw light straight back, so a full
+    // Moon is a flat disc rather than a ball.
     float mu0 = max(cosI, 0.0);
     lin = albedo * (2.0 * mu0 / (mu0 + cosE + 1e-4)) * shade * SUNLIGHT * 1.1;
     // Inside the Earth's shadow, only light bent through the Earth's air
     // arrives, and every sunset on the Earth at once turns it copper.
-    float umbra = pow(1.0 - shade, 3.0);
+    float umbra = pow(1.0 - shade, 3.0) * uCopper;
     lin += albedo * vec3(0.55, 0.16, 0.06) * 0.42 * umbra * smoothstep(-0.05, 0.2, cosI);
-    // Earthshine on the night side.
-    lin += albedo * vec3(0.55, 0.68, 1.0) * uShineK * max(dot(N, uShine), 0.0);
+    // Its planet's light on the night side: earthshine, or Jupiter's.
+    lin += albedo * uShineTint * uShineK * max(dot(N, uShine), 0.0);
   } else if (uShade == 2) {
     // The Earth: land and sea by day, cloud over both, cities by night.
     float cloud = textureGrad(uClouds, uv, gx, gy).r;
@@ -345,7 +356,7 @@ void main() {
   float r = ang / uPx;
   float pt = exp(-(r * r) / (uDotR * uDotR));
   vec4 point = vec4(uDot * pt, pt);
-  o = mix(res, point, uDotMix);
+  o = mix(res, point, uDotMix) * uFade;
 }`
 
 /*
@@ -541,16 +552,19 @@ export class Renderer {
     const t = gl.createTexture() as WebGLTexture
     gl.bindTexture(gl.TEXTURE_2D, t)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(rgba))
+    const old = this.maps.get(key)
+    if (old) gl.deleteTexture(old)
     this.maps.set(key, t)
   }
 
+  /** A body in its own colour, until its map arrives. */
+  paint(key: string, hex: string): void {
+    const n = parseInt(hex.replace('#', ''), 16)
+    this.solid(key, [(n >> 16) & 255, (n >> 8) & 255, n & 255, 255])
+  }
+
   /** A map by url. `linear` keeps its values as they are, for masks. */
-  load(key: string, url: string, linear = false, placeholder?: string): Promise<void> {
-    if (placeholder) {
-      const hex = placeholder.replace('#', '')
-      const n = parseInt(hex, 16)
-      this.solid(key, [(n >> 16) & 255, (n >> 8) & 255, n & 255, 255])
-    }
+  load(key: string, url: string, linear = false): Promise<void> {
     const img = new Image()
     img.src = url
     return img.decode().then(() => {
@@ -743,13 +757,17 @@ export class Renderer {
       gl.uniform1f(u.uK, 1 / (1 - b.flat))
       gl.uniform3fv(u.uSun, inLocal(b.sun, f, 1 / R))
       gl.uniform1f(u.uSunR, 695_700 / R)
-      if (b.occ) {
-        gl.uniform3fv(u.uOcc, inLocal(b.occ.rel, f, 1 / R))
-        gl.uniform1f(u.uOccR, b.occ.radius / R)
-      } else gl.uniform1f(u.uOccR, 0)
+      const occ = b.occ.slice(0, 4)
+      gl.uniform1i(u.uOccN, occ.length)
+      if (occ.length) {
+        gl.uniform3fv(u.uOcc, occ.flatMap((o) => inLocal(o.rel, f, 1 / R)))
+        gl.uniform1fv(u.uOccR, occ.map((o) => o.radius / R))
+      }
+      gl.uniform1f(u.uCopper, b.copper ? 1 : 0)
       if (b.shine) {
         gl.uniform3fv(u.uShine, inLocal(b.shine.dir, f))
         gl.uniform1f(u.uShineK, b.shine.k)
+        gl.uniform3f(u.uShineTint, b.shine.tint[0], b.shine.tint[1], b.shine.tint[2])
       } else gl.uniform1f(u.uShineK, 0)
       gl.uniform1i(u.uShade, SHADE[b.shade])
       if (b.air) gl.uniform4f(u.uAir, b.air.tint[0], b.air.tint[1], b.air.tint[2], b.air.depth)
@@ -761,6 +779,7 @@ export class Renderer {
       gl.uniform1f(u.uDotMix, dotMix)
       gl.uniform1f(u.uDotR, DOT_R * this.dpr)
       gl.uniform1f(u.uClock, frame.clock)
+      gl.uniform1f(u.uFade, b.fade)
       this.bind(0, b.id)
       this.bind(1, b.id === 'earth' ? 'night' : 'dark')
       this.bind(2, b.id === 'earth' ? 'clouds' : 'dark')

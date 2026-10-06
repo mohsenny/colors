@@ -79,10 +79,11 @@ Its source is in [lattice/](lattice/) and what it does and why is in
 ## Solar
 
 **[Open Solar](https://mohsenny.github.io/whoami/solar/)**, the third: the Sun, the
-planets and the Moon where they really are, at their true sizes and distances. Become
-any of them to see the others from there, run the clock up to a year a second either
-way, and jump to the next eclipse. Same chrome with the lights out. Its source is in
-[solar/](solar/) and the why is in [solar/PRD.md](solar/PRD.md).
+planets, the Moon and the moons of Jupiter and Saturn where they really are, at their
+true sizes and distances. Become any of them to see the others from there, run the clock
+up to a year a second either way, and jump to the next eclipse. Same chrome with the
+lights out. Its source is in [solar/](solar/) and the why is in
+[solar/PRD.md](solar/PRD.md).
 
 ## Running it locally
 

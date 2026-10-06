@@ -2,18 +2,51 @@ import { describe, expect, it } from 'vitest'
 import { AU_KM, LIGHT_KM_S } from '../sky/bodies'
 import { covered, distanceLabel, lightLabel, sizeLabel } from './instrument'
 import { TAPE_S, Tape } from './tape'
-import { TOP, clampRung, clockLabel, dayLabel, minuteLabel, rateName, rateOf } from './time'
+import { DEAD, clockLabel, dayLabel, dialOf, minuteLabel, notch, rateOf, speedLabel, speedSaid } from './time'
 
 describe('the clock', () => {
-  it('climbs from real time to a year a second, and runs back the same way', () => {
+  const YEAR = 365.2425 * 86_400
+  const ROUND = [60, 600, 3600, 21_600, 86_400, 604_800, 30.436875 * 86_400, YEAR]
+
+  it('rests on real time in the middle of the knob and climbs either way to a year a second', () => {
     expect(rateOf(0)).toBe(1)
-    expect(rateOf(TOP)).toBe(365.2425 * 86_400)
-    expect(rateOf(-1)).toBe(-60)
-    expect(rateOf(TOP + 3)).toBe(rateOf(TOP))
-    expect(clampRung(-99)).toBe(-TOP)
-    for (let r = 1; r <= TOP; r++) expect(rateOf(r)).toBeGreaterThan(rateOf(r - 1))
-    expect(rateName(0)).toBe('Real time')
-    expect(rateName(-5)).toBe(rateName(5))
+    expect(rateOf(DEAD * 0.9)).toBe(1)
+    expect(rateOf(-DEAD * 0.9)).toBe(1)
+    expect(rateOf(DEAD)).toBeCloseTo(60, 6)
+    expect(rateOf(1) / YEAR).toBeCloseTo(1, 9)
+    expect(rateOf(5)).toBe(rateOf(1))
+    let last = 1
+    for (let d = DEAD; d <= 1; d += 0.01) {
+      expect(rateOf(d)).toBeGreaterThan(last)
+      expect(rateOf(-d)).toBe(-rateOf(d))
+      last = rateOf(d)
+    }
+  })
+
+  it('steps through the round speeds, each way', () => {
+    for (const r of ROUND) expect(rateOf(dialOf(r)) / r).toBeCloseTo(1, 9)
+    const want = [...ROUND.map((r) => -r).reverse(), 1, ...ROUND]
+    let d = -1
+    for (const r of want) {
+      expect(rateOf(d) / r).toBeCloseTo(1, 9)
+      d = notch(d, 1)
+    }
+    expect(notch(1, 1)).toBe(1)
+    expect(notch(-1, -1)).toBe(-1)
+    expect(rateOf(notch(dialOf(5000), -1))).toBeCloseTo(3600, 6)
+    expect(rateOf(notch(dialOf(-5000), 1))).toBeCloseTo(-3600, 6)
+  })
+
+  it('reads the speed in two figures, signed, and carries into the next unit', () => {
+    expect(speedLabel(0)).toBe('Real time')
+    expect(speedLabel(dialOf(600))).toBe('+10 min/s')
+    expect(speedLabel(dialOf(-2.5 * 3600))).toBe('\u22122.5 hr/s')
+    expect(speedLabel(dialOf(3590))).toBe('+1 hr/s')
+    expect(speedLabel(dialOf(23.9 * 3600))).toBe('+1 day/s')
+    expect(speedLabel(-1)).toBe('\u22121 yr/s')
+    expect(speedSaid(0)).toBe('Real time')
+    expect(speedSaid(dialOf(-86_400))).toBe('1 day a second, backward')
+    expect(speedSaid(dialOf(2.5 * 86_400))).toBe('2.5 days a second')
   })
 
   it('reads in UTC', () => {

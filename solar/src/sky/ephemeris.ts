@@ -1,19 +1,23 @@
 /*
  * Where everything is, and which way it is turned, at any moment. Positions
- * come from Astronomy Engine (VSOP87 for the planets, ELP for the Moon,
- * checked against JPL Horizons to under an arcminute) and the turn of each
- * body from the IAU's rotational elements, so the right face of the Earth is
- * in daylight and the Moon shows the side it really shows.
+ * come from Astronomy Engine (VSOP87 for the planets, ELP for the Moon, L1.2
+ * for the moons of Jupiter) and from Meeus for the moons of Saturn, all
+ * checked against JPL Horizons. The turn of each planet and of the Moon is
+ * the IAU's, so the right face of the Earth is in daylight and the Moon shows
+ * the side it really shows; the moons of the giants keep one face to their
+ * planet, as they do.
  *
  * The frame is the ecliptic of J2000 with the Sun at the middle and km as the
  * unit: x toward the March equinox, z toward ecliptic north, so the plane the
  * planets keep to is the floor.
  */
 
-import { Body as AE, GeoMoon, HelioVector, MakeTime, RotationAxis } from 'astronomy-engine'
+import { Body as AE, GeoMoon, HelioVector, JupiterMoons, MakeTime, RotationAxis } from 'astronomy-engine'
 import type { AstroTime } from 'astronomy-engine'
-import { AU_KM, BODIES } from './bodies'
+import { AU_KM, BODIES, bodyById } from './bodies'
 import type { BodyId } from './bodies'
+import { saturnMoon } from './saturn'
+import type { SaturnMoon } from './saturn'
 
 export type Vec3 = [number, number, number]
 
@@ -27,7 +31,8 @@ export function toEcliptic(x: number, y: number, z: number): Vec3 {
   return [x, CE * y + SE * z, -SE * y + CE * z]
 }
 
-const ENGINE: Record<BodyId, AE> = {
+/** The Sun, the planets and the Moon, which Astronomy Engine knows the turn of too. */
+const ENGINE: Partial<Record<BodyId, AE>> = {
   sun: AE.Sun,
   mercury: AE.Mercury,
   venus: AE.Venus,
@@ -59,20 +64,71 @@ function km(v: { x: number; y: number; z: number }): Vec3 {
   return toEcliptic(v.x * AU_KM, v.y * AU_KM, v.z * AU_KM)
 }
 
+type Galilean = 'io' | 'europa' | 'ganymede' | 'callisto'
+
+/** Julian day of the J2000 epoch, which Astronomy Engine counts its days from. */
+const J2000 = 2451545
+
+/** Saturn's radius as the theory of its moons counts it, km: fitted against JPL Horizons. */
+const SATURN_UNIT = 60_434
+
+/**
+ * The ecliptic and equinox of B1950, which the moons of Saturn are worked out
+ * on, to J2000's: onto the old equator, through fifty years of precession
+ * (Lieske 1976), and off the new equator. Kept as its three columns.
+ */
+const FROM_B1950: number[] = (() => {
+  const arcsec = Math.PI / 648_000
+  const [ca, sa] = [Math.cos(1152.8425 * arcsec), Math.sin(1152.8425 * arcsec)]
+  const [cb, sb] = [Math.cos(1153.0407 * arcsec), Math.sin(1153.0407 * arcsec)]
+  const [ct, st] = [Math.cos(1002.2611 * arcsec), Math.sin(1002.2611 * arcsec)]
+  const e = (23.4457889 * Math.PI) / 180
+  const out: number[] = []
+  for (const [x, y0, z0] of [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ]) {
+    const y = Math.cos(e) * y0 - Math.sin(e) * z0
+    const z = Math.sin(e) * y0 + Math.cos(e) * z0
+    out.push(
+      ...toEcliptic(
+        (ca * ct * cb - sa * sb) * x - (sa * ct * cb + ca * sb) * y - st * cb * z,
+        (ca * ct * sb + sa * cb) * x - (sa * ct * sb - ca * cb) * y - st * sb * z,
+        ca * st * x - sa * st * y + ct * z,
+      ),
+    )
+  }
+  return out
+})()
+
+/** A moon of Saturn from Saturn's centre, km, at a Julian ephemeris day. */
+function fromSaturn(id: SaturnMoon, jde: number): Vec3 {
+  const [x, y, z] = saturnMoon(id, jde)
+  const m = FROM_B1950
+  return [
+    (m[0] * x + m[3] * y + m[6] * z) * SATURN_UNIT,
+    (m[1] * x + m[4] * y + m[7] * z) * SATURN_UNIT,
+    (m[2] * x + m[5] * y + m[8] * z) * SATURN_UNIT,
+  ]
+}
+
+/** A moon from its planet's centre, km. */
+function fromPlanet(id: BodyId, time: AstroTime): Vec3 {
+  const parent = bodyById(id)?.parent
+  if (parent === 'jupiter') return km(JupiterMoons(time)[id as Galilean])
+  if (parent === 'saturn') return fromSaturn(id as SaturnMoon, time.tt + J2000)
+  return km(GeoMoon(time))
+}
+
 /** Centre of a body, km from the Sun's. */
 export function centreOf(id: BodyId, time: AstroTime): Vec3 {
   if (id === 'sun') return [0, 0, 0]
-  if (id === 'moon') {
-    const e = km(HelioVector(AE.Earth, time))
-    const m = km(GeoMoon(time))
-    return [e[0] + m[0], e[1] + m[1], e[2] + m[2]]
-  }
-  return km(HelioVector(ENGINE[id], time))
-}
-
-/** The Moon from the Earth's centre, km. */
-export function moonFromEarth(ms: number): Vec3 {
-  return km(GeoMoon(MakeTime(new Date(ms))))
+  const parent = bodyById(id)?.parent
+  if (!parent) return km(HelioVector(ENGINE[id] as AE, time))
+  const p = centreOf(parent, time)
+  const m = fromPlanet(id, time)
+  return [p[0] + m[0], p[1] + m[1], p[2] + m[2]]
 }
 
 /**
@@ -81,7 +137,7 @@ export function moonFromEarth(ms: number): Vec3 {
  * defines it.
  */
 function axesOf(id: BodyId, time: AstroTime): [Vec3, Vec3, Vec3] {
-  const a = RotationAxis(ENGINE[id], time)
+  const a = RotationAxis(ENGINE[id] as AE, time)
   const n = a.north
   // The ascending node of the body's equator on the J2000 equator: z cross pole.
   const h = Math.hypot(n.x, n.y) || 1
@@ -95,20 +151,48 @@ function axesOf(id: BodyId, time: AstroTime): [Vec3, Vec3, Vec3] {
   return [toEcliptic(x[0], x[1], x[2]), toEcliptic(y[0], y[1], y[2]), toEcliptic(n.x, n.y, n.z)]
 }
 
+/**
+ * The axes of a moon that keeps one face to its planet: the prime meridian
+ * under the planet, the pole square to the orbit. `at` is from the planet and
+ * `way` the way the moon is going.
+ */
+function locked(at: Vec3, way: Vec3): [Vec3, Vec3, Vec3] {
+  const r = Math.hypot(at[0], at[1], at[2])
+  const x: Vec3 = [-at[0] / r, -at[1] / r, -at[2] / r]
+  const n: Vec3 = [at[1] * way[2] - at[2] * way[1], at[2] * way[0] - at[0] * way[2], at[0] * way[1] - at[1] * way[0]]
+  const l = Math.hypot(n[0], n[1], n[2])
+  const z: Vec3 = [n[0] / l, n[1] / l, n[2] / l]
+  return [x, [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]], z]
+}
+
 /** Every body at `ms`, a UTC time in milliseconds. */
 export function posesAt(ms: number): Poses {
   const time = MakeTime(new Date(ms))
-  const earth = km(HelioVector(AE.Earth, time))
+  const jde = time.tt + J2000
+  const jupiter = JupiterMoons(time)
   const out = {} as Poses
   for (const b of BODIES) {
-    let at: Vec3
-    if (b.id === 'earth') at = earth
-    else if (b.id === 'moon') {
-      const m = km(GeoMoon(time))
-      at = [earth[0] + m[0], earth[1] + m[1], earth[2] + m[2]]
-    } else at = centreOf(b.id, time)
-    const [x, y, z] = axesOf(b.id, time)
-    out[b.id] = { at, x, y, z }
+    if (!b.parent) {
+      const [x, y, z] = axesOf(b.id, time)
+      out[b.id] = { at: centreOf(b.id, time), x, y, z }
+      continue
+    }
+    let m: Vec3
+    let axes: [Vec3, Vec3, Vec3]
+    if (b.parent === 'jupiter') {
+      const s = jupiter[b.id as Galilean]
+      m = km(s)
+      axes = locked(m, toEcliptic(s.vx, s.vy, s.vz))
+    } else if (b.parent === 'saturn') {
+      m = fromSaturn(b.id as SaturnMoon, jde)
+      const next = fromSaturn(b.id as SaturnMoon, jde + 1e-3)
+      axes = locked(m, [next[0] - m[0], next[1] - m[1], next[2] - m[2]])
+    } else {
+      m = km(GeoMoon(time))
+      axes = axesOf(b.id, time)
+    }
+    const p = out[b.parent].at
+    out[b.id] = { at: [p[0] + m[0], p[1] + m[1], p[2] + m[2]], x: axes[0], y: axes[1], z: axes[2] }
   }
   return out
 }
@@ -124,20 +208,31 @@ export const PERIOD: Partial<Record<BodyId, number>> = {
   saturn: 10759.22,
   uranus: 30688.5,
   neptune: 60182,
+  io: 1.769138,
+  europa: 3.551181,
+  ganymede: 7.154553,
+  callisto: 16.689018,
+  mimas: 0.942422,
+  enceladus: 1.370218,
+  tethys: 1.887802,
+  dione: 2.736915,
+  rhea: 4.518212,
+  titan: 15.945421,
+  iapetus: 79.3215,
 }
 
 /**
- * One lap of an orbit, centred on `ms`: km from the Sun's centre, or for the
- * Moon from the Earth's. The planets barely change lap to lap, so this is
+ * One lap of an orbit, centred on `ms`: km from the Sun's centre, or for a
+ * moon from its planet's. The planets barely change lap to lap, so this is
  * worked out now and then rather than every frame.
  */
 export function orbitOf(id: BodyId, ms: number, samples: number): Float64Array {
   const days = PERIOD[id] ?? 0
+  const moon = bodyById(id)?.parent !== undefined
   const out = new Float64Array(samples * 3)
   for (let i = 0; i < samples; i++) {
-    const t = ms + ((i / (samples - 1) - 0.5) * days * 86_400_000)
-    const p = id === 'moon' ? moonFromEarth(t) : centreOf(id, MakeTime(new Date(t)))
-    out.set(p, i * 3)
+    const time = MakeTime(new Date(ms + (i / (samples - 1) - 0.5) * days * 86_400_000))
+    out.set(moon ? fromPlanet(id, time) : centreOf(id, time), i * 3)
   }
   return out
 }

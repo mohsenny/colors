@@ -5,11 +5,11 @@
  * names in the sky are written straight into the page every frame.
  */
 
-import { AU_KM, BODIES, LIGHT_KM_S, RINGS, bodyById } from '../sky/bodies'
+import { AU_KM, BODIES, KEYED, LIGHT_KM_S, RINGS, bodyById } from '../sky/bodies'
 import type { Body, BodyId } from '../sky/bodies'
 import { nextEclipse } from '../sky/eclipses'
 import type { Eclipse } from '../sky/eclipses'
-import { TIME_MAX, TIME_MIN, orbitOf, posesAt } from '../sky/ephemeris'
+import { PERIOD, TIME_MAX, TIME_MIN, orbitOf, posesAt } from '../sky/ephemeris'
 import type { Poses, Vec3 } from '../sky/ephemeris'
 import { unpackStars } from '../sky/stars'
 import {
@@ -41,13 +41,12 @@ import { ORBIT_UNIT, Renderer } from '../render/gl'
 import type { BodyDraw, OrbitDraw, Shade } from '../render/gl'
 import { EARTH_CLOUDS, EARTH_NIGHT, SATURN_RING, STARS, SURFACE } from '../render/maps'
 import { Tape } from './tape'
-import { clampRung, clockLabel, dayLabel, rateName, rateOf } from './time'
+import { DEAD, clockLabel, dayLabel, dialOf, notch, rateOf, speedSaid } from './time'
 
 export interface Snapshot {
   playing: boolean
-  rung: number
-  rate: string
-  reverse: boolean
+  /** Where the speed knob is turned, -1 to 1: below 0 the clock runs back, 0 is real time. */
+  dial: number
   /** True when the clock shows the present at real speed. */
   live: boolean
   seat: Body
@@ -68,20 +67,33 @@ export interface Snapshot {
   moment: string
 }
 
-const SHADES: Record<BodyId, Shade> = {
+/** Every moon is lit as the Moon is, but Titan, which is all haze. */
+const SHADES: Partial<Record<BodyId, Shade>> = {
   sun: 'sun',
   mercury: 'rock',
   venus: 'gas',
   earth: 'earth',
-  moon: 'moon',
   mars: 'rock',
   jupiter: 'gas',
   saturn: 'gas',
+  titan: 'gas',
   uranus: 'gas',
   neptune: 'gas',
 }
 
+/** The colour of a planet's light on its moons' night sides. */
+const SHINE: Partial<Record<BodyId, readonly [number, number, number]>> = {
+  earth: [0.55, 0.68, 1],
+  jupiter: [1, 0.84, 0.64],
+  saturn: [1, 0.9, 0.68],
+}
+
+/** Each planet's moons, nearest first. */
+const MOONS = new Map<BodyId, Body[]>()
+for (const b of BODIES) if (b.parent) MOONS.set(b.parent, [...(MOONS.get(b.parent) ?? []), b])
+
 const YEAR_MS = 365.2425 * 86_400_000
+const ORIGIN: Vec3 = [0, 0, 0]
 
 /** Points a lap. */
 const LAP = 361
@@ -177,7 +189,7 @@ export class Instrument {
   private dirty = true
 
   private ms = Date.now()
-  private rung = 0
+  private dial = 0
   private playing = true
   private seat: BodyId = 'earth'
   private look: BodyId = 'moon'
@@ -195,8 +207,12 @@ export class Instrument {
   private width = 1
   private height = 1
   private orbits: Orbit[] = []
-  private moonOrbit: Orbit | null = null
-  private moonOrbitAt = 0
+  /** The moons' paths round their planets, worked out once there is a line to draw. */
+  private locals = new Map<BodyId, Orbit>()
+  private localAt = 0
+  /** How much of each moon shows, 0 to 1. */
+  private fades = new Map<BodyId, number>()
+  private mapped = new Set<BodyId>()
   private labelEls = new Map<BodyId, HTMLSpanElement>()
   private labelWidths = new Map<BodyId, number>()
   private placed = new Map<BodyId, { dir: Vec3; ang: number; d: number; x: number; y: number; r: number; shown: boolean }>()
@@ -233,8 +249,7 @@ export class Instrument {
       this.labelEls.set(b.id, el)
     }
     for (const b of BODIES) {
-      if (b.id === 'sun' || b.id === 'moon') continue
-      this.orbits.push({ id: b.id, centre: this.ms, points: orbitOf(b.id, this.ms, LAP) })
+      if (b.kind === 'planet') this.orbits.push({ id: b.id, centre: this.ms, points: orbitOf(b.id, this.ms, LAP) })
     }
     this.snap = this.makeSnapshot()
     this.observer = new ResizeObserver(() => this.resize())
@@ -243,8 +258,10 @@ export class Instrument {
     this.loadMaps()
   }
 
+  /** Every body in its own colour at once. The giants' moons fetch their maps once they are near enough to show them. */
   private loadMaps(): void {
-    for (const b of BODIES) void this.renderer.load(b.id, SURFACE[b.id], false, b.color).catch(() => undefined)
+    for (const b of BODIES) this.renderer.paint(b.id, b.color)
+    for (const b of KEYED) this.loadMap(b.id)
     void this.renderer.load('night', EARTH_NIGHT).catch(() => undefined)
     void this.renderer.load('clouds', EARTH_CLOUDS, true).catch(() => undefined)
     void this.renderer.load('rings', SATURN_RING).catch(() => undefined)
@@ -252,6 +269,13 @@ export class Instrument {
       .then((r) => r.arrayBuffer())
       .then((buf) => this.renderer.setStars(unpackStars(buf)))
       .catch(() => undefined)
+  }
+
+  private loadMap(id: BodyId): void {
+    const url = SURFACE[id]
+    if (!url || this.mapped.has(id)) return
+    this.mapped.add(id)
+    void this.renderer.load(id, url).catch(() => undefined)
   }
 
   // ------------------------------------------------------------ store
@@ -312,7 +336,7 @@ export class Instrument {
 
   private step(dt: number, now: number): void {
     if (this.playing) {
-      const next = this.ms + dt * 1000 * rateOf(this.rung)
+      const next = this.ms + dt * 1000 * rateOf(this.dial)
       if (next <= TIME_MIN || next >= TIME_MAX) {
         this.ms = Math.max(TIME_MIN, Math.min(TIME_MAX, next))
         this.playing = false
@@ -321,9 +345,10 @@ export class Instrument {
       this.tape.record(dt, this.ms)
     }
     this.poses = posesAt(this.ms)
-    this.refreshOrbits(now)
     this.eye = this.flownEye(now)
     this.frame = frameOf(this.eye, this.width / this.height)
+    this.mergeMoons()
+    this.refreshOrbits(now)
     this.renderer.draw({
       eye: this.eye,
       bodies: this.bodyDraws(),
@@ -406,13 +431,22 @@ export class Instrument {
     }
   }
 
-  /** A lens that shows the target an eighth of the frame across, as far as the lens goes. */
+  /**
+   * A lens that shows the target an eighth of the frame across, as far as the
+   * lens goes. A planet is framed wider when it needs to be for the moons that
+   * go round it within three weeks to fit across as well.
+   */
   private zoomFor(seat: BodyId, look: BodyId): number {
     if (seat === look) return 0
     const d = len(sub(this.at(look), this.at(seat)))
-    const across = 2 * Math.asin(Math.min(1, this.radius(look) / d))
-    const fov = Math.max(FOV_MIN, Math.min(FOV, across * 8))
-    return Math.log(fov / FOV)
+    let fov = 16 * Math.asin(Math.min(1, this.radius(look) / d))
+    for (const m of MOONS.get(look) ?? []) {
+      const r = len(sub(this.at(m.id), this.at(look)))
+      if ((PERIOD[m.id] ?? Infinity) < 21 && r < d / 4) {
+        fov = Math.max(fov, 2 * Math.atan((1.1 * r) / (d * (this.width / this.height))))
+      }
+    }
+    return Math.log(Math.max(FOV_MIN, Math.min(FOV, fov)) / FOV)
   }
 
   /** Turn to look at a body from where you sit. Looking at the seat itself circles it. */
@@ -495,28 +529,29 @@ export class Instrument {
     this.emit(true)
   }
 
-  setRung(rung: number): void {
-    const r = clampRung(rung)
-    if (r === this.rung) return
-    this.rung = r
+  /** Turning the speed knob. Its own turns are not announced: as a slider it says what it is at. */
+  setDial(dial: number, say = false): void {
+    const d = Math.abs(dial) < DEAD ? 0 : Math.max(-1, Math.min(1, dial))
+    if (d === this.dial) return
+    this.dial = d
     this.play()
-    this.touch(`${rateName(r)}${r < 0 ? ', backward' : ''}`)
+    this.touch(say ? speedSaid(d) : undefined)
     this.emit(true)
   }
 
   faster(): void {
-    this.setRung(this.rung + 1)
+    this.setDial(notch(this.dial, 1), true)
   }
 
   slower(): void {
-    this.setRung(this.rung - 1)
+    this.setDial(notch(this.dial, -1), true)
   }
 
   now(): void {
     this.branch()
     this.ms = Date.now()
     this.tape.jump(this.ms)
-    this.rung = 0
+    this.dial = 0
     this.playing = true
     this.touch('Now, at real speed')
     this.emit(true)
@@ -529,7 +564,7 @@ export class Instrument {
     this.ms = e.peak - (solar ? 90 : 120) * 60_000
     this.tape.jump(this.ms)
     this.tape.know(e.peak)
-    this.rung = 2
+    this.dial = dialOf(10 * 60)
     this.playing = true
     this.poses = posesAt(this.ms)
     this.fly(1600)
@@ -599,14 +634,15 @@ export class Instrument {
       this.yaw -= dx * k
       this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch + dy * k))
     } else {
-      // Grabbing the sky: the eye swings round the seat, which stays under
-      // you, and the sky moves with the hand. Wide, a drag across the screen
-      // turns you more than half way round; through a telescope the sky moves
-      // at most ten times as fast as the hand, so it can still be aimed.
+      // Turning on the spot: the eye swings round the seat, which stays under
+      // you. Across, the sky moves with the hand; up and down you look the
+      // way you drag, as a camera tilts. Wide, a drag across the screen turns
+      // you more than half way round; through a telescope the sky moves at
+      // most ten times as fast as the hand, so it can still be aimed.
       const k = Math.min(0.003, (20 * Math.tan(this.eye.fov / 2)) / this.height)
       const lat0 = Math.asin(norm(sub(this.at(this.look), this.at(this.seat)))[2])
       this.swing += dx * k
-      this.rise = Math.max(-RISE_MAX - lat0, Math.min(RISE_MAX - lat0, this.rise + dy * k))
+      this.rise = Math.max(-RISE_MAX - lat0, Math.min(RISE_MAX - lat0, this.rise - dy * k))
     }
   }
 
@@ -672,6 +708,7 @@ export class Instrument {
     let best: BodyId | null = null
     let bestScore = Infinity
     for (const [id, p] of this.placed) {
+      if ((this.fades.get(id) ?? 1) < 0.5) continue
       const el = this.labelEls.get(id)
       const lx = p.x + Math.max(p.r, 2) + 7
       const onLabel = p.shown && el !== undefined && x >= lx - 4 && x <= lx + el.offsetWidth + 4 && Math.abs(y - p.y) <= 10
@@ -691,25 +728,56 @@ export class Instrument {
 
   // ------------------------------------------------------------ drawing
 
+  /** Moons too near their planet on screen to tell apart from it fold into its point. Never the seat or the target. */
+  private mergeMoons(): void {
+    const eye = this.eye.at
+    const px = (2 * Math.tan(this.eye.fov / 2)) / this.height
+    for (const b of BODIES) {
+      if (!b.parent) continue
+      const p = sub(this.at(b.parent), eye)
+      const big = Math.asin(Math.min(1, this.radius(b.parent) / len(p))) / px
+      const apart = angle(p, sub(this.at(b.id), eye)) / px
+      const keep = b.id === this.seat || b.id === this.look
+      this.fades.set(b.id, keep ? 1 : Math.max(smoothstep(2, 6, big), smoothstep(2.5, 6, apart)))
+    }
+  }
+
+  /**
+   * What can throw a shadow on a body: a moon's planet, or a planet's moons on
+   * its sunward side, the four nearest the line to the Sun.
+   */
+  private shadowers(b: Body): BodyDraw['occ'] {
+    const at = this.at(b.id)
+    if (b.parent) {
+      // The Earth's shadow is a little wider than the Earth: its air blocks light too.
+      const k = b.parent === 'earth' ? 1.02 : 1
+      return [{ rel: sub(this.at(b.parent), at), radius: this.radius(b.parent) * k }]
+    }
+    const toSun = scale(at, -1)
+    return (MOONS.get(b.id) ?? [])
+      .map((m) => ({ rel: sub(this.at(m.id), at), radius: m.radius }))
+      .filter((o) => dot(o.rel, toSun) > 0)
+      .sort((p, q) => angle(p.rel, toSun) - angle(q.rel, toSun))
+      .slice(0, 4)
+  }
+
   private bodyDraws(): BodyDraw[] {
     const eye = this.eye.at
-    const P = this.poses
-    const earth = P.earth.at
-    const moon = P.moon.at
     const out: BodyDraw[] = []
     for (const b of BODIES) {
-      const pose = P[b.id]
+      const pose = this.poses[b.id]
       const rel = sub(pose.at, eye)
       const sun = scale(pose.at, -1)
-      let occ: BodyDraw['occ'] = null
       let shine: BodyDraw['shine'] = null
-      if (b.id === 'earth') occ = { rel: sub(moon, earth), radius: this.radius('moon') }
-      if (b.id === 'moon') {
-        // The Earth's shadow is a little wider than the Earth: its air blocks light too.
-        occ = { rel: sub(earth, moon), radius: this.radius('earth') * 1.02 }
-        const toEarth = norm(sub(earth, moon))
-        const lit = (1 + dot(norm(scale(earth, -1)), scale(toEarth, -1))) / 2
-        shine = { dir: toEarth, k: 0.05 * lit }
+      if (b.parent) {
+        // The planet's day side lights the moon's night side: as brightly as
+        // the Moon's earthshine is drawn, or more close under a giant.
+        const p = this.at(b.parent)
+        const d = len(sub(p, pose.at))
+        const toPlanet = scale(sub(p, pose.at), 1 / d)
+        const lit = (1 + dot(norm(scale(p, -1)), scale(toPlanet, -1))) / 2
+        const k = Math.max(0.05, 0.5 * (this.radius(b.parent) / d) ** 2) * lit
+        shine = { dir: toPlanet, k, tint: SHINE[b.parent] ?? [1, 1, 1] }
       }
       // As a point: its colour, dimmed by how little of its day side faces the eye.
       let dot3: readonly [number, number, number]
@@ -724,17 +792,19 @@ export class Instrument {
       }
       out.push({
         id: b.id,
-        shade: SHADES[b.id],
+        shade: SHADES[b.id] ?? 'moon',
         rel,
         radius: b.radius,
         flat: b.flat,
         axes: [pose.x, pose.y, pose.z],
         sun,
-        occ,
+        occ: this.shadowers(b),
+        copper: b.id === 'moon',
         shine,
         air: b.air ?? null,
         rings: b.id === 'saturn' ? RINGS : null,
         dot: dot3,
+        fade: this.fades.get(b.id) ?? 1,
       })
     }
     out.sort((a, b) => len(b.rel) - len(a.rel))
@@ -776,26 +846,43 @@ export class Instrument {
         o.points = orbitOf(o.id, this.ms, LAP)
       }
     }
-    // The Moon's is pulled about by the Sun, so it is redrawn as it goes.
-    const m = this.moonOrbit
-    const stale = !m || Math.abs(this.ms - m.centre) > 6 * 3.6e6
-    if (stale && now - this.moonOrbitAt > 200) {
-      this.moonOrbitAt = now
-      this.moonOrbit = { id: 'moon', centre: this.ms, points: orbitOf('moon', this.ms, LAP) }
+    // A moon's is worked out once there is a line to draw, and again a few
+    // laps on. The Moon's is pulled about by the Sun, so it is redone every
+    // few hours of the clock. One a frame, ten a second at most.
+    if (now - this.localAt < 100) return
+    for (const b of BODIES) {
+      if (!b.parent || this.localInk(b) <= 0) continue
+      const o = this.locals.get(b.id)
+      const life = b.id === 'moon' ? 6 * 3.6e6 : 4 * (PERIOD[b.id] ?? 0) * 86_400_000
+      if (o && Math.abs(this.ms - o.centre) <= life) continue
+      this.locals.set(b.id, { id: b.id, centre: this.ms, points: orbitOf(b.id, this.ms, LAP) })
+      this.localAt = now
+      return
     }
+  }
+
+  /**
+   * How strongly a moon's path is drawn: once it is big enough on screen to
+   * be a path, and like the planets' faded through a narrow lens, unless the
+   * whole of it is in view.
+   */
+  private localInk(b: Body): number {
+    const planet = this.at(b.parent as BodyId)
+    const px = (2 * Math.tan(this.eye.fov / 2)) / this.height
+    const r = len(sub(this.at(b.id), planet)) / (len(sub(planet, this.eye.at)) * px)
+    const look = b.id === this.look
+    const wide = smoothstep(0.15, 0.7, this.eye.fov)
+    const whole = 1 - smoothstep(1, 3, r / (Math.max(this.width, this.height) / 2))
+    return (look ? 0.26 : 0.14) * smoothstep(8, 24, r) * Math.max(look ? 0.35 + 0.65 * wide : wide, whole)
   }
 
   private orbitDraws(): OrbitDraw[] {
     const eye = this.eye.at
     const out: OrbitDraw[] = []
-    const lines = [...this.orbits]
-    if (this.moonOrbit) lines.push(this.moonOrbit)
     const wide = smoothstep(0.15, 0.7, this.eye.fov)
-    for (const o of lines) {
-      const moon = o.id === 'moon'
-      const base: Vec3 = moon ? this.at('earth') : [0, 0, 0]
+    const line = (o: Orbit, base: Vec3, ink: number): void => {
       // Fade where the line passes close by the eye: up close it is no longer a path, just a stroke.
-      const near = moon ? 2.5e4 : 4e6
+      const near = base === ORIGIN ? 4e6 : 0.065 * Math.hypot(o.points[0], o.points[1], o.points[2])
       const points = new Float32Array(LAP * 3)
       const alpha = new Float32Array(LAP)
       for (let i = 0; i < LAP; i++) {
@@ -809,10 +896,15 @@ export class Instrument {
         const t = Math.max(0, Math.min(1, (d - near) / (near * 3)))
         alpha[i] = t * t * (3 - 2 * t)
       }
-      // Paths are a map: through a narrow lens they are clutter, so only the
-      // one through what you are looking at stays, and that faintly.
-      const ink = o.id === this.look ? 0.26 * (0.35 + 0.65 * wide) : 0.14 * wide
       out.push({ points, alpha, count: LAP, ink })
+    }
+    // Paths are a map: through a narrow lens they are clutter, so only the
+    // one through what you are looking at stays, and that faintly.
+    for (const o of this.orbits) line(o, ORIGIN, o.id === this.look ? 0.26 * (0.35 + 0.65 * wide) : 0.14 * wide)
+    for (const o of this.locals.values()) {
+      const b = bodyById(o.id) as Body
+      const ink = this.localInk(b)
+      if (ink > 0) line(o, this.at(b.parent as BodyId), ink)
     }
     return out
   }
@@ -831,7 +923,8 @@ export class Instrument {
     for (const disc of discs) {
       const at = project(fr, disc.dir, this.width, this.height)
       const r = disc.ang / pxAngle
-      let shown = at !== null && disc.id !== this.seat && r < 26
+      if (r > 1.5 || disc.id === this.seat || disc.id === this.look) this.loadMap(disc.id)
+      let shown = at !== null && disc.id !== this.seat && r < 26 && (this.fades.get(disc.id) ?? 1) >= 0.5
       if (shown && at) {
         if (at[0] < -40 || at[0] > this.width + 40 || at[1] < -20 || at[1] > this.height + 20) shown = false
         // Hidden behind a nearer body.
@@ -925,10 +1018,8 @@ export class Instrument {
     const { solar, lunar } = this.upcoming()
     return {
       playing: this.playing,
-      rung: this.rung,
-      rate: rateName(this.rung),
-      reverse: this.rung < 0,
-      live: this.rung === 0 && Math.abs(this.ms - Date.now()) < 5000,
+      dial: this.dial,
+      live: this.dial === 0 && Math.abs(this.ms - Date.now()) < 5000,
       seat,
       look,
       readout: rows,

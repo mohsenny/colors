@@ -86,7 +86,7 @@ describe('dragging round the seat', () => {
   const earth: Vec3 = [384_400, 0, 0]
   const px = (2 * Math.tan(FOV / 2)) / H
 
-  it('turns the sky the way the hand moves', () => {
+  it('carries the target a pixel for every pixel turned', () => {
     // Swinging and rising by ten pixels' worth carries the target ten pixels right and down.
     const swung = seatEye(seat, moon, earth, 0, 10 * px, 0)
     const risen = seatEye(seat, moon, earth, 0, 0, 10 * px)

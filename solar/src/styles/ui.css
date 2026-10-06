@@ -1,8 +1,8 @@
 /*
  * The floating chrome, copied from Lattice (which copied it from Lightbox)
  * with the lb- and lt- names kept so the three can be diffed. Solar's own
- * additions are sl- and sit at the end: the clock, the speed, the marks on
- * the tape and the eclipse drawer.
+ * additions are sl- and sit at the end: the clock, the speed knob, the marks
+ * on the tape and the eclipse drawer.
  *
  * The values are the dark side of the same glass: smoked panels, white ink,
  * washes of white where the light rooms use washes of graphite.
@@ -442,7 +442,11 @@
   left: 0;
   gap: 1px;
   padding: 5px;
-  min-width: 220px;
+  width: 240px;
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   transform: translate(0, 6px) scale(0.97);
   transform-origin: bottom left;
 }
@@ -497,6 +501,37 @@
   font-family: var(--lb-font-mono, ui-monospace, monospace);
   letter-spacing: 0;
   text-align: right;
+}
+
+/* The moons of a giant, under it, their names in line with the planets'. */
+.lt-moons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px 2px;
+  padding: 0 0 3px 23px;
+}
+
+.lt-moon {
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lt-moon:hover {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
+}
+
+.lt-moon[aria-pressed='true'] {
+  color: var(--lb-ink-strong, #fff);
+  background: var(--sl-on, rgba(255, 255, 255, 0.1));
 }
 
 /* --------------------------------------------------------------- readout */
@@ -619,76 +654,68 @@
 
 /* ----------------------------------------------------------------- speed */
 
-.sl-rate {
+/* The knob and the speed it is at are one control: drag either, or step them with the arrow keys. */
+.sl-knob {
   display: flex;
   align-items: center;
+  gap: 4px;
   height: 26px;
-  padding: 0 10px;
+  padding: 0 9px 0 0;
   border-radius: var(--lb-r-pill, 999px);
   color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
-  background: rgba(255, 255, 255, 0.045);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
   transition:
     color var(--lb-t-quick, 120ms) ease,
     background-color var(--lb-t-quick, 120ms) ease;
 }
 
-.sl-rate:hover {
+.sl-knob:hover,
+.sl-knob.is-turning {
   color: var(--lb-ink, rgba(255, 255, 255, 0.86));
   background: var(--sl-hover, rgba(255, 255, 255, 0.07));
 }
 
-.sl-rate.is-on {
-  color: var(--lb-ink-strong, #fff);
-  background: var(--sl-on, rgba(255, 255, 255, 0.1));
+.sl-knob.is-turning {
+  cursor: grabbing;
 }
 
-/* Wide enough for "Real time", the longest name, so the dock holds still. */
-.sl-rate-name {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 72px;
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+.sl-knob-dial {
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+
+.sl-knob-track,
+.sl-knob-turn,
+.sl-knob-hand {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.sl-knob-track {
+  stroke: rgba(255, 255, 255, 0.13);
+}
+
+.sl-knob-turn,
+.sl-knob-hand {
+  stroke: currentColor;
+}
+
+.sl-knob-cap {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke: var(--lb-hairline, rgba(255, 255, 255, 0.1));
+}
+
+/* Wide enough for the longest speed, "+2.5 day/s", so the dock holds still as the knob turns. */
+.sl-knob-speed {
+  min-width: 10ch;
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
   white-space: nowrap;
-}
-
-/* Running back: a small left-pointing mark ahead of the speed. */
-.sl-rate-name.is-back::before {
-  content: '';
-  width: 0;
-  height: 0;
-  border-top: 3.5px solid transparent;
-  border-bottom: 3.5px solid transparent;
-  border-right: 5px solid currentColor;
-}
-
-/* The speed drawer sits over the right end of the dock, where its button is. */
-.sl-speed {
-  left: auto;
-  right: 0;
-  gap: 1px;
-  padding: 5px;
-  min-width: 176px;
-  transform: translate(0, 6px) scale(0.97);
-  transform-origin: bottom right;
-}
-
-.sl-speed.is-open {
-  transform: translate(0, 0) scale(1);
-}
-
-.sl-way {
-  margin-bottom: 4px;
-}
-
-.sl-way .lb-seg-btn {
-  flex: 1 1 0;
-  padding-inline: 0;
-  text-align: center;
 }
 
 /* --------------------------------------------------------------- eclipses */
@@ -777,13 +804,14 @@
 
   .lb-dock {
     --lb-tl-w: 48px;
-    --lb-tl-open: min(260px, calc(100vw - 268px));
+    --lb-tl-open: min(260px, calc(100vw - 282px));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
   }
 
-  .sl-rate {
-    padding: 0 8px;
+  .sl-knob {
+    gap: 2px;
+    padding-right: 7px;
   }
 
   .lt-chip {
@@ -805,10 +833,8 @@
     line-height: 1.15;
   }
 
-  .sl-rate-name {
-    min-width: 62px;
-    font-size: 9px;
-    letter-spacing: 0.09em;
+  .sl-knob-speed {
+    font-size: 9.5px;
   }
 
   .lt-readout {

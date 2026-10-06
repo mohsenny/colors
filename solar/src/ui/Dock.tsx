@@ -5,8 +5,8 @@ import type { BodyId } from '../sky/bodies'
 import type { Eclipse } from '../sky/eclipses'
 import { Bodies } from './Bodies'
 import { PauseIcon, PlayIcon, PlusIcon } from './Icons'
+import { Knob } from './Knob'
 import { Options } from './Options'
-import { Speed } from './Speed'
 import { Sphere } from './Sphere'
 import { Timeline } from './Timeline'
 import type { TimelineProps } from './Timeline'
@@ -17,7 +17,7 @@ export interface DockProps {
   attachClock(day: HTMLElement | null, time: HTMLElement | null): void
   timeline: TimelineProps
   onTogglePlay(): void
-  onRung(rung: number): void
+  onDial(dial: number): void
   onBecome(id: BodyId): void
   onWatch(e: Eclipse): void
   onNow(): void
@@ -26,16 +26,15 @@ export interface DockProps {
 /** Quiet time before the chrome recedes, as in Lightbox. */
 const IDLE_MS = 2400
 
-type Drawer = 'bodies' | 'speed' | 'options' | null
+type Drawer = 'bodies' | 'options' | null
 
 export function Dock(props: DockProps): ReactElement {
-  const { snap, attachClock, timeline, onTogglePlay, onRung, onBecome, onWatch, onNow } = props
+  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onNow } = props
   const { playing } = snap
   const [idle, setIdle] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLButtonElement | null>(null)
-  const speedRef = useRef<HTMLButtonElement | null>(null)
   const moreRef = useRef<HTMLButtonElement | null>(null)
   const dayRef = useRef<HTMLSpanElement | null>(null)
   const timeRef = useRef<HTMLSpanElement | null>(null)
@@ -81,7 +80,7 @@ export function Dock(props: DockProps): ReactElement {
     const escape = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
-      ;({ bodies: bodyRef, speed: speedRef, options: moreRef })[drawer].current?.focus()
+      ;({ bodies: bodyRef, options: moreRef })[drawer].current?.focus()
       setDrawer(null)
     }
     window.addEventListener('pointerdown', away)
@@ -115,7 +114,7 @@ export function Dock(props: DockProps): ReactElement {
       </button>
 
       <button type="button" className="lb-btn" aria-label={playing ? 'Pause' : 'Play'} onClick={onTogglePlay}>
-        {playing ? <PauseIcon /> : <PlayIcon back={snap.reverse} />}
+        {playing ? <PauseIcon /> : <PlayIcon back={snap.dial < 0} />}
       </button>
 
       {/* Written by the instrument every frame, not by React. */}
@@ -127,18 +126,7 @@ export function Dock(props: DockProps): ReactElement {
 
       <Timeline {...timeline} />
 
-      <button
-        ref={speedRef}
-        type="button"
-        className={`sl-rate${drawer === 'speed' ? ' is-on' : ''}`}
-        aria-label={`Speed: ${snap.rate}${snap.reverse ? ', backward' : ''}. Change it`}
-        aria-expanded={drawer === 'speed'}
-        onClick={() => toggle('speed')}
-      >
-        <span className={`sl-rate-name${snap.reverse ? ' is-back' : ''}`} aria-hidden="true">
-          {snap.rate}
-        </span>
-      </button>
+      <Knob dial={snap.dial} onDial={onDial} />
 
       <button
         ref={moreRef}
@@ -156,15 +144,6 @@ export function Dock(props: DockProps): ReactElement {
         seat={snap.seat.id}
         onSelect={(id) => {
           onBecome(id)
-          setDrawer(null)
-        }}
-      />
-      <Speed
-        open={drawer === 'speed'}
-        rung={snap.rung}
-        onTurn={onRung}
-        onSelect={(rung) => {
-          onRung(rung)
           setDrawer(null)
         }}
       />
