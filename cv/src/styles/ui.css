@@ -1,7 +1,7 @@
 /*
  * The CV's own chrome. Everything it is made of is Lightbox's: the paper is
  * `.lb-paper` from src/styles/stage.css, the card is the tray's glass with
- * Lattice's readout type, copied below with the lb- and lt- names kept so the
+ * Gravity's readout type, copied below with the lb- and lt- names kept so the
  * four pages can be diffed, and nothing here brings a size, a colour or a
  * timing of its own. Its own names are cv- so they never meet Lightbox's.
  *
@@ -1267,7 +1267,7 @@ body > .cv-paper .cv-text {
     top: calc(80px + env(safe-area-inset-top, 0px));
   }
 
-  /* Under the title, as Lattice's and Solar's readouts are, and the width of
+  /* Under the title, as Gravity's and Solar's readouts are, and the width of
      the phone less 6px either side. */
   .cv-card {
     left: calc(6px + env(safe-area-inset-left, 0px));

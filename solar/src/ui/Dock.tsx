@@ -111,7 +111,7 @@ export function Dock(props: DockProps): ReactElement {
         </span>
       </button>
 
-      {/* Then how time moves: play by the tape, as in Lightbox and Lattice, and the speed. */}
+      {/* Then how time moves: play by the tape, as in Lightbox and Gravity, and the speed. */}
       <button type="button" className="lb-btn" aria-label={playing ? 'Pause' : 'Play'} onClick={onTogglePlay}>
         {playing ? <PauseIcon /> : <PlayIcon back={snap.dial < 0} />}
       </button>

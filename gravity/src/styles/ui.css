@@ -1,6 +1,6 @@
 /*
  * The floating chrome, copied from Lightbox (colors repo, b19db57) with the
- * lb- names kept so the two can be diffed. Lattice's own additions are lt-
+ * lb- names kept so the two can be diffed. Gravity's own additions are lt-
  * and sit at the end: the body chip, the bodies drawer, the sliders, the
  * readout card and the particle tab.
  *
@@ -475,7 +475,7 @@
 
 /* ------------------------------------------------------------- tray card */
 
-/* Top right, the quiet corner of the frame. Lattice puts its readout here. */
+/* Top right, the quiet corner of the frame. Gravity puts its readout here. */
 .lb-tray {
   position: fixed;
   /* The same 16px the legend sits at, so the corners read as one margin. */

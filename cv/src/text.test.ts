@@ -6,8 +6,8 @@ describe('closingParts', () => {
   it('links each instrument from the CV, and nothing else', () => {
     const links = closingParts(LIFE.closing).filter((p) => p.href)
     expect(links).toEqual([
-      { text: 'Lattice', href: 'lattice/' },
       { text: 'Solar', href: 'solar/' },
+      { text: 'Gravity', href: 'gravity/' },
       { text: 'Lightbox', href: 'lightbox/' },
     ])
     expect(closingParts(LIFE.closing).map((p) => p.text).join('')).toBe(LIFE.closing)
@@ -45,6 +45,6 @@ describe('titleRow', () => {
     const html = titleRow()
     expect(html.startsWith('<noscript>')).toBe(true)
     expect(html).toContain('<span class="lb-title-name" aria-current="page">Mohsen</span>')
-    for (const id of ['lightbox', 'lattice', 'solar']) expect(html).toContain(`href="${id}/"`)
+    for (const id of ['solar', 'gravity', 'lightbox']) expect(html).toContain(`href="${id}/"`)
   })
 })

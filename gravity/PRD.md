@@ -1,9 +1,9 @@
-# Lattice
+# Gravity
 
-**Status:** v1, built. Working name, cheap to change.
+**Status:** v1, built. Called Lattice until 2026-10-06; the old `lattice/` address sends on here.
 **Trigger:** the rubber-sheet picture of gravity is 2D and everyone has seen it. Mohsen wants the 3D version: the kids' climbing net, rubber ropes running along X, Y and Z, with a mass in the middle that pulls every rope in. Time is shown by particles flying through the net.
 **Owner:** Mohsen.
-**Sibling:** Lightbox, at the root of the same site; Lattice lives under `lattice/`. Same hand, same materials. A person landing on either should not need to be told they were made by the same person.
+**Siblings:** the CV at the root, Solar under `solar/` and Lightbox under `lightbox/`; Gravity lives under `gravity/`. Same hand, same materials. A person landing on any of them should not need to be told they were made by the same person.
 
 ---
 
@@ -23,7 +23,7 @@ It is an instrument to look at, not a simulator to configure. It opens with prob
 4. **Probes speed up, light does not.** Matter falling into a well speeds up, as you'd expect. Light always moves at c locally. Seen from far away it *slows down* near the mass (the Shapiro delay) and stops at a horizon. Both are drawn honestly and the readout says which you are looking at.
 5. **One body in v1.** The classic picture has Earth orbiting the Sun. Two bodies means two overlapping wells, and the lattice has no single correct answer for that. v1 gets one body right first (see §8).
 6. **No 3D library.** WebGL2 directly. What's on screen is a net of ribbons, a set of points and one sphere drawn per pixel, which three.js would only add weight to. This keeps Lightbox's "no runtime dependencies beyond React" rule.
-7. **Chrome is copied from Lightbox, not reinvented.** Tokens, fibre, dock, segmented control, drawer, timeline and legend are lifted verbatim from Lightbox at `b19db57`, with the `lb-` prefix kept so a diff between `src/styles` and `lattice/src/styles` shows drift. A shared package becomes worth it when a third instrument appears.
+7. **Chrome is copied from Lightbox, not reinvented.** Tokens, fibre, dock, segmented control, drawer, timeline and legend are lifted verbatim from Lightbox at `b19db57`, with the `lb-` prefix kept so a diff between `src/styles` and `gravity/src/styles` shows drift. A shared package becomes worth it when a third instrument appears.
 
 ## 3. The room
 
@@ -115,7 +115,7 @@ Up to eight particles at once. A ninth retires the oldest, which fades out. Part
 
 The same places Lightbox uses, and nothing else. No header, no sidebar, no footer.
 
-**Title, top left.** Both names, `Lightbox Lattice`, shared by the two pages: Helvetica medium at 22 px (18 px on a phone), tracking pulled in, no panel. The page you are on is dark grey, the other light grey, and clicking it crosses over while the words stay put. When the other page is the one just behind or ahead in the tab's history, it steps there rather than loading it again, so the room comes back as it was left.
+**Title, top left.** The four names, `Mohsen Solar Gravity Lightbox`, shared by every page: Helvetica medium at 22 px (18 px on a phone), tracking pulled in, no panel. The page you are on is dark grey, the others light grey, and clicking one crosses over while the words stay put. When that page is the one just behind or ahead in the tab's history, it steps there rather than loading it again, so the room comes back as it was left.
 
 **Dock, bottom centre.** One pill, Lightbox's material exactly (panel white at 0.82, fibre, 14 px blur, float shadow). Left to right:
 
@@ -154,7 +154,7 @@ While riding it reads `DRAG look around`, `SPACE stop time`, `ESC OR CLICK step 
 
 **Idle.** Three seconds without the mouse, a touch or a key, or the window left for another, and every word and control goes, the tab on a particle and the cursor with them, playing or paused. Any of those brings them back, and a touch on an idle page does only that: the tap that wakes it does nothing in the room or on the dock. An open drawer, a press still down, the mouse resting on the chrome, or focus tabbed into it holds them. Shared with the other two (`src/ui/idle.ts`).
 
-**Save.** A plain download, named as a Mac names a screenshot (`Lattice 2026-10-06 at 12.57.24.png`): the surface and the lattice, no words or controls. Where it goes is the browser's to say, so only a failure gets a note, over the dock. Shared with the other two (`src/photo/`, `src/ui/PhotoButton.tsx`, `src/ui/Toast.tsx`).
+**Save.** A plain download, named as a Mac names a screenshot (`Gravity 2026-10-06 at 12.57.24.png`): the surface and the lattice, no words or controls. Where it goes is the browser's to say, so only a failure gets a note, over the dock. Shared with the other two (`src/photo/`, `src/ui/PhotoButton.tsx`, `src/ui/Toast.tsx`).
 
 **Under 620 px.** Readout moves to a 10 px inset, chip shows the sphere only. Same breakpoint as Lightbox.
 
@@ -201,4 +201,4 @@ By eye, on a 2020 MacBook Air at 1440×900:
 
 ## 11. Running it
 
-From the repo root: `npm run dev` and open `/lattice/`. Tests, lint, typecheck and the build cover both instruments, and Pages deploys both from `main`.
+From the repo root: `npm run dev` and open `/gravity/`. Tests, lint, typecheck and the build cover every page, and Pages deploys them all from `main`.

@@ -1,5 +1,5 @@
 /*
- * The lit surface Lightbox and Lattice stand on, painted for a photograph:
+ * The lit surface Lightbox and Gravity stand on, painted for a photograph:
  * stage.css's gradients from the bottom up, then its grain. The gradients are
  * copied from the stylesheet, as a computed gradient is a string no canvas
  * takes, so a change to one is a change to both. The tubes are read off the

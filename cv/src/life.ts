@@ -332,7 +332,7 @@ export const LIFE: Life = {
   ],
   outside: 'Space and physics, quantum field theory especially, and my golden retriever.',
   closing:
-    'Then see what I make for fun: Lattice bends space with a mass, Solar keeps the planets at true scale, Lightbox mixes colour.',
+    'Then see what I make for fun: Solar keeps the planets at true scale, Gravity bends space with a mass, Lightbox mixes colour.',
 }
 
 /**

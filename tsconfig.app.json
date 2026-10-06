@@ -23,5 +23,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "cv/src", "lattice/src", "solar/src"]
+  "include": ["src", "cv/src", "gravity/src", "solar/src"]
 }

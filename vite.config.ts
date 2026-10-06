@@ -25,13 +25,15 @@ export default defineConfig({
   // preview` and opening dist/index.html off the filesystem working.
   base: './',
   plugins: [react(), cvText()],
-  // Four pages, one site: the CV at the root, Lightbox under lightbox/,
-  // Lattice under lattice/ and Solar under solar/.
+  // Four pages, one site: the CV at the root, Solar under solar/, Gravity
+  // under gravity/ and Lightbox under lightbox/. lattice/ is Gravity's old
+  // address and only sends on.
   build: {
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         lightbox: fileURLToPath(new URL('./lightbox/index.html', import.meta.url)),
+        gravity: fileURLToPath(new URL('./gravity/index.html', import.meta.url)),
         lattice: fileURLToPath(new URL('./lattice/index.html', import.meta.url)),
         solar: fileURLToPath(new URL('./solar/index.html', import.meta.url)),
       },
@@ -39,6 +41,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'cv/src/**/*.test.ts', 'lattice/src/**/*.test.ts', 'solar/src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'cv/src/**/*.test.ts', 'gravity/src/**/*.test.ts', 'solar/src/**/*.test.ts'],
   },
 })

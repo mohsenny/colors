@@ -65,7 +65,7 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         onSize={(v) => instrument.setSizeLog(v)}
         onSettle={() => instrument.settleBody()}
         onPhoto={() => {
-          void savePhoto('Lattice', () => instrument.photo()).then(
+          void savePhoto('Gravity', () => instrument.photo()).then(
             (text) => text && setNote({ text, at: Date.now() }),
           )
         }}
@@ -101,7 +101,7 @@ export default function App(): ReactElement {
     <main className="lb-stage">
       <canvas ref={canvasRef} className="lt-canvas" aria-label="A lattice of space around a body, with particles moving through it" />
       <div ref={tabRef} className="lt-tab" aria-hidden="true" />
-      <Title active="lattice" />
+      <Title active="gravity" />
       {failed && <p className="lt-fail">This needs WebGL2, which this browser does not offer.</p>}
       {instrument && <Chrome instrument={instrument} />}
     </main>

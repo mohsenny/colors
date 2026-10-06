@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { APPS, hrefOf } from './pages'
 
 /** Every page's folder under the site root, the CV being the root itself. */
-const FOLDER = { mohsen: '', lightbox: 'lightbox/', lattice: 'lattice/', solar: 'solar/' } as const
+const FOLDER = { mohsen: '', solar: 'solar/', gravity: 'gravity/', lightbox: 'lightbox/' } as const
 
 describe('hrefOf', () => {
   for (const from of APPS) {
@@ -16,6 +16,6 @@ describe('hrefOf', () => {
   }
 
   it('names the CV first', () => {
-    expect(APPS.map((app) => app.name)).toEqual(['Mohsen', 'Lightbox', 'Lattice', 'Solar'])
+    expect(APPS.map((app) => app.name)).toEqual(['Mohsen', 'Solar', 'Gravity', 'Lightbox'])
   })
 })

@@ -41,7 +41,7 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v
 }
 
-/** Copied from Lattice, with the marks added and the head kept under the pointer while the tape is still filling. Pointing at a mark says which eclipse it is. */
+/** Copied from Gravity, with the marks added and the head kept under the pointer while the tape is still filling. Pointing at a mark says which eclipse it is. */
 export function Timeline(props: TimelineProps): ReactElement {
   const { expanded, moment, onScrub, onScrubStart, onScrubEnd } = props
   const position = clamp01(props.position)

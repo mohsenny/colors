@@ -70,13 +70,13 @@ playing the animation backwards.
 
 More on all of it in [docs/design-notes.md](docs/design-notes.md).
 
-## Lattice
+## Gravity
 
-**[Open Lattice](https://mohsenny.github.io/whoami/lattice/)**, the sibling instrument: a
+**[Open Gravity](https://mohsenny.github.io/whoami/gravity/)**, the sibling instrument: a
 net of space pulled in by a mass, with probes and light moving through it. Same
 surface, same chrome. The names in the top-left corner cross between the instruments.
-Its source is in [lattice/](lattice/) and what it does and why is in
-[lattice/PRD.md](lattice/PRD.md).
+Its source is in [gravity/](gravity/) and what it does and why is in
+[gravity/PRD.md](gravity/PRD.md). It was called Lattice until October 2026.
 
 ## Solar
 
