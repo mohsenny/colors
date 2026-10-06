@@ -105,7 +105,7 @@ export default function App(): ReactElement {
 
   return (
     <main className="lb-stage">
-      <canvas ref={canvasRef} className="sl-canvas" aria-label="The Sun, the planets and Pluto, the Moon and the moons of Jupiter, Saturn and Pluto where they are now, at their true sizes and distances" />
+      <canvas ref={canvasRef} className="sl-canvas" aria-label="The Sun, the planets and Pluto, the Moon and the moons of the four giants and Pluto where they are now, at their true sizes and distances" />
       <div ref={labelsRef} className="sl-labels" aria-hidden="true" />
       <Title active="solar" />
       {failed && <p className="lt-fail">This needs WebGL2, which this browser does not offer.</p>}

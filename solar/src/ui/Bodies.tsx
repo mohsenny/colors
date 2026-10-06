@@ -19,7 +19,7 @@ export interface BodiesProps {
 
 /**
  * The drawer behind the seat chip: the Sun, the planets and Pluto, Sun
- * outward, each with its key, and the moons of Jupiter, Saturn and Pluto
+ * outward, each with its key, and the moons of the four giants and Pluto
  * under what they go round.
  */
 export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {

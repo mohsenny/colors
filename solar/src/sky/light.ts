@@ -55,7 +55,13 @@ export const ALBEDO: Record<Exclude<BodyId, 'sun'>, number> = {
   iapetus: 0.25,
   phoebe: 0.08,
   uranus: 0.488,
+  miranda: 0.45,
+  ariel: 0.53,
+  umbriel: 0.26,
+  titania: 0.35,
+  oberon: 0.31,
   neptune: 0.442,
+  triton: 0.76,
   pluto: 0.52,
   charon: 0.41,
 }

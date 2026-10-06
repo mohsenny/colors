@@ -101,6 +101,8 @@ const SHINE: Partial<Record<BodyId, readonly [number, number, number]>> = {
   earth: [0.55, 0.68, 1],
   jupiter: [1, 0.84, 0.64],
   saturn: [1, 0.9, 0.68],
+  uranus: [0.74, 0.95, 1],
+  neptune: [0.5, 0.64, 1],
   pluto: [1, 0.86, 0.74],
 }
 

@@ -7,10 +7,12 @@
  * rounded, and its starting angles for Hyperion and Phoebe are not where
  * Horizons has them. So where each moon is along its orbit, and how fast
  * Himalia's orbit turns, are fitted to JPL Horizons, and so is the one shape
- * the table has wrong, Epimetheus'. The two swings no ellipse makes are added:
- * Janus and Epimetheus trading orbits, and Hyperion rocking in step with
- * Titan. Positions are km from the planet's centre, on the equator and equinox
- * of J2000; the ephemeris turns them into its own frame.
+ * the table has wrong, Epimetheus'. The five round moons of Uranus and
+ * Neptune's Triton are fitted to Horizons whole, from 1950 to 2100. The swings
+ * no ellipse makes are added: Janus and Epimetheus trading orbits, Hyperion
+ * rocking in step with Titan, and Miranda and Ariel in step with Umbriel.
+ * Positions are km from the planet's centre, on the equator and equinox of
+ * J2000; the ephemeris turns them into its own frame.
  */
 
 export type KeplerMoon =
@@ -25,6 +27,12 @@ export type KeplerMoon =
   | 'janus'
   | 'hyperion'
   | 'phoebe'
+  | 'miranda'
+  | 'ariel'
+  | 'umbriel'
+  | 'titania'
+  | 'oberon'
+  | 'triton'
   | 'charon'
 
 const D = Math.PI / 180
@@ -39,7 +47,8 @@ const J2000 = 2_451_545
  * Earth's equator. P is the days M takes to go round; the periapsis and node
  * take Pw and Pn years, backward when negative. The plane is given by its
  * pole: the planet's equator, near enough, for the close moons, the ecliptic
- * for Himalia and Pluto's equator for Charon.
+ * for Himalia, the plane its orbit turns round for Triton, and Pluto's
+ * equator for Charon.
  */
 type Row = [
   a: number,
@@ -71,6 +80,12 @@ const ROWS: Record<KeplerMoon, Row> = {
   janus: [151_500, 0.007, 11.1, 114.786, 0.2, 159.9, SHARED, 0.24, -0.482, 40.6, 83.5],
   hyperion: [1_481_500, 0.105, 131.646, 55.264, 0.6, 102.66, 21.21257682, -20.843, -257.625, 40.2, 83.6],
   phoebe: [12_929_400, 0.164, 342.297, 53.114, 175.2, 240.93, 550.9568984, 468.321, 741.483, 276, 67.5],
+  miranda: [129_848, 0.00136, 155.054, 72.742, 4.4271, 100.861, 1.413783755, 8.940569, -17.78682, 77.311, 15.175],
+  ariel: [190_929, 0.00145, 99.635, 119.646, 0.0117, 343.801, 2.520680757, 62.4414, 757.145, 77.311, 15.175],
+  umbriel: [265_981, 0.00376, 154.505, 260.407, 0.0765, 196.337, 4.144554494, 63.55813, -129.7191, 77.311, 15.175],
+  titania: [436_281, 0.00114, 216.464, 52.268, 0.1031, 12.834, 8.70666837, 349.9528, 1005.607, 77.311, 15.175],
+  oberon: [583_448, 0.00139, 156.785, 157.956, 0.1717, 37.821, 13.46404996, 307.5065, -619.2602, 77.311, 15.175],
+  triton: [354_759, 0, 0, 57.771, 157.211, 176.806, 5.876714377, 0, 676.247, 299.8, 43.1],
   charon: [19_600, 0, 0, 304.1, 0, 0, 6.387222, 0, 0, 132.993, -6.163],
 }
 
@@ -97,6 +112,10 @@ const SWING: Partial<Record<KeplerMoon, (t: number) => number>> = {
   janus: trading(39.12),
   // Held in step with Titan, three of its laps to four of Titan's.
   hyperion: (t) => 9.126 * Math.sin((2 * Math.PI * (t - 457.83)) / 640.49),
+  // Miranda's laps less three of Ariel's and plus two of Umbriel's come round
+  // every 12.6 years, and each time the three pull each other on and back.
+  miranda: (t) => 1.4356 * Math.sin((2 * Math.PI * (t - 534.67)) / 4582.84) + 0.1759 * Math.sin((2 * Math.PI * (t - 538.15)) / 2290.37),
+  ariel: (t) => 0.0985 * Math.sin((2 * Math.PI * (t - 2809.95)) / 4600.26),
 }
 
 export function isKepler(id: string): id is KeplerMoon {

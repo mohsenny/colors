@@ -2,12 +2,12 @@
  * Where everything is, and which way it is turned, at any moment. Positions
  * come from Astronomy Engine (VSOP87 for the planets, ELP for the Moon, L1.2
  * for the big moons of Jupiter, its own integration for Pluto), from Meeus for
- * the round moons of Saturn and from JPL's mean elements for the rest, all
- * checked against JPL Horizons. The turn of each planet, of Pluto and of the
- * Moon is the IAU's, so the right face of the Earth is in daylight and the
- * Moon shows the side it really shows; the other moons keep one face to their
- * planet, as all but Hyperion, Himalia and Phoebe do (those three have no map
- * to show which way they face).
+ * the round moons of Saturn and from ellipses, JPL's mean elements or fitted
+ * to Horizons, for the rest, all checked against JPL Horizons. The turn of
+ * each planet, of Pluto and of the Moon is the IAU's, so the right face of
+ * the Earth is in daylight and the Moon shows the side it really shows; the
+ * other moons keep one face to their planet, as all but Hyperion, Himalia and
+ * Phoebe do (those three have no map to show which way they face).
  *
  * The frame is the ecliptic of J2000 with the Sun at the middle and km as the
  * unit: x toward the March equinox, z toward ecliptic north, so the plane the
@@ -186,6 +186,13 @@ function locked(at: Vec3, way: Vec3): [Vec3, Vec3, Vec3] {
   return [x, [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]], z]
 }
 
+/**
+ * Moons whose north, as the IAU has it, is on the other side from the way they
+ * go round: Uranus's, round a planet tipped past its side, and Triton, which
+ * goes round backward. It is the north their maps have at the top.
+ */
+const OVER = new Set<BodyId>(['miranda', 'ariel', 'umbriel', 'titania', 'oberon', 'triton'])
+
 /** Every body at `ms`, a UTC time in milliseconds. */
 export function posesAt(ms: number): Poses {
   const time = MakeTime(new Date(ms))
@@ -203,7 +210,8 @@ export function posesAt(ms: number): Poses {
     if (isKepler(b.id)) {
       m = fromElements(b.id, jde)
       const next = fromElements(b.id, jde + 1e-3)
-      axes = locked(m, [next[0] - m[0], next[1] - m[1], next[2] - m[2]])
+      const s = OVER.has(b.id) ? -1 : 1
+      axes = locked(m, [s * (next[0] - m[0]), s * (next[1] - m[1]), s * (next[2] - m[2])])
     } else if (b.parent === 'jupiter') {
       const s = jupiter[b.id as Galilean]
       m = km(s)
@@ -256,6 +264,12 @@ export const PERIOD: Partial<Record<BodyId, number>> = {
   hyperion: 21.27666,
   iapetus: 79.3215,
   phoebe: 550.304,
+  miranda: 1.413479,
+  ariel: 2.520379,
+  umbriel: 4.144177,
+  titania: 8.705869,
+  oberon: 13.463237,
+  triton: 5.876854,
   charon: 6.387222,
 }
 

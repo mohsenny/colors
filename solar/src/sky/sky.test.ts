@@ -1,6 +1,6 @@
 import { Body as AE, HelioVector, Illumination, MakeTime } from 'astronomy-engine'
 import { describe, expect, it } from 'vitest'
-import { AU_KM, BODIES } from './bodies'
+import { AU_KM, BODIES, bodyById } from './bodies'
 import type { BodyId } from './bodies'
 import { nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
 import type { Eclipse, EclipseType } from './eclipses'
@@ -217,6 +217,78 @@ describe('the moons of Jupiter and Saturn', () => {
       const round = b.id === 'himalia' || b.id === 'hyperion' || b.id === 'phoebe' ? 10 : 2
       expect(Math.abs(wLon + 90), b.id).toBeLessThan(round)
       expect(Math.abs(wLat)).toBeLessThan(0.01)
+    }
+  })
+})
+
+describe('the moons of Uranus and Neptune', () => {
+  const fromPlanet = (ms: number, id: BodyId): Vec3 => {
+    const p = posesAt(ms)
+    return toward(p[bodyById(id)?.parent as BodyId].at, p[id].at)
+  }
+
+  // Ellipses fitted to JPL Horizons from 1950 to 2100, against it at the three
+  // MOMENTS, each bound half as much again as the worst miss at these moments
+  // and the note by it the worst in km over all those years. What is left is
+  // mostly the moons pulling on each other.
+  const HORIZONS: Array<[BodyId, number, Vec3[]]> = [
+    // 330
+    ['miranda', 400, [[-104_329.5, 4_597.7, -77_052.5], [-90_703.6, 11_480.2, -92_257.1], [95_115.1, -19_198.6, 86_137.5]]],
+    // 770
+    ['ariel', 1_100, [[175_677.9, -46_703.8, -59_273.4], [131_667.5, -9_659.4, 137_974.1], [164_518.9, -22_844.8, 94_826]]],
+    // 770
+    ['umbriel', 600, [[100_010.3, -55_025.3, -240_255.1], [205_103.5, -21_358, 167_927], [15_657.2, 33_392.3, 264_243.6]]],
+    // 2,900
+    ['titania', 3_500, [[-63_107, -46_441.1, -428_906.5], [-253_125.2, 103_080.3, 341_225.4], [-85_060.2, 78_049.3, 420_422.9]]],
+    // 2,500
+    ['oberon', 2_000, [[-560_570, 104_036.9, -124_464.2], [182_985.9, -116_830.8, -541_564.2], [-488_235.1, 63_447.5, -311_378.4]]],
+    // 1,200
+    ['triton', 850, [[-205_696.5, 124_061.5, 261_000.8], [-224_658.5, -268_856.1, -55_816.3], [-105_318.1, 237_326.2, 241_688.3]]],
+  ]
+
+  it('puts them where JPL Horizons has them, within a few hundred km for the inner ones and a few thousand for the outer', () => {
+    for (const [id, within, wants] of HORIZONS) {
+      wants.forEach((want, k) => expect(len(toward(want, fromPlanet(msAt(MOMENTS[k]), id))), id).toBeLessThan(within))
+    }
+  })
+
+  it("keeps Uranus's moons over its equator, Miranda within its 4.4 degrees, and Triton going round Neptune backward, 23 degrees off its equator", () => {
+    const most = new Map<BodyId, number>()
+    for (let day = 0; day < 30; day += 0.1) {
+      const p = posesAt(Date.UTC(2026, 9, 5) + day * 86_400_000)
+      for (const [id] of HORIZONS) {
+        const planet = p[bodyById(id)?.parent as BodyId]
+        const r = toward(planet.at, p[id].at)
+        const lat = Math.abs((Math.asin(dot(r, planet.z) / len(r)) * 180) / Math.PI)
+        most.set(id, Math.max(most.get(id) ?? 0, lat))
+      }
+    }
+    for (const [id, lat] of most) expect(Math.abs(lat - (id === 'miranda' ? 4.4 : id === 'triton' ? 23 : 0)), id).toBeLessThan(0.5)
+  })
+
+  it('turns one face to the planet, north where the IAU has it, so each leads with the side at 90 degrees east', () => {
+    const ms = Date.UTC(2026, 9, 5)
+    const p = posesAt(ms)
+    for (const [id] of HORIZONS) {
+      const m = p[id]
+      const [lon, lat] = onBody(toward(m.at, p[bodyById(id)?.parent as BodyId].at), m.x, m.y, m.z)
+      expect(Math.abs(lon)).toBeLessThan(0.01)
+      expect(Math.abs(lat)).toBeLessThan(0.01)
+      const [wLon] = onBody(toward(fromPlanet(ms - 1000, id), fromPlanet(ms + 1000, id)), m.x, m.y, m.z)
+      expect(Math.abs(wLon - 90), id).toBeLessThan(1)
+    }
+  })
+
+  it('lit the south, which their maps show, when Voyager 2 flew by', () => {
+    for (const [ms, ids, under] of [
+      [Date.UTC(1986, 0, 24, 18), ['miranda', 'ariel', 'umbriel', 'titania', 'oberon'], -75],
+      [Date.UTC(1989, 7, 25, 9), ['triton'], -40],
+    ] as const) {
+      const p = posesAt(ms)
+      for (const id of ids) {
+        const m = p[id]
+        expect(onBody(toward(m.at, [0, 0, 0]), m.x, m.y, m.z)[1], id).toBeLessThan(under)
+      }
     }
   })
 })

@@ -1,10 +1,11 @@
 /*
  * The Sun, the eight planets and Pluto, the Moon, the moons of Jupiter and
- * Saturn from the round ones to the small and far ones, and Charon, at their
- * real sizes. Radii are the IAU 2015 equatorial ones for the Sun and the
- * planets, with the flattening that makes the giants visibly squat, and mean
- * ones for Pluto and the moons, in km. The small moons are lumpy, but each is
- * drawn as a ball of its mean radius.
+ * Saturn from the round ones to the small and far ones, the five round ones of
+ * Uranus, Neptune's Triton and Pluto's Charon, at their real sizes. Radii are
+ * the IAU 2015 equatorial ones for the Sun and the planets, with the
+ * flattening that makes the giants visibly squat, and mean ones for Pluto and
+ * the moons, in km. The small moons are lumpy, but each is drawn as a ball of
+ * its mean radius.
  */
 
 export type BodyId =
@@ -39,7 +40,13 @@ export type BodyId =
   | 'iapetus'
   | 'phoebe'
   | 'uranus'
+  | 'miranda'
+  | 'ariel'
+  | 'umbriel'
+  | 'titania'
+  | 'oberon'
   | 'neptune'
+  | 'triton'
   | 'pluto'
   | 'charon'
 
@@ -135,6 +142,11 @@ export const BODIES: readonly Body[] = [
     color: '#a3d6dd',
     air: { depth: 0.02, tint: [0.6, 0.85, 0.9] },
   },
+  { id: 'miranda', name: 'Miranda', kind: 'moon', radius: 235.8, flat: 0, color: '#8d8b88', parent: 'uranus' },
+  { id: 'ariel', name: 'Ariel', kind: 'moon', radius: 578.9, flat: 0, color: '#93918e', parent: 'uranus' },
+  { id: 'umbriel', name: 'Umbriel', kind: 'moon', radius: 584.7, flat: 0, color: '#616160', parent: 'uranus' },
+  { id: 'titania', name: 'Titania', kind: 'moon', radius: 788.9, flat: 0, color: '#78746d', parent: 'uranus' },
+  { id: 'oberon', name: 'Oberon', kind: 'moon', radius: 761.4, flat: 0, color: '#777067', parent: 'uranus' },
   {
     id: 'neptune',
     name: 'Neptune',
@@ -144,6 +156,7 @@ export const BODIES: readonly Body[] = [
     color: '#5578d6',
     air: { depth: 0.02, tint: [0.4, 0.55, 1] },
   },
+  { id: 'triton', name: 'Triton', kind: 'moon', radius: 1_353.4, flat: 0, color: '#9b8f84', parent: 'neptune' },
   { id: 'pluto', name: 'Pluto', kind: 'dwarf', radius: 1_188.3, flat: 0, color: '#c9a383' },
   { id: 'charon', name: 'Charon', kind: 'moon', radius: 606, flat: 0, color: '#8f8b88', parent: 'pluto' },
 ]
