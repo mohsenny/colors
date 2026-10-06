@@ -1025,18 +1025,22 @@
     font-size: 9.5px;
   }
 
+  /* Below the title, which has four names now: they measure 249px at 18px and
+     the readout needs 196px, more than a phone has beside them. 40px is the
+     title's 12px down and its 18px, and 10px. */
   .lt-readout {
     right: calc(10px + env(safe-area-inset-right, 0px));
-    top: calc(10px + env(safe-area-inset-top, 0px));
+    top: calc(40px + env(safe-area-inset-top, 0px));
   }
 
   .lt-readout .lb-tray-list {
     min-width: 0;
   }
 
-  /* The readout is up by the title here, so the drawer stops below it too. */
+  /* The readout is under the title here, so the drawer stops below it too:
+     30px lower than when the two shared the top line. */
   .lt-bodies {
-    max-height: calc(100dvh - 206px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 236px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   }
 }
 

@@ -1,17 +1,6 @@
 import type { MouseEvent, ReactElement } from 'react'
-
-type App = 'lightbox' | 'lattice' | 'solar'
-
-const APPS: ReadonlyArray<{ id: App; name: string }> = [
-  { id: 'lightbox', name: 'Lightbox' },
-  { id: 'lattice', name: 'Lattice' },
-  { id: 'solar', name: 'Solar' },
-]
-
-/** Where another app lives, seen from this one: Lightbox at the root, the others a folder down. */
-function hrefOf(from: App, to: App): string {
-  return (from === 'lightbox' ? '' : '../') + (to === 'lightbox' ? '' : `${to}/`)
-}
+import { APPS, hrefOf } from './pages'
+import type { App } from './pages'
 
 /**
  * When the other app is the page just behind or just ahead in this tab's
@@ -42,13 +31,13 @@ function stepAcross(e: MouseEvent<HTMLAnchorElement>): void {
 }
 
 /**
- * The three names in the top-left corner, and the only way across. The one
+ * The four names in the top-left corner, and the only way across. The one
  * you are in is strong, the others are faint, and clicking one goes there.
  * Same weight for all, so the words never move when the shades trade places.
  */
 export function Title({ active }: { active: App }): ReactElement {
   return (
-    <nav className="lb-title" aria-label="Instruments">
+    <nav className="lb-title" aria-label="Pages">
       {APPS.map((app) =>
         app.id === active ? (
           <span key={app.id} className="lb-title-name" aria-current="page">

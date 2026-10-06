@@ -2,8 +2,6 @@ import {
   CAST_TAU,
   CORNER_INNER,
   CORNER_OUTER,
-  H_MM_BASE,
-  H_MM_RANGE,
   TAB_H,
   TAB_INSET,
   TAB_PROUD,
@@ -20,7 +18,8 @@ import { png } from '../photo/save'
 import { grainOf, litSurface, patternOf, tile } from '../photo/surface'
 import { Painter } from './paint'
 import { drawMount, drawPaper } from './photo'
-import type { Shade, Stock } from './photo'
+import type { Stock } from './photo'
+import { LIP, shadowParts, shadowStack } from './shadow'
 
 /**
  * The stage is the only thing that touches the playground's DOM. React never
@@ -59,22 +58,6 @@ const Z_PAPER = 5
 function paperWidth(crowd: number, aspect: number, vh: number): number {
   return Math.round(litEdgePx(litRect(aspect, crowd), vh))
 }
-
-/** Shadow model (design notes 1.5). Alpha falls as blur grows; that inversion
- *  is what reads as a physical object a few millimetres above a lit surface. */
-const SOFT_BLUR_BASE = 3
-const SOFT_BLUR_PER_MM = 4
-const SOFT_OY_PER_MM = 1.6
-const CONTACT_BLUR_BASE = 1.5
-const CONTACT_BLUR_PER_MM = 0.6
-const CONTACT_OY_PER_MM = 0.4
-const OX_OVER_OY = 0.35
-const SOFT_ALPHA_BASE = 0.155
-const SOFT_ALPHA_PER_MM = 0.0105
-const CONTACT_ALPHA_BASE = 0.1
-const CONTACT_ALPHA_PER_MM = 0.008
-const LIP = 'rgba(30,34,48,0.055)'
-const OUTER_LIP = `0 0 0 0.5px ${LIP}`
 
 /** z is eased continuously; quantising it stops the shadow string being rebuilt
  *  on every frame for a change nobody can see. */
@@ -1198,39 +1181,3 @@ function depthRank(slides: SlideState[], slide: SlideState): number {
   }
   return rank
 }
-
-/*
- * Height only. Selection used to add a 1px ring here, which was a second
- * border a hair outside the card's own: a box-shadow spread follows the border
- * box, so it stopped where the mount stopped and cut straight across the base
- * of the tab. Selection now darkens the card's one real edge instead, in CSS,
- * and that line already goes round the tab.
- */
-function shadowStack(z: number): string {
-  const [contact, soft] = shadowParts(z)
-  const css = (s: Shade): string =>
-    `${s.ox.toFixed(2)}px ${s.oy.toFixed(2)}px ${s.blur.toFixed(2)}px rgba(46,52,72,${s.alpha.toFixed(4)})`
-  return `${OUTER_LIP}, ${css(soft)}, ${css(contact)}`
-}
-
-/** The two shadows of a card at height `z`, the contact under the soft, as numbers for the photograph. */
-function shadowParts(z: number): [Shade, Shade] {
-  const hmm = H_MM_BASE + H_MM_RANGE * z
-  const softOy = SOFT_OY_PER_MM * hmm
-  const contactOy = CONTACT_OY_PER_MM * hmm
-  return [
-    {
-      ox: contactOy * OX_OVER_OY,
-      oy: contactOy,
-      blur: CONTACT_BLUR_BASE + CONTACT_BLUR_PER_MM * hmm,
-      alpha: Math.max(0, CONTACT_ALPHA_BASE - CONTACT_ALPHA_PER_MM * hmm),
-    },
-    {
-      ox: softOy * OX_OVER_OY,
-      oy: softOy,
-      blur: SOFT_BLUR_BASE + SOFT_BLUR_PER_MM * hmm,
-      alpha: Math.max(0, SOFT_ALPHA_BASE - SOFT_ALPHA_PER_MM * hmm),
-    },
-  ]
-}
-

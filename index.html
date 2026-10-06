@@ -2,15 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Lightbox lived at this address before the CV, and its links carry their
+         seed in the hash. Those go on to Lightbox before anything else loads,
+         with the hash untouched, so the colours that were shared are the ones
+         that open. Replace, so Back does not land here and bounce. The CV's own
+         hashes are lowercase words, so never s=. -->
+    <script>
+      if (/[#&]s=/.test(location.hash)) location.replace('lightbox/' + location.search + location.hash)
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f7f6f3" />
     <meta
       name="description"
-      content="Lightbox. Transparent colour slides drifting over an illuminated surface. Watch them overlap, pause, pin the colours you like."
+      content="I'm Mohsen, a QA lead in Germany. If it takes creativity, tech or AI, it's for me."
     />
-    <title>Lightbox</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23faf9f7'/%3E%3Crect x='5' y='7' width='16' height='16' rx='2' fill='%23ff6b3d' opacity='.72'/%3E%3Crect x='11' y='11' width='16' height='16' rx='2' fill='%232f6bff' opacity='.62'/%3E%3C/svg%3E" />
-    <!-- Crossing between Lightbox and Lattice fades one room into the other.
+    <title>Mohsen Nasiri</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Mohsen Nasiri" />
+    <meta
+      property="og:description"
+      content="I'm Mohsen, a QA lead in Germany. If it takes creativity, tech or AI, it's for me."
+    />
+    <meta property="og:url" content="https://mohsenny.github.io/whoami/" />
+    <meta property="og:image" content="https://mohsenny.github.io/whoami/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Eight sheets of coloured film on a lit white surface, two of them crossing" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23faf9f7'/%3E%3Crect x='5' y='13' width='15' height='15' rx='2' fill='%2389d8ff'/%3E%3Crect x='12' y='5' width='15' height='15' rx='2' fill='%23f5da89'/%3E%3Crect x='12' y='13' width='8' height='7' fill='%2348f59d'/%3E%3C/svg%3E" />
+    <!-- Crossing between the pages fades one room into the other.
          Inline, so the opt-in is there before any stylesheet has arrived. -->
     <style>
       @media (prefers-reduced-motion: no-preference) {
@@ -22,6 +41,7 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <!-- cv-text -->
+    <script type="module" src="./cv/src/main.tsx"></script>
   </body>
 </html>

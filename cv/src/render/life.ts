@@ -1,0 +1,317 @@
+import {
+  CORNER_INNER,
+  CORNER_OUTER,
+  TAB_H,
+  TAB_INSET,
+  TAB_PROUD,
+  TAB_RADIUS,
+  TAB_W,
+} from '../../../src/core/constants'
+import type { Dye, RenderOptions, SimState, SlideState, Viewport } from '../../../src/core/types'
+import { measureViewport } from '../../../src/app/viewport'
+import { Painter } from '../../../src/render/paint'
+import { shadowStack } from '../../../src/render/shadow'
+import { crosses, inside, toStage } from '../layout'
+import type { Fit, Laid, Placed } from '../layout'
+import { yearsOf } from '../life'
+import type { Life } from '../life'
+
+/*
+ * The life on the lightbox: Lightbox's own Painter for the film and its own
+ * mounts and tabs in the DOM, laid where layout.ts says and never moving on
+ * their own. Nothing here runs Lightbox's stage or simulation. The painter is
+ * handed a SimState that is only ever a still picture, so the film is the same
+ * film, mixed the same way, with none of the drift, sway or tubes.
+ *
+ * It draws when the camera, the selection or the hover has changed, and not
+ * otherwise: `draw` compares the picture it is asked for with the last one.
+ */
+
+/** Mounts start above the surface and the film canvas, which own 1 and 2, as in Lightbox. Their layer stands at this, and they stack inside it. */
+const Z_BASE = 10
+
+/** Heights as stage.ts quantises them, so the shadow string is built once per visible step. */
+const Z_SHADOW_STEPS = 250
+
+/** What a press on the life is about: one chapter, or two where they cross. */
+export type Target = { kind: 'chapter'; index: number } | { kind: 'crossing'; index: number }
+
+/** The picture to draw. */
+export interface View {
+  fit: Fit
+  /** Where the camera looks, u along. */
+  camera: number
+  /** Each sheet's height off the surface, 0 to 1, in the shadow formula's terms. */
+  z: readonly number[]
+  /** The sheets that are the current chapter, or both of the current crossing. */
+  current: readonly boolean[]
+  hovered: readonly boolean[]
+}
+
+interface Mount {
+  frame: HTMLDivElement
+  tab: HTMLButtonElement
+  transform: string
+  side: number
+  shadow: number
+  rank: number
+  current: boolean
+  hovered: boolean
+}
+
+function div(cls: string): HTMLDivElement {
+  const node = document.createElement('div')
+  node.className = cls
+  return node
+}
+
+/** A sheet as the painter reads one. Only the place, size, lean, height and dye are ever looked at; the rest is the shape the type asks for, at rest. */
+function still(id: number, dye: Dye): SlideState {
+  return {
+    id,
+    x: 0,
+    y: 0,
+    heading: 0,
+    speed0: 0,
+    rot: 0,
+    rotRest: 0,
+    omegaRot: 0,
+    sizeFrac: 0,
+    aspect: 1,
+    w: 0,
+    h: 0,
+    z: 0,
+    zTarget: 0,
+    dye,
+    dyeBase: dye,
+    dyeFrom: dye,
+    dyeTo: dye,
+    tweenT: 1,
+    tweenDelay: 0,
+    driftGate: 0,
+    lonelyTimer: 0,
+    stickyTimer: 0,
+    cd: [0, 0, 0, 0],
+    rngState: 0,
+    catchUntil: 0,
+    speedPre: 0,
+    locked: true,
+    held: true,
+  }
+}
+
+export class Film {
+  private readonly root: HTMLElement
+  private readonly life: Life
+  private readonly placed: readonly Placed[]
+  private readonly painter: Painter
+  private readonly state: SimState
+  /**
+   * The mounts' own layer, so a phone can fade them out above the band in one
+   * mask. The canvas takes its own mask: one on the film as a whole would
+   * isolate it, and the paint would multiply with nothing instead of the lit
+   * surface.
+   */
+  private readonly layer: HTMLDivElement
+  private readonly mounts: Mount[] = []
+  private laid: Laid[] = []
+  private fit: Fit | null = null
+  private viewport: Viewport
+  private key = ''
+
+  constructor(root: HTMLElement, life: Life, placed: readonly Placed[], onTab: (index: number) => void) {
+    this.root = root
+    this.life = life
+    this.placed = placed
+    this.painter = new Painter(root)
+    this.viewport = measureViewport(root)
+    this.state = {
+      t: 0,
+      aspect: this.viewport.aspect,
+      // Paint, not light: the crossing is the colour a painter would mix, and
+      // the one life.test.ts holds to being a third colour.
+      modeMix: 0,
+      paletteEpoch: 0,
+      crowd: 0,
+      slides: life.chapters.map((c, i) => still(i, c.dye)),
+    }
+
+    // The mount's measures, set on the root as stage.ts sets them, so
+    // stage.css draws the same card.
+    const style = root.style
+    style.setProperty('--lb-tab-h', `${TAB_H}px`)
+    style.setProperty('--lb-tab-proud', `${TAB_PROUD}px`)
+    style.setProperty('--lb-tab-radius', `${TAB_RADIUS}px`)
+    style.setProperty('--lb-radius-outer', `${CORNER_OUTER}px`)
+    style.setProperty('--lb-radius-inner', `${CORNER_INNER}px`)
+    style.setProperty('--lb-frame', `${this.viewport.frame}px`)
+
+    this.layer = div('cv-mounts')
+    this.layer.style.zIndex = String(Z_BASE)
+    root.append(this.layer)
+
+    // In time order, so Tab walks the chapters as the years run.
+    for (const [i, c] of life.chapters.entries()) {
+      const frame = div('lb-frame')
+      // Under the tab, so the tab's own card hides the ring across its base.
+      const edge = div('lb-edge')
+      const tab = document.createElement('button')
+      tab.type = 'button'
+      tab.className = 'lb-tab'
+      tab.style.width = `${TAB_W}px`
+      tab.style.left = `${TAB_W / 2 + TAB_INSET}px`
+      // As the live message and the tape say it, so all three agree.
+      tab.setAttribute('aria-label', `${c.name}, ${yearsOf(c)}`)
+      // So the pointer over a tab lifts its own sheet, as over the film.
+      tab.dataset.chapter = String(i)
+      const year = document.createElement('span')
+      year.className = 'lb-hex'
+      // The start year, or for Growing up the place, as life.ts has it.
+      year.textContent = String(c.from)
+      tab.append(year)
+      tab.addEventListener('click', () => onTab(i))
+      frame.append(edge, tab)
+      this.layer.append(frame)
+      this.mounts.push({
+        frame,
+        tab,
+        transform: '',
+        side: -1,
+        shadow: -1,
+        rank: -1,
+        current: false,
+        hovered: false,
+      })
+    }
+  }
+
+  destroy(): void {
+    this.layer.remove()
+    this.mounts.length = 0
+    this.painter.destroy()
+  }
+
+  /** The stage changed size: measured again, and drawn on the next call whatever it is asked. */
+  resize(): Viewport {
+    this.viewport = measureViewport(this.root)
+    this.state.aspect = this.viewport.aspect
+    this.root.style.setProperty('--lb-frame', `${this.viewport.frame}px`)
+    this.key = ''
+    return this.viewport
+  }
+
+  draw(view: View): void {
+    const key = [
+      view.fit.u.toFixed(2),
+      view.fit.narrow ? 'n' : 'w',
+      (view.camera * view.fit.u).toFixed(1),
+      view.z.map((z) => Math.round(z * Z_SHADOW_STEPS)).join(','),
+      view.current.map(Number).join(''),
+      view.hovered.map(Number).join(''),
+    ].join('|')
+    if (key === this.key) return
+    this.key = key
+
+    const { edge, near } = view.fit
+    this.root.classList.toggle('is-narrow', edge !== null)
+    if (edge !== null) {
+      this.root.style.setProperty('--cv-edge', `${edge.toFixed(1)}px`)
+      this.root.style.setProperty('--cv-near', `${near.toFixed(1)}px`)
+    }
+
+    const vp = this.viewport
+    const vh = vp.height
+    this.fit = view.fit
+    this.laid = this.placed.map((p) => toStage(view.fit, p, view.camera))
+
+    for (let i = 0; i < this.laid.length; i++) {
+      const s = this.laid[i] as Laid
+      const slide = this.state.slides[i] as SlideState
+      slide.x = s.x / vh
+      slide.y = s.y / vh
+      slide.w = s.side / vh
+      slide.h = s.side / vh
+      slide.rot = s.rot
+      slide.rotRest = s.rot
+      slide.z = view.z[i] ?? 0
+
+      const m = this.mounts[i] as Mount
+      const transform =
+        `translate3d(${s.x.toFixed(2)}px, ${s.y.toFixed(2)}px, 0) ` +
+        `rotate(${s.rot.toFixed(4)}rad) translate(-50%, -50%)`
+      if (transform !== m.transform) {
+        m.transform = transform
+        m.frame.style.transform = transform
+      }
+      const side = Math.round(s.side * 100) / 100
+      if (side !== m.side) {
+        m.side = side
+        m.frame.style.width = `${side}px`
+        m.frame.style.height = `${side}px`
+      }
+      const shadow = Math.round((view.z[i] ?? 0) * Z_SHADOW_STEPS)
+      if (shadow !== m.shadow) {
+        m.shadow = shadow
+        m.frame.style.boxShadow = shadowStack(shadow / Z_SHADOW_STEPS)
+      }
+      const current = view.current[i] === true
+      const hovered = view.hovered[i] === true
+      if (current !== m.current) {
+        m.current = current
+        m.frame.classList.toggle('is-selected', current)
+        m.tab.setAttribute('aria-current', current ? 'true' : 'false')
+      }
+      if (hovered !== m.hovered) {
+        m.hovered = hovered
+        m.frame.classList.toggle('is-hovered', hovered)
+      }
+      // A tab standing in the fade or above it is not there to press.
+      m.tab.classList.toggle('is-away', edge !== null && s.y - s.side / 2 < near)
+      // Work over learning, so a work tab standing up into a learning sheet
+      // is never under it; the hovered sheet over those, the current over all.
+      const work = this.life.chapters[i]?.row === 'work' ? 1 : 0
+      const rank = (current ? 4 : hovered ? 2 : 0) + work
+      if (rank !== m.rank) {
+        m.rank = rank
+        m.frame.style.zIndex = String(rank)
+      }
+    }
+
+    const opts: RenderOptions = {
+      viewport: vp,
+      selectedId: null,
+      hoveredId: null,
+      reducedMotion: true,
+      warmth: 0,
+    }
+    this.painter.draw(this.state, opts)
+  }
+
+  /**
+   * What is under a stage point. The painter answers first, because a
+   * crossing is a region only it knows: two sheets there that the life says
+   * ran at once are the crossing. Anywhere else on a sheet, the mount
+   * included, is the sheet nearest the top.
+   */
+  targetAt(x: number, y: number): Target | null {
+    // Faded out above a phone's band, so nothing there to press.
+    const f = this.fit
+    if (f && f.edge !== null && y < f.near) return null
+    const hit = this.painter.sampleAt(x, y)
+    if (hit && hit.ids.length === 2) {
+      const [a, b] = hit.ids.map((id) => this.life.chapters[id]?.id ?? '')
+      const index = this.life.crossings.findIndex((c) => crosses([c], a ?? '', b ?? ''))
+      if (index >= 0) return { kind: 'crossing', index }
+    }
+    let best = -1
+    let rank = -1
+    for (let i = 0; i < this.laid.length; i++) {
+      const m = this.mounts[i] as Mount
+      if (m.rank > rank && inside(this.laid[i] as Laid, x, y)) {
+        best = i
+        rank = m.rank
+      }
+    }
+    return best >= 0 ? { kind: 'chapter', index: best } : null
+  }
+}

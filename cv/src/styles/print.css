@@ -1,0 +1,66 @@
+/*
+ * Printed, the CV is its text and nothing else: no film, no title, no card,
+ * no dock. The paper is in index.html before any script, so this holds with
+ * the script off too, and it prints whether the paper is out or put away.
+ * Imported last from main.tsx; the build links it in the head all the same.
+ */
+@media print {
+  /* global.css makes the viewport the page and scrolls nothing, which would
+     print the first sheet only. */
+  html,
+  body {
+    height: auto;
+    overflow: visible;
+    background: #fff;
+  }
+
+  /* Everything but the way down to the paper: with the app, body, #root,
+     the stage and the slot; without it, the paper is body's own child. */
+  body > :not(#root, #cv-paper),
+  #root > :not(.cv-stage),
+  .cv-stage > :not(.cv-slot) {
+    display: none !important;
+  }
+
+  /* The stage is fixed to the viewport, and fixed prints once per sheet. */
+  .cv-stage {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    background: none;
+  }
+
+  .cv-stage::after {
+    display: none;
+  }
+
+  .cv-paper {
+    position: static;
+    width: auto;
+    visibility: visible;
+    transform: none;
+    transition: none;
+    background: none;
+    box-shadow: none !important;
+    /* The cut edge, stage.css's border on the right, would print as a rule down every page. */
+    border: 0 !important;
+  }
+
+  .cv-text {
+    position: static;
+    overflow: visible;
+    padding: 0;
+    color: #3a3a40;
+  }
+
+  /* A role stays on one sheet where it fits. */
+  .cv-role,
+  .cv-text h2 {
+    break-inside: avoid;
+  }
+
+  .cv-text h2 {
+    break-after: avoid;
+  }
+}

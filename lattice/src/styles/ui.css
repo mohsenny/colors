@@ -799,9 +799,12 @@
     display: none;
   }
 
+  /* Below the title, which has four names now: they measure 249px at 18px and
+     the readout needs 196px, more than a phone has beside them. 40px is the
+     title's 12px down and its 18px, and 10px. */
   .lt-readout {
     right: calc(10px + env(safe-area-inset-right, 0px));
-    top: calc(10px + env(safe-area-inset-top, 0px));
+    top: calc(40px + env(safe-area-inset-top, 0px));
   }
 
   .lt-readout .lb-tray-list {

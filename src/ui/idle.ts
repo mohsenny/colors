@@ -9,6 +9,12 @@ const HELD = ':is(.lb-dock, .lb-tray, .lb-title, .lb-tab, .lb-grip)'
 /** The mark on the root while the page is idle. */
 const IDLE = 'is-idle'
 
+/**
+ * Chrome that stays on screen while the page is idle, like the CV's card. It
+ * never left, so a press on it is meant for it and wakes nothing.
+ */
+const AWAKE = '[data-awake]'
+
 /*
  * What the hand is doing. It lives out here because the effect below starts
  * again each time a drawer opens or closes, and the hand has not changed.
@@ -33,7 +39,19 @@ export function isIdle(): boolean {
 }
 
 /**
- * Idle, shared by all three: after a while without the mouse, a touch or a
+ * Whether a press only wakes the page and reaches nothing under it: a finger
+ * or a pen, while the page is idle or another such press is down, anywhere but
+ * on chrome that never left.
+ */
+export function onlyWakes(pointerType: string, target: EventTarget | null, idle: boolean, waking: number): boolean {
+  if (pointerType === 'mouse' || (!idle && waking === 0)) return false
+  // Duck-typed rather than `instanceof Element`, so the rule runs outside a page too.
+  const el = target as { closest?: (selectors: string) => unknown } | null
+  return !el?.closest?.(AWAKE)
+}
+
+/**
+ * Idle, shared by every page: after a while without the mouse, a touch or a
  * key, or as soon as the window is left for another, every word and control
  * leaves the screen and the cursor goes with them, playing or not, until the
  * hand comes back. Not while `busy` (a drawer is open), nor while a pointer is
@@ -43,8 +61,8 @@ export function isIdle(): boolean {
  *
  * A finger or a pen that comes down on an idle page only brings the chrome
  * back. Its press, and any other finger's while it is down, reach nothing
- * under it, click included. A mouse wakes the page as it moves, so its
- * presses always act.
+ * under it, click included, unless it lands inside `[data-awake]`. A mouse
+ * wakes the page as it moves, so its presses always act.
  */
 export function useIdle(busy: boolean): void {
   useEffect(() => {
@@ -87,7 +105,7 @@ export function useIdle(busy: boolean): void {
         waking.clear()
       }
       pressed.add(e.pointerId)
-      if (!mouse && (idle || waking.size > 0)) {
+      if (onlyWakes(e.pointerType, e.target, idle, waking.size)) {
         waking.add(e.pointerId)
         hush(e)
       }

@@ -1,0 +1,1356 @@
+/*
+ * The CV's own chrome. Everything it is made of is Lightbox's: the paper is
+ * `.lb-paper` from src/styles/stage.css, the card is the tray's glass with
+ * Lattice's readout type, copied below with the lb- and lt- names kept so the
+ * four pages can be diffed, and nothing here brings a size, a colour or a
+ * timing of its own. Its own names are cv- so they never meet Lightbox's.
+ *
+ * Lightbox's room comes in by @import rather than from main.tsx. Imported as
+ * modules by two pages, the two files became a chunk of their own that the
+ * build linked after each page's stylesheet, which turned the cascade over on
+ * Lightbox too. Inlined here they are the CV's own copy, and Lightbox builds as
+ * it did.
+ */
+
+@import '../../../src/styles/global.css';
+@import '../../../src/styles/stage.css';
+
+/* ------------------------------------------------------------------- paper */
+
+/*
+ * The text CV, on the paper Lightbox lays over its sheets: mount white, the
+ * fibre, the cut edge on the right. Full height like Lightbox's, with the
+ * reading between the title and the dock. Laid out here, not by the app, so
+ * it reads the same with no script at all.
+ */
+.cv-paper {
+  /* Fixed rather than the stage's absolute, so it holds before the app takes it in. */
+  position: fixed;
+  /* Over the sheets (10 and up), under the title, the card and the dock (200).
+     Lightbox's is 5, under its sheets, because there they lie on it. */
+  z-index: 100;
+  display: block;
+  width: min(560px, 100vw);
+  /* Lightbox's paper lies under its sheets; this one lies over them, so the
+     mount white is laid over the bare surface rather than over the film. */
+  background:
+    var(--lb-fibre) 0 0 / 64px 64px,
+    linear-gradient(var(--lb-mount), var(--lb-mount)),
+    var(--lb-surface);
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+  /* Out to the left, the way it came, and gone from the reading order once
+     it is out of sight. */
+  visibility: hidden;
+  transform: translateX(-100%);
+  transition:
+    transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    visibility 0s linear var(--lb-t-enter, 240ms);
+}
+
+.cv-paper.is-in {
+  visibility: visible;
+  transform: none;
+  transition: transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* The scroll. 52px clears the title (14px down, 22px tall) by 16px, 72px the
+   dock (18px up, 38px tall) by the same. */
+.cv-text {
+  position: absolute;
+  inset: calc(52px + env(safe-area-inset-top, 0px)) 0 calc(72px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 28px 0 calc(18px + env(safe-area-inset-left, 0px));
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+/* Without script the paper is never taken into the app, and there is no dock
+   to clear: the reading runs to the foot of the page. */
+body > .cv-paper .cv-text {
+  bottom: 0;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+}
+
+.cv-text h1 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lb-ink-strong, #101014);
+}
+
+.cv-intro {
+  margin-top: 4px;
+  color: var(--lb-ink, #1a1a1e);
+}
+
+.cv-part {
+  margin-top: 22px;
+}
+
+.cv-text h2 {
+  margin-bottom: 8px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+.cv-role + .cv-role {
+  margin-top: 14px;
+}
+
+.cv-text h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lb-ink, #1a1a1e);
+}
+
+.cv-at {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 14px;
+}
+
+/* Dates as the tabs and the clock set numbers. */
+.cv-when {
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  white-space: nowrap;
+}
+
+.cv-role ul,
+.cv-writing {
+  margin-top: 4px;
+}
+
+.cv-role li,
+.cv-writing li {
+  position: relative;
+  padding-left: 12px;
+}
+
+/* A short rule rather than a bullet, the weight of the cut edge. */
+.cv-role li::before,
+.cv-writing li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.68em;
+  width: 6px;
+  height: 1px;
+  background: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+.cv-reach {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 14px;
+}
+
+.cv-reach dt {
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.85;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+.cv-closing {
+  margin: 22px 0 24px;
+  color: var(--lb-ink, #1a1a1e);
+}
+
+.cv-text a {
+  color: var(--lb-ink, #1a1a1e);
+  text-decoration-color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  text-underline-offset: 2px;
+  transition: text-decoration-color var(--lb-t-grow, 180ms) var(--lb-ease, ease);
+}
+
+.cv-text a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* -------------------------------------------------------------------- film */
+
+/*
+ * The life: the painter's canvas and the mounts, laid by cv/src/render/life.ts.
+ * No z-index of its own, so the film still multiplies with the lit surface
+ * under it and the mounts' layer stacks with the paper and the chrome. It
+ * takes the vertical drag a phone would otherwise scroll with.
+ */
+.cv-film {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.cv-mounts {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* On a phone the years run down, and the life panned above the band fades
+   out over the margin under the card instead of passing under it and the
+   title. A mask on each layer, the canvas included, and none on the film:
+   that would isolate the paint from the surface it multiplies with. */
+.cv-film.is-narrow .lb-paint,
+.cv-film.is-narrow .cv-mounts {
+  -webkit-mask-image: linear-gradient(transparent var(--cv-edge), #000 var(--cv-near));
+  mask-image: linear-gradient(transparent var(--cv-edge), #000 var(--cv-near));
+}
+
+/* Pictures on the table here, not things to pick up: the press goes through
+   to the film, which knows a crossing from a sheet. The tab is a button, so
+   it takes its own. */
+.cv-film .lb-frame {
+  pointer-events: none;
+  cursor: inherit;
+}
+
+.cv-film .lb-tab {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* In the fade, or above it, on a phone. */
+.cv-film .lb-tab.is-away {
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ legend */
+
+/*
+ * Bottom left, at the same inset as the card top right, so the corners of the
+ * chrome sit on one margin. Type on the lit surface, and nothing else: a
+ * caption, not another thing to operate.
+ */
+.lb-legend {
+  position: fixed;
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: none;
+  pointer-events: none;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* The paper comes out over this corner, and what the legend says is about
+   the life under it. */
+.lb-legend.is-away {
+  opacity: 0;
+}
+
+.lb-legend-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+/* The gesture column is fixed so the three effects line up. Sized to
+   "Scroll", the longest, which measures 41px. */
+.lb-legend-gesture {
+  flex: 0 0 auto;
+  width: 44px;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+.lb-legend-effect {
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+/* Under this, with the longest name in the chip, the dock comes within 15px
+   of the legend. */
+@media (max-width: 939px) {
+  .lb-legend {
+    display: none;
+  }
+}
+
+/* -------------------------------------------------------------------- dock */
+
+.lb-dock {
+  /* The two tape widths, as in Solar, and the dock needs the difference to
+     compute its own offset. */
+  --lb-tl-w: 112px;
+  --lb-tl-open: 260px;
+  /* What sets the groups apart, over the gap inside them. */
+  --sl-group: 10px;
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: var(--lb-r-pill, 999px);
+  background-color: var(--lb-panel, rgba(255, 255, 255, 0.82));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+  box-shadow:
+    var(
+      --lb-shadow-float,
+      3.4px 9.6px 27.1px rgba(46, 52, 72, 0.092),
+      0.8px 2.4px 5.1px rgba(46, 52, 72, 0.052)
+    ),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transform: translateX(-50%);
+  transition:
+    opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* Stopping Play widens the tape. Offsetting by half the growth pins the left
+   edge, so the play button stays under the pointer that just clicked it. */
+.lb-dock.is-expanded {
+  transform: translateX(calc(-50% + (var(--lb-tl-open) - var(--lb-tl-w)) / 2));
+}
+
+/* Four groups: which chapter, when, how the years move, then the text. Each
+   ends with a wider gap than the ones inside it. */
+.lt-chip,
+.sl-now,
+.lb-timeline {
+  margin-right: var(--sl-group);
+}
+
+/* There has to be room on the right to absorb the shift. With the longest
+   name in the chip 771px leaves 15px of it. Under it the dock
+   grows from the centre, rather than off the edge of the screen. */
+@media (max-width: 770px) {
+  .lb-dock.is-expanded {
+    transform: translateX(-50%);
+  }
+}
+
+.lb-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-btn:hover {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(30, 34, 48, 0.055);
+}
+
+.lb-btn:active {
+  background: rgba(30, 34, 48, 0.09);
+}
+
+.lb-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* ----------------------------------------------------------- options panel */
+
+/*
+ * The drawer opens above the dock, so the pair reads as one object growing
+ * upward rather than as a second panel arriving from the side. A child of the
+ * dock, so it travels with it.
+ */
+.lb-options {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: 12px;
+  background-color: var(--lb-panel, rgba(255, 255, 255, 0.82));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+  box-shadow:
+    var(
+      --lb-shadow-float,
+      3.4px 9.6px 27.1px rgba(46, 52, 72, 0.092),
+      0.8px 2.4px 5.1px rgba(46, 52, 72, 0.052)
+    ),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 6px) scale(0.97);
+  transform-origin: bottom center;
+  transition:
+    opacity var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    visibility 0s linear var(--lb-t-grow, 180ms);
+}
+
+.lb-options.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0) scale(1);
+  transition-delay: 0s;
+}
+
+/* ---------------------------------------------------------------- timeline */
+
+.lb-timeline {
+  position: relative;
+  flex: none;
+  width: var(--lb-tl-w, 112px);
+  height: 24px;
+  margin-left: 2px;
+  transition: width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-timeline.is-expanded {
+  width: var(--lb-tl-open, 260px);
+}
+
+/* Visually hidden but fully operative: keyboard stepping, AT value reporting and
+   pointer drag all come from the native control. Opacity 0 (not
+   display/clip-path) is what keeps it hit-testable. */
+.lb-timeline-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  /* A touch drag on the thumb must scrub, not pan or rubber-band the page. */
+  touch-action: none;
+}
+
+/* No thumb width: a range keeps its thumb inside the track, which would put
+   both ends of the life 8px in from where the head draws them. */
+.lb-timeline-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0;
+  height: 24px;
+}
+
+.lb-timeline-input::-moz-range-thumb {
+  width: 0;
+  height: 24px;
+  border: 0;
+}
+
+.lb-timeline-visual {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lb-timeline-input:focus-visible ~ .lb-timeline-visual {
+  outline: 2px solid var(--lb-focus, rgba(26, 30, 44, 0.55));
+  outline-offset: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+}
+
+.lb-timeline-track,
+.lb-timeline-recorded {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+  transform: translateY(-50%);
+  transition: height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-timeline-track {
+  left: 0;
+  right: 0;
+  background: rgba(30, 34, 48, 0.09);
+}
+
+/* The whole life is on the tape from the start, so it is all recorded. */
+.lb-timeline-recorded {
+  left: var(--lb-tl-rec-left, 100%);
+  width: var(--lb-tl-rec-width, 0%);
+  background: rgba(30, 34, 48, 0.2);
+}
+
+.lb-timeline-head {
+  position: absolute;
+  top: 50%;
+  left: var(--lb-tl-pos, 100%);
+  z-index: 1;
+  width: 2px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transform: translate(-50%, -50%);
+  transition:
+    width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    background-color var(--lb-t-grow, 180ms) ease,
+    box-shadow var(--lb-t-grow, 180ms) ease,
+    border-radius var(--lb-t-grow, 180ms) ease;
+}
+
+.lb-timeline.is-expanded .lb-timeline-track,
+.lb-timeline.is-expanded .lb-timeline-recorded {
+  height: 4px;
+}
+
+/* Not playing: the hairline tick becomes a real handle. */
+.lb-timeline.is-expanded .lb-timeline-head {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lb-panel-hover, rgba(255, 255, 255, 0.99));
+  box-shadow:
+    0 1px 2px rgba(30, 34, 48, 0.16),
+    0 0 0 0.5px rgba(30, 34, 48, 0.16);
+}
+
+.lb-timeline:hover .lb-timeline-head {
+  background: var(--lb-ink, #1a1a1e);
+}
+
+.lb-timeline.is-expanded:hover .lb-timeline-head {
+  background: var(--lb-panel-hover, rgba(255, 255, 255, 0.99));
+  box-shadow:
+    0 1px 3px rgba(30, 34, 48, 0.22),
+    0 0 0 0.5px rgba(30, 34, 48, 0.24);
+}
+
+/* ------------------------------------------------------------- chapter chip */
+
+/* Where Solar's body chip sits: the one place the dock carries colour. */
+.lt-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px 0 6px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lt-chip:hover {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(30, 34, 48, 0.055);
+}
+
+.lt-chip.is-on {
+  color: var(--lb-ink-strong, #101014);
+  background: rgba(30, 34, 48, 0.075);
+}
+
+/* Wide enough for the longest name, "Both at once" at 85.3px, so the dock
+   holds still from Now through every chapter and crossing. */
+.lt-chip-label {
+  min-width: 86px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------- chapters drawer */
+
+/* Opens over the chip rather than the middle of the dock. */
+.lt-bodies {
+  left: 0;
+  gap: 1px;
+  padding: 5px;
+  width: 240px;
+  /* Clear of the title above it and the dock below; past that it scrolls. */
+  max-height: calc(100dvh - 110px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  transform: translate(0, 6px) scale(0.97);
+  transform-origin: bottom left;
+}
+
+.lt-bodies.is-open {
+  transform: translate(0, 0) scale(1);
+}
+
+/* Inside the dock's glass a second blur finds nothing to blur, and the sheets
+   under the drawer read through its names at the panel's 0.82. */
+.lt-bodies {
+  background-color: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
+}
+
+/* Short of room, the drawer scrolls rather than squeeze its rows. */
+.lt-bodies > * {
+  flex-shrink: 0;
+}
+
+.lt-body-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 5px;
+  text-align: left;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lt-body-row:hover {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(30, 34, 48, 0.045);
+}
+
+.lt-body-row[aria-pressed='true'] {
+  color: var(--lb-ink-strong, #101014);
+  background: rgba(30, 34, 48, 0.065);
+}
+
+.lt-body-name {
+  flex: 1 1 auto;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lt-body-kind,
+.lt-body-key {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+.lt-body-key {
+  width: 10px;
+  font-family: var(--lb-font-mono, ui-monospace, monospace);
+  letter-spacing: 0;
+  text-align: right;
+}
+
+/* The start year, set as the tabs set it. */
+.cv-body-from {
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  font-variant-numeric: slashed-zero tabular-nums;
+}
+
+/* The crossings, under the chapter that made them, their names in line with
+   the chapters'. */
+.lt-moons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px 2px;
+  padding: 0 0 3px 23px;
+}
+
+.lt-moon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.lt-moon .lb-tray-swatch {
+  width: 10px;
+  height: 10px;
+}
+
+.lt-moon:hover {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(30, 34, 48, 0.045);
+}
+
+.lt-moon[aria-pressed='true'] {
+  color: var(--lb-ink-strong, #101014);
+  background: rgba(30, 34, 48, 0.065);
+}
+
+/* ------------------------------------------------------------------- clock */
+
+/* The year under the head of the tape, or Iran before there were years. */
+.sl-clock {
+  display: flex;
+  align-items: baseline;
+  margin-left: 4px;
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  white-space: nowrap;
+  color: var(--lb-ink, #1a1a1e);
+}
+
+/* Four characters, a year or IRAN, so nothing moves as the years pass. */
+.cv-clock-year {
+  min-width: 4ch;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+/* Back to the present, as a live stream has it: the dot is lit at Now, and a
+   ring to press once the clock has left. */
+.sl-now {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px 0 8px;
+  border-radius: var(--lb-r-pill, 999px);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.sl-now:hover:not([aria-disabled='true']) {
+  color: var(--lb-ink, #1a1a1e);
+  background: rgba(30, 34, 48, 0.055);
+}
+
+.sl-now:active:not([aria-disabled='true']) {
+  background: rgba(30, 34, 48, 0.09);
+}
+
+.sl-now[aria-disabled='true'] {
+  color: var(--lb-ink, #1a1a1e);
+  cursor: default;
+}
+
+.sl-now-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  transition:
+    background-color var(--lb-t-grow, 180ms) ease,
+    box-shadow var(--lb-t-grow, 180ms) ease;
+}
+
+.sl-now[aria-disabled='true'] .sl-now-dot {
+  background: var(--sl-live, #ff5b4f);
+  box-shadow: 0 0 5px var(--sl-live-glow, rgba(255, 91, 79, 0.45));
+}
+
+/* ------------------------------------------------------------------ marks */
+
+/* Where a chapter starts, in its own colour: a sheet at tape size, with the
+   swatch's lip. Over the track, under the head. */
+.sl-mark {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 1.5px;
+  background: var(--lb-swatch, #fff);
+  box-shadow:
+    inset 0 0 0 0.6px rgba(0, 0, 0, 0.075),
+    0 0 0 0.5px rgba(255, 255, 255, 0.7);
+  transform: translate(-50%, -50%);
+  transition:
+    width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-quick, 120ms) ease;
+}
+
+.lb-timeline.is-expanded .sl-mark {
+  width: 8px;
+  height: 8px;
+}
+
+.sl-mark.is-pointed {
+  transform: translate(-50%, -50%) scale(1.35);
+}
+
+/* Which chapter a mark is, while the pointer is on it. Above the drawer, which
+   comes later in the dock and would otherwise blur it. */
+.sl-mark-tip {
+  position: absolute;
+  bottom: calc(100% + 13px);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 11px 0 8px;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: var(--lb-r-pill, 999px);
+  background: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
+  box-shadow: var(
+    --lb-shadow-soft,
+    1.9px 5.5px 16.7px rgba(46, 52, 72, 0.119),
+    0.5px 1.4px 3.6px rgba(46, 52, 72, 0.073)
+  );
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: sl-tip-in var(--lb-t-quick, 120ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+@keyframes sl-tip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 3px);
+  }
+}
+
+.sl-mark-tip .lb-tray-swatch {
+  width: 10px;
+  height: 10px;
+}
+
+.sl-mark-tip-kind {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lb-ink, #1a1a1e);
+}
+
+.sl-mark-tip-when {
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  text-transform: uppercase;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+/* Growing up is squeezed into the tenth of the tape before true scale begins.
+   Two short strokes across a gap cut in the track, as a chart breaks an axis,
+   halfway into that tenth: at its end the first year's mark would cover it. */
+.cv-break {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--cv-break, 10%) / 2);
+  width: 4px;
+  height: 10px;
+  border-inline: 1px solid var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  background: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
+  transform: translate(-50%, -50%) skewX(-18deg);
+  transition: opacity var(--lb-t-grow, 180ms) ease;
+}
+
+/* Playing, the tape is too short for it to clear the marks either side. */
+.lb-timeline:not(.is-expanded) .cv-break {
+  opacity: 0;
+}
+
+/* ---------------------------------------------------------------- CV button */
+
+/* The way to the text, in the legend's small capitals, the dock's last word. */
+.cv-paper-btn {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: var(--lb-r-pill, 999px);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  white-space: nowrap;
+  color: var(--lb-ink-strong, #101014);
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.cv-paper-btn:hover {
+  background: rgba(30, 34, 48, 0.055);
+}
+
+.cv-paper-btn:active {
+  background: rgba(30, 34, 48, 0.09);
+}
+
+.cv-paper-btn[aria-pressed='true'] {
+  background: rgba(30, 34, 48, 0.075);
+}
+
+/* --------------------------------------------------------------- skip link */
+
+/* Out of sight until Tab reaches it, then a note over the title's corner on
+   the toast's glass. */
+.cv-skip:focus-visible {
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  z-index: 300;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 6px 12px;
+  overflow: visible;
+  clip-path: none;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: var(--lb-r-pill, 999px);
+  background: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
+  box-shadow: var(
+    --lb-shadow-float,
+    3.4px 9.6px 27.1px rgba(46, 52, 72, 0.092),
+    0.8px 2.4px 5.1px rgba(46, 52, 72, 0.052)
+  );
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--lb-ink-strong, #101014);
+}
+
+/* ------------------------------------------------------------- tray card */
+
+.lb-tray {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  z-index: 200;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.lb-tray-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: var(--lb-r-chip, 7px);
+  background-color: var(--lb-panel, rgba(255, 255, 255, 0.82));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(12px) saturate(1.04);
+  -webkit-backdrop-filter: blur(12px) saturate(1.04);
+  box-shadow:
+    var(
+      --lb-shadow-soft,
+      1.9px 5.5px 16.7px rgba(46, 52, 72, 0.119),
+      0.5px 1.4px 3.6px rgba(46, 52, 72, 0.073)
+    ),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.lb-tray-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--lb-swatch, #fff);
+  box-shadow:
+    inset 0 0 0 0.6px rgba(0, 0, 0, 0.075),
+    0 0 0 0.5px rgba(255, 255, 255, 0.7);
+}
+
+/* --------------------------------------------------------------- readout */
+
+.lt-readout .lb-tray-list {
+  gap: 2px;
+  padding: 8px 10px 9px;
+  min-width: 196px;
+}
+
+.lt-readout-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lb-ink-strong, #101014);
+}
+
+.lt-readout-label {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+.lt-readout-value {
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+/* -------------------------------------------------------------------- card */
+
+/*
+ * Where Solar's readout sits, 264px of it: the facts at Now, a chapter or a
+ * crossing otherwise. The only words on the page that can be selected besides
+ * the paper's.
+ */
+.cv-card {
+  width: 264px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.cv-card .lb-tray-list {
+  gap: 0;
+}
+
+/* The old face fades out laid over the new one fading in, out of the flow,
+   so the card takes the new one's height at once. The facts lie there
+   unseen too, for nowBottom in App.tsx to measure. */
+.cv-card-faces {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+}
+
+.cv-card-face {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.cv-card-face.is-leaving,
+.cv-card-probe {
+  position: absolute;
+  inset: 0 0 auto;
+}
+
+.cv-card-probe {
+  visibility: hidden;
+}
+
+.cv-card-face.is-entering {
+  animation: cv-card-in var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+}
+
+.cv-card-face.is-leaving {
+  pointer-events: none;
+  animation: cv-card-out var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+}
+
+@keyframes cv-card-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes cv-card-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The chapter's years, where Solar says where you are looking from. */
+.cv-card-years {
+  margin-left: auto;
+  padding-left: 10px;
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: slashed-zero tabular-nums;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+/* Prose at the paper's size. */
+.cv-card-copy {
+  margin: 2px 0 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--lb-ink, #1a1a1e);
+}
+
+.cv-card-rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  margin: 2px 0 6px;
+}
+
+.cv-card-rows .lt-readout-label {
+  line-height: 1.6;
+}
+
+.cv-card-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+.cv-card-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+.cv-card-roles li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.cv-card-link {
+  color: var(--lb-ink, #1a1a1e);
+  text-decoration: underline;
+  text-decoration-color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  text-underline-offset: 2px;
+  transition: text-decoration-color var(--lb-t-grow, 180ms) var(--lb-ease, ease);
+}
+
+.cv-card-link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* The way to the crossing, and from it to either chapter. */
+.cv-card-cross {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--lb-ink, #1a1a1e);
+}
+
+/* The chapter it crossed, where a row has its value. */
+.cv-card-with {
+  margin-left: auto;
+  padding-left: 10px;
+  font-weight: 400;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+.cv-card-roles .cv-card-cross {
+  width: auto;
+  margin: 0;
+}
+
+.cv-card-cross .lb-tray-swatch {
+  width: 10px;
+  height: 10px;
+}
+
+.cv-card-cross:hover span:not(.cv-card-with) {
+  text-decoration: underline;
+  text-decoration-color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  text-underline-offset: 2px;
+}
+
+.cv-card-closing {
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+/* Always the last row, under a hairline, the way to the whole of it. */
+.cv-card-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 2px;
+  padding: 7px 0 0;
+  border-top: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lb-ink-strong, #101014);
+}
+
+.cv-card-text[aria-pressed='true'] {
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+/* The key is no help on a touch screen, which has no keyboard to press it on. */
+@media (hover: none) {
+  .cv-card-text .lt-readout-label {
+    display: none;
+  }
+}
+
+/*
+ * While the paper is out and the two would overlap, the card is only its
+ * last row, which then puts the paper away. 856px is the paper's 560, the
+ * card's 264 and the 16px either side of it.
+ */
+@media (max-width: 855px) {
+  .cv-card.is-reading .cv-card-faces {
+    display: none;
+  }
+
+  .cv-card.is-reading .cv-card-text {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+}
+
+/* ------------------------------------------------- narrow viewports (760px) */
+
+/* The Now dot alone, as in Solar. 310px is the rest of the dock with the
+   longest name in the chip, and 7px either side. */
+@media (max-width: 759px) {
+  .lb-dock {
+    --lb-tl-w: min(112px, calc(100vw - 310px));
+    --lb-tl-open: min(260px, calc(100vw - 310px));
+    --sl-group: 8px;
+  }
+
+  .sl-now {
+    justify-content: center;
+    width: 26px;
+    padding: 0;
+  }
+
+  .sl-now-label {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------- small viewports (620px) */
+
+/* The title is 18px here and 12px down, so 40px clears it by 10px, and the
+   dock 12px up, so 60px clears that by the same. */
+@media (max-width: 619px) {
+  .cv-text {
+    inset: calc(40px + env(safe-area-inset-top, 0px)) 0 calc(60px + env(safe-area-inset-bottom, 0px));
+    padding: 0 18px 0 calc(14px + env(safe-area-inset-left, 0px));
+  }
+
+  /* Under the card's one row, which is 30px tall here, by the same 10px. */
+  :root:has(.cv-card) .cv-text {
+    top: calc(80px + env(safe-area-inset-top, 0px));
+  }
+
+  /* Under the title, as Lattice's and Solar's readouts are, and the width of
+     the phone less 6px either side. */
+  .cv-card {
+    left: calc(6px + env(safe-area-inset-left, 0px));
+    right: calc(6px + env(safe-area-inset-right, 0px));
+    top: calc(40px + env(safe-area-inset-top, 0px));
+    width: auto;
+  }
+
+  .lt-readout .lb-tray-list {
+    min-width: 0;
+  }
+
+  /* Across the phone, the card lies over the sheets panned out above the
+     band, and at the tray's 0.82 they read through the text. */
+  .cv-card .lb-tray-list {
+    background-color: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
+  }
+
+  .lb-dock {
+    /* 175px is the rest of the dock with the chip a swatch, and 7px either side. */
+    --lb-tl-w: 48px;
+    --lb-tl-open: min(260px, calc(100vw - 189px));
+    --sl-group: 4px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    gap: 2px;
+  }
+
+  /* The chip is its swatch alone: the chapter is on the card above. */
+  .lt-chip {
+    justify-content: center;
+    width: 26px;
+    padding: 0;
+  }
+
+  .lt-chip-label {
+    display: none;
+  }
+
+  .sl-clock {
+    margin-left: 2px;
+    font-size: 9.5px;
+  }
+
+  /* The card is under the title here, so the drawer stops below where the
+     card's one row ends. */
+  .lt-bodies {
+    max-height: calc(100dvh - 160px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* The last few pixels come out of the gaps, then the tape, which keeps 20px
+   to be dragged by. 161px is the rest of the dock here, and 7px either side. */
+@media (max-width: 394px) {
+  .lb-dock {
+    --lb-tl-w: max(20px, min(48px, calc(100vw - 161px)));
+    --lb-tl-open: max(var(--lb-tl-w), calc(100vw - 161px));
+    --sl-group: 0px;
+    gap: 0;
+    padding: 5px 4px;
+  }
+
+  .sl-clock {
+    margin: 0;
+  }
+}
+
+/* -------------------------------------------------------------------- idle */
+
+/*
+ * Idle (src/ui/idle.ts, shared): the title, the tabs and the rest of the
+ * chrome leave, which leaves the life as a picture. The card stays, being
+ * what a reader came for.
+ */
+.is-idle .lb-dock,
+.is-idle .lb-legend,
+.is-idle .lb-tray:not(.cv-card),
+.is-idle .lb-tab {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: var(--lb-t-rest, 700ms);
+}
+
+.is-idle,
+.is-idle *:not(.cv-card, .cv-card *) {
+  cursor: none !important;
+}

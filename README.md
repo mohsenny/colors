@@ -3,7 +3,7 @@
 Eight sheets of transparent coloured film drifting over a backlit surface. Where they
 cross you get a third colour that nobody chose. That colour is the point.
 
-**[Open Lightbox](https://mohsenny.github.io/whoami/)**
+**[Open Lightbox](https://mohsenny.github.io/whoami/lightbox/)**
 
 ![Eight translucent colour sheets drifting over a bright white surface, several of them overlapping to produce new colours, with a small control dock at the bottom and one saved colour in the top right](docs/screenshot.jpg)
 
@@ -93,6 +93,12 @@ moons of the four giants are NASA, JPL and USGS mosaics, Pluto and Charon are Ne
 Horizons mosaics (NASA, JHUAPL, SwRI) and the stars are the Yale Bright Star Catalogue.
 The small moons show as plain colours.
 
+## Mohsen
+
+**[The site's front page](https://mohsenny.github.io/whoami/)** is my CV: my life laid out
+as sheets of the same film, with the CV as text one press away. Its source is in
+[cv/](cv/).
+
 ## Running it locally
 
 ```sh
@@ -100,8 +106,8 @@ npm install
 npm run dev
 ```
 
-Then open the URL it prints. Other scripts: `npm run build`, `npm test`,
-`npm run lint`, `npm run typecheck`.
+Then open the URL it prints, which opens on the CV. Other scripts: `npm run build`,
+`npm test`, `npm run lint`, `npm run typecheck`.
 
 React, TypeScript and Vite. No runtime dependencies beyond React itself, except
 Astronomy Engine for Solar's ephemeris. Pushing to `main` builds and deploys to GitHub
