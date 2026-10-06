@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AU_KM, LIGHT_KM_S } from '../sky/bodies'
-import { covered, crossesDisc, distanceLabel, lightLabel, sizeLabel } from './instrument'
+import { covered, crossesDisc, distanceLabel, lightLabel, luxLabel, sizeLabel } from './instrument'
 import { TAPE_S, Tape } from './tape'
 import { DEAD, clockLabel, dayLabel, dialOf, minuteLabel, notch, rateOf, speedLabel, speedSaid } from './time'
 
@@ -157,6 +157,14 @@ describe('the readout', () => {
     // Metis from the Earth, and Adrastea from Pluto.
     expect(sizeLabel((0.0104 / 3600) * deg)).toBe('0.010″')
     expect(sizeLabel((0.00055 / 3600) * deg)).toBe('0.00055″')
+  })
+
+  it('gives the noon light in lux to three figures', () => {
+    expect(luxLabel(128_000)).toBe('128,000 lux')
+    expect(luxLabel(1361.3)).toBe('1,360 lux')
+    expect(luxLabel(999.7)).toBe('1,000 lux')
+    expect(luxLabel(101.3)).toBe('101 lux')
+    expect(luxLabel(12.8)).toBe('12.8 lux')
   })
 })
 

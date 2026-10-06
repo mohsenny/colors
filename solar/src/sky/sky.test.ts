@@ -1,4 +1,4 @@
-import { Body as AE, HelioVector, MakeTime } from 'astronomy-engine'
+import { Body as AE, HelioVector, Illumination, MakeTime } from 'astronomy-engine'
 import { describe, expect, it } from 'vitest'
 import { AU_KM, BODIES } from './bodies'
 import type { BodyId } from './bodies'
@@ -7,6 +7,7 @@ import type { Eclipse, EclipseType } from './eclipses'
 import { TIME_MAX, TIME_MIN, posesAt, toEcliptic } from './ephemeris'
 import type { Vec3 } from './ephemeris'
 import { keplerMoon } from './kepler'
+import { DARK, excess, gain, glareOf, limit, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt } from './light'
 
 function len(a: Vec3): number {
   return Math.hypot(a[0], a[1], a[2])
@@ -358,5 +359,73 @@ describe('eclipses', () => {
     // Greatest eclipse was over Nazas, Mexico.
     expect(e.where?.lat).toBeCloseTo(25.3, 0)
     expect(e.where?.lon).toBeCloseTo(-104.1, 0)
+  })
+})
+
+describe('how bright things are', () => {
+  const deg = Math.PI / 180
+  const radius = (id: BodyId): number => (BODIES.find((b) => b.id === id) as (typeof BODIES)[number]).radius
+
+  it('makes a full Moon magnitude -12.7', () => {
+    expect(magnitude('moon', radius('moon'), 384_400, 1, 0)).toBeCloseTo(-12.7, 1)
+  })
+
+  it('makes the planets from the Earth as bright as Astronomy Engine has them, over fifty years', () => {
+    // Saturn's rings are reckoned a different way there, and Pluto is there
+    // with Charon, as one point.
+    const PLANETS = { mercury: AE.Mercury, venus: AE.Venus, mars: AE.Mars, jupiter: AE.Jupiter, saturn: AE.Saturn, uranus: AE.Uranus, neptune: AE.Neptune, pluto: AE.Pluto } as const
+    const within: Partial<Record<BodyId, number>> = { saturn: 0.3, pluto: 0.3 }
+    for (let ms = Date.UTC(1990, 0, 1); ms < Date.UTC(2040, 0, 1); ms += 3.3e9) {
+      const t = MakeTime(new Date(ms))
+      for (const [id, body] of Object.entries(PLANETS) as Array<[keyof typeof PLANETS, AE]>) {
+        const il = Illumination(body, t)
+        const tilt = (il.ring_tilt ?? 0) * deg
+        const m = (on: Exclude<BodyId, 'sun'>): number =>
+          magnitude(on, radius(on), il.geo_dist * AU_KM, il.helio_dist, il.phase_angle * deg, 1, on === 'saturn' ? ringsMagnitude(tilt, tilt) : 0)
+        const ours = id === 'pluto' ? -2.5 * Math.log10(10 ** (-0.4 * m('pluto')) + 10 ** (-0.4 * m('charon'))) : m(id)
+        expect(Math.abs(ours - il.mag)).toBeLessThan(within[id] ?? 0.15)
+      }
+    }
+  })
+
+  it('makes Venus brighter again as a thin crescent, and Saturn brighter with its rings open to both the Sun and the eye', () => {
+    const venus = (a: number): number => magnitude('venus', radius('venus'), 4e7, 0.72, a * deg)
+    expect(venus(175)).toBeLessThan(venus(165))
+    expect(ringsMagnitude(26 * deg, 26 * deg)).toBeCloseTo(-0.8, 1)
+    expect(ringsMagnitude(-10 * deg, 10 * deg)).toBe(0)
+  })
+
+  it('gives 128,000 lux at noon a sunlit AU away, a square less farther out', () => {
+    expect(noonLux(1)).toBe(128_000)
+    expect(noonLux(39.5)).toBeCloseTo(82, 0)
+    expect(luxOf(-26.74)).toBeCloseTo(128_000, -1)
+  })
+
+  it('draws the faintest stars, 6.5, on a dark sky as they were drawn before', () => {
+    expect(limit(DARK)).toBeCloseTo(6.63, 2)
+    const { a, size } = pointLook(excess(6.5, DARK, 0))
+    // As bright as they were drawn: 1.33 for each magnitude under 6.8.
+    const before = (6.8 - 6.5) * 1.33
+    expect(a).toBeCloseTo(0.1 + 0.085 * before, 4)
+    expect(size).toBeCloseTo(2.2 + 0.36 * before, 3)
+    // Lost a quarter of a magnitude under the limit, and no step where the
+    // size stops growing evenly.
+    expect(pointLook(-0.25).a).toBe(0)
+    expect(pointLook(11 / 1.33 + 1e-6).size).toBeCloseTo(pointLook(11 / 1.33 - 1e-6).size, 4)
+  })
+
+  it('lets a lens show fainter, up to a 20 cm telescope', () => {
+    expect(gain(1)).toBe(0)
+    expect(gain(30)).toBeCloseTo(7.39, 2)
+    expect(gain(300)).toBe(gain(30))
+  })
+
+  it('leaves only the brightest stars next to a full Moon, and most of them across the sky', () => {
+    const glare = [{ id: 'moon' as const, dir: [1, 0, 0] as Vec3, k: glareOf(luxOf(-12.7), 1), min: 0.25 * deg }]
+    const at = (a: number): number => limit(skyAt(glare, [Math.cos(a * deg), Math.sin(a * deg), 0]))
+    expect(at(5)).toBeLessThan(2)
+    expect(at(60)).toBeGreaterThan(5)
+    // Not its own glare.
+    expect(skyAt(glare, [1, 0, 0], 'moon')).toBe(DARK)
   })
 })

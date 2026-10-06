@@ -88,6 +88,11 @@ export function slerp(a: Vec3, b: Vec3, t: number): Vec3 {
 export const FOV = (46 * Math.PI) / 180
 /** The narrowest: a twentieth of a degree, about what a good amateur telescope shows. */
 export const FOV_MIN = (0.05 * Math.PI) / 180
+
+/** How many times a lens of field `fov` magnifies, against the widest. */
+export function magnification(fov: number): number {
+  return Math.tan(FOV / 2) / Math.tan(fov / 2)
+}
 /** How far above the seat's centre you sit, in its radii, before backing away. */
 export const BACK = 1.6
 /** The farthest you can back away from any seat, km: Neptune's whole orbit fits, with room round it. */

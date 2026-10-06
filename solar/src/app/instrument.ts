@@ -11,6 +11,8 @@ import { NEAR_MS, nearEclipse, stepTo, stepsFrom } from '../sky/eclipses'
 import type { Eclipse, EclipseSteps, EclipseType } from '../sky/eclipses'
 import { PERIOD, TIME_MAX, TIME_MIN, orbitOf, posesAt } from '../sky/ephemeris'
 import type { Poses, Vec3 } from '../sky/ephemeris'
+import { DARK, LIGHTS, excess, gain, glareOf, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt, sunMagnitude } from '../sky/light'
+import type { Glare } from '../sky/light'
 import { unpackStars } from '../sky/stars'
 import {
   FOV,
@@ -31,6 +33,7 @@ import {
   globeEye,
   grip,
   len,
+  magnification,
   meet,
   norm,
   overSpot,
@@ -120,6 +123,13 @@ const SNAP_MS = 125
 const CLICK_PX = 5
 /** How near a dot a click still counts as on it. */
 const PICK_PX = 14
+/** A star of 6.5, the faintest drawn, on a dark sky: what you are looking at never shows fainter. */
+const FINDABLE = excess(6.5, DARK, 0)
+/** The nearest the haze round a light is reckoned, radians as the eye sees the widest lens. */
+const HAZE = (0.5 * Math.PI) / 180
+/** Points a lit disc is sampled at, for how much of it is on screen. */
+const SAMPLES = 64
+const GOLDEN = Math.PI * (3 - Math.sqrt(5))
 /** Whose name stays when two would run into each other, after the one you are looking at. */
 const BY_SIZE: BodyId[] = [...BODIES].sort((a, b) => b.radius - a.radius).map((b) => b.id)
 
@@ -156,6 +166,12 @@ function rgb(hex: string): [number, number, number] {
 function smoothstep(a: number, b: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
   return t * t * (3 - 2 * t)
+}
+
+/** A body's colour washed pale, as a star's is: the eye sees little colour in a point. */
+function pale(c: readonly [number, number, number]): [number, number, number] {
+  const top = Math.max(c[0], c[1], c[2], 1e-3)
+  return [0.5 + (0.5 * c[0]) / top, 0.5 + (0.5 * c[1]) / top, 0.5 + (0.5 * c[2]) / top]
 }
 
 function smoother(t: number): number {
@@ -205,6 +221,12 @@ export function lightLabel(km: number): string {
   if (whole < 3600) return `${Math.floor(whole / 60)} min ${whole % 60} s`
   const m = Math.round(s / 60)
   return `${Math.floor(m / 60)} h ${m % 60} min`
+}
+
+/** Lux to three figures: "103 lux", "128,000 lux". */
+export function luxLabel(lux: number): string {
+  const r = Number(lux.toPrecision(3))
+  return `${r >= 1000 ? r.toLocaleString('en-US') : lux.toPrecision(3)} lux`
 }
 
 /**
@@ -423,11 +445,17 @@ export class Instrument {
 
   /** A frame, its paths drawn at `paths`, 0 to 1. */
   private draw(now: number, paths: number): void {
+    const cover = this.sunCover()
+    const power = magnification(this.eye.fov)
+    const mags = this.magnitudes()
+    const glare = this.glare(mags, cover.sunSeen, power)
     this.renderer.draw({
       eye: this.eye,
-      bodies: this.bodyDraws(),
-      ...this.sunCover(),
+      bodies: this.bodyDraws(mags, glare, gain(power)),
+      ...cover,
       orbits: paths > 0 ? this.orbitDraws(paths) : [],
+      glare,
+      lens: gain(power),
       clock: now / 1000,
     })
   }
@@ -930,7 +958,129 @@ export class Instrument {
       .slice(0, 4)
   }
 
-  private bodyDraws(): BodyDraw[] {
+  /** How much sunlight reaches a moon past its planet: none in the umbra, but for the Moon's copper. */
+  private sunlit(b: Body): number {
+    if (!b.parent) return 1
+    const at = this.at(b.id)
+    const toSun = sub(this.at('sun'), at)
+    const toPlanet = sub(this.at(b.parent), at)
+    const k = b.parent === 'earth' ? 1.02 : 1
+    const rs = Math.asin(Math.min(1, this.radius('sun') / len(toSun)))
+    const ro = Math.asin(Math.min(1, (this.radius(b.parent) * k) / len(toPlanet)))
+    return Math.max(b.id === 'moon' ? 1e-4 : 0, 1 - covered(rs, ro, angle(toSun, toPlanet)))
+  }
+
+  /** Every body's magnitude from the eye. */
+  private magnitudes(): Map<BodyId, number> {
+    const eye = this.eye.at
+    const sunAt = this.at('sun')
+    const out = new Map<BodyId, number>()
+    for (const b of BODIES) {
+      const at = this.at(b.id)
+      const toEye = sub(eye, at)
+      const d = len(toEye)
+      if (b.id === 'sun') {
+        out.set(b.id, sunMagnitude(d / AU_KM))
+        continue
+      }
+      const toSun = sub(sunAt, at)
+      let rings = 0
+      if (b.id === 'saturn') {
+        const pole = this.poses.saturn.z
+        rings = ringsMagnitude(Math.asin(dot(pole, toEye) / d), Math.asin(dot(pole, toSun) / len(toSun)))
+      }
+      out.set(b.id, magnitude(b.id, b.radius, d, len(toSun) / AU_KM, angle(toSun, toEye), this.sunlit(b), rings))
+    }
+    return out
+  }
+
+  /**
+   * The lights in view, for the haze they put over the sky round them: the
+   * Sun and every body bright enough to matter, each by as much of its
+   * sunlit side as is on screen and not behind something nearer. Light from
+   * off screen never reaches the eye, but a light just past the edge still
+   * counts a little, so the haze goes smoothly as it leaves.
+   */
+  private glare(mags: Map<BodyId, number>, seen: number, power: number): Glare[] {
+    const fr = this.frame ?? frameOf(this.eye, this.width / this.height)
+    const eye = this.eye.at
+    const sunAt = this.at('sun')
+    const near = HAZE / power
+    const discs = BODIES.map((b) => {
+      const rel = sub(this.at(b.id), eye)
+      const d = len(rel)
+      return { dir: scale(rel, 1 / d), d, cos: Math.cos(Math.asin(Math.min(1, b.radius / d))) }
+    })
+    const hidden = (r: Vec3, far: number): boolean => discs.some((o) => o.d < far && dot(r, o.dir) > o.cos)
+    const edge = 0.1 * this.height
+    const onScreen = (r: Vec3): number => {
+      const p = project(fr, r, this.width, this.height)
+      if (!p) return 0
+      return 1 - smoothstep(0, edge, Math.max(-p[0], p[0] - this.width, -p[1], p[1] - this.height, 0))
+    }
+    const out: Glare[] = []
+    for (const b of BODIES) {
+      const isSun = b.id === 'sun'
+      const k = glareOf(luxOf(mags.get(b.id) as number) * (isSun ? seen : 1), power)
+      if (k < 0.3 * DARK * near * near) continue
+      const at = this.at(b.id)
+      const rel = sub(at, eye)
+      const d = len(rel)
+      const dir = scale(rel, 1 / d)
+      const ang = Math.asin(Math.min(1, b.radius / d))
+      let share = 0
+      let spread = 0
+      let centre = dir
+      if (ang / this.pixel(rel) < 2) {
+        share = !isSun && hidden(dir, d) ? 0 : onScreen(dir)
+      } else {
+        // Points spread evenly over the disc, each weighed by how brightly it
+        // is lit as its own shader lights it, and kept if it is in view.
+        const toSun = norm(sub(sunAt, at))
+        const dusty = (SHADES[b.id] ?? 'moon') === 'moon'
+        const u = norm(across(NORTH, dir, [1, 0, 0]))
+        const v: Vec3 = [dir[1] * u[2] - dir[2] * u[1], dir[2] * u[0] - dir[0] * u[2], dir[0] * u[1] - dir[1] * u[0]]
+        const cap = 2 * Math.sin(ang / 2) ** 2
+        const kept: Array<[Vec3, number]> = []
+        let all = 0
+        let sum: Vec3 = [0, 0, 0]
+        let shown = 0
+        for (let i = 0; i < SAMPLES; i++) {
+          const down = ((i + 0.5) / SAMPLES) * cap
+          const s = Math.sqrt(down * (2 - down))
+          const c = 1 - down
+          const ph = i * GOLDEN
+          const r = add(add(scale(dir, c), scale(u, s * Math.cos(ph))), scale(v, s * Math.sin(ph)))
+          let g = 1
+          if (!isSun) {
+            const t = d * c - Math.sqrt(Math.max(0, b.radius * b.radius - d * d * s * s))
+            const n = scale(sub(scale(r, t), rel), 1 / b.radius)
+            const mu0 = dot(n, toSun)
+            const mu = Math.max(0, -dot(n, r))
+            g = mu0 <= 0 ? 0 : dusty ? (2 * mu0) / (mu0 + mu + 1e-4) : mu0
+          }
+          all += g
+          if (g <= 0 || (!isSun && hidden(r, d))) continue
+          const w = g * onScreen(r)
+          if (w <= 0) continue
+          kept.push([r, w])
+          sum = add(sum, scale(r, w))
+          shown += w
+        }
+        if (shown > 0) {
+          share = shown / all
+          centre = norm(sum)
+          let s2 = 0
+          for (const [r, w] of kept) s2 += w * angle(r, centre) ** 2
+          spread = Math.sqrt(s2 / shown)
+        }
+      }
+      if (share > 0) out.push({ id: b.id, dir: centre, k: k * share, min: Math.max(near, 1.2 * spread) })
+    }
+    return out.sort((p, q) => q.k - p.k).slice(0, LIGHTS)
+  }
+
+  private bodyDraws(mags: Map<BodyId, number>, glare: readonly Glare[], lens: number): BodyDraw[] {
     const eye = this.eye.at
     const out: BodyDraw[] = []
     for (const b of BODIES) {
@@ -948,17 +1098,12 @@ export class Instrument {
         const k = Math.max(0.05, 0.5 * (this.radius(b.parent) / d) ** 2) * lit
         shine = { dir: toPlanet, k, tint: SHINE[b.parent] ?? [1, 1, 1] }
       }
-      // As a point: its colour, dimmed by how little of its day side faces the eye.
-      let dot3: readonly [number, number, number]
-      if (b.id === 'sun') dot3 = [1, 0.92, 0.78]
-      else {
-        const toEye = norm(scale(rel, -1))
-        const toSun = norm(sun)
-        const lit = (1 + dot(toEye, toSun)) / 2
-        const c = rgb(b.color)
-        const k = 0.35 + 0.75 * Math.sqrt(lit)
-        dot3 = [Math.min(1, c[0] * k + 0.1), Math.min(1, c[1] * k + 0.1), Math.min(1, c[2] * k + 0.1)]
-      }
+      // As a point: a star of its magnitude, against the sky round it, which
+      // the lights in view lighten. What you are looking at stays findable.
+      let x = excess(mags.get(b.id) as number, skyAt(glare, norm(rel), b.id), lens)
+      if (b.id === this.look) x = Math.max(x, FINDABLE)
+      const { a, size } = pointLook(x)
+      const c = b.id === 'sun' ? [1, 0.92, 0.78] : pale(rgb(b.color))
       out.push({
         id: b.id,
         shade: SHADES[b.id] ?? 'moon',
@@ -972,7 +1117,7 @@ export class Instrument {
         shine,
         air: b.air ?? null,
         rings: b.id === 'saturn' ? RINGS : null,
-        dot: dot3,
+        dot: { rgb: [c[0] * a, c[1] * a, c[2] * a], a, size },
         fade: this.fades.get(b.id) ?? 1,
       })
     }
@@ -1184,6 +1329,7 @@ export class Instrument {
       if (seat.id !== 'sun') {
         rows.push(['Sun', distanceLabel(fromSun)])
         rows.push(['Sunlight', lightLabel(fromSun)])
+        rows.push(['Noon', luxLabel(noonLux(fromSun / AU_KM))])
       }
       rows.push(['Radius', `${Math.round(seat.radius).toLocaleString('en-US')} km`])
     } else {

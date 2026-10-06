@@ -90,11 +90,7 @@ export function Dock(props: DockProps): ReactElement {
         </span>
       </button>
 
-      <button type="button" className="lb-btn" aria-label={playing ? 'Pause' : 'Play'} onClick={onTogglePlay}>
-        {playing ? <PauseIcon /> : <PlayIcon back={snap.dial < 0} />}
-      </button>
-
-      {/* Written by the instrument every frame, not by React. */}
+      {/* Then when: written by the instrument every frame, not by React. */}
       <div className="sl-clock" role="timer" aria-label="Date and time, UTC">
         <span ref={dayRef} className="sl-clock-day" />
         <span ref={timeRef} className="sl-clock-time" />
@@ -113,6 +109,11 @@ export function Dock(props: DockProps): ReactElement {
         <span className="sl-now-label" aria-hidden="true">
           Now
         </span>
+      </button>
+
+      {/* Then how time moves: play by the tape, as in Lightbox and Lattice, and the speed. */}
+      <button type="button" className="lb-btn" aria-label={playing ? 'Pause' : 'Play'} onClick={onTogglePlay}>
+        {playing ? <PauseIcon /> : <PlayIcon back={snap.dial < 0} />}
       </button>
 
       <Timeline {...timeline} />

@@ -46,7 +46,7 @@
 
 /* Solar's dock is the widest of the three. Under this, with the longest name in
    the chip, it comes within 15px of the legend. */
-@media (max-width: 1170px) {
+@media (max-width: 1196px) {
   .lb-legend {
     display: none;
   }
@@ -59,6 +59,8 @@
      compute its own offset. */
   --lb-tl-w: 112px;
   --lb-tl-open: 260px;
+  /* What sets the groups apart, over the gap inside them. */
+  --sl-group: 10px;
   position: fixed;
   left: 50%;
   bottom: calc(18px + env(safe-area-inset-bottom, 0px));
@@ -89,15 +91,23 @@
   transform: translateX(calc(-50% + (var(--lb-tl-open) - var(--lb-tl-w)) / 2));
 }
 
+/* Four groups: where you are, when, how time moves, then the picture and the
+   plus. Each ends with a wider gap than the ones inside it. */
+.lt-chip,
+.sl-now,
+.sl-knob {
+  margin-right: var(--sl-group);
+}
+
 /* There has to be room on the right to absorb the shift. With the longest name
-   in the chip the cutoff at 999 leaves 15px of it, and anything added to the
+   in the chip the cutoff at 1025 leaves 15px of it, and anything added to the
    dock moves it. Under it the dock grows from the centre, rather than off the
-   edge of the screen, and the tape opens only as far as there is room: 580px
+   edge of the screen, and the tape opens only as far as there is room: 606px
    is the rest of the dock, with the longest name in the chip, and a margin
    either side. */
-@media (max-width: 998px) {
+@media (max-width: 1024px) {
   .lb-dock {
-    --lb-tl-open: min(260px, calc(100vw - 580px));
+    --lb-tl-open: min(260px, calc(100vw - 606px));
   }
 
   .lb-dock.is-expanded {
@@ -622,7 +632,7 @@
   display: flex;
   align-items: baseline;
   gap: 7px;
-  margin: 0 4px;
+  margin-left: 4px;
   font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10.5px;
   font-variant-numeric: slashed-zero tabular-nums;
@@ -955,12 +965,13 @@
 /* ------------------------------------------------ narrow viewports (760px) */
 
 /* Now keeps its dot and the clock drops UTC, to leave the tape room to open.
-   520px is the rest of the dock here, counted the same way. Near the bottom of
+   540px is the rest of the dock here, counted the same way. Near the bottom of
    the range the tape gives way while playing too. */
 @media (max-width: 759px) {
   .lb-dock {
-    --lb-tl-w: min(112px, calc(100vw - 520px));
-    --lb-tl-open: min(260px, calc(100vw - 520px));
+    --lb-tl-w: min(112px, calc(100vw - 540px));
+    --lb-tl-open: min(260px, calc(100vw - 540px));
+    --sl-group: 8px;
   }
 
   .sl-now {
@@ -979,9 +990,10 @@
 
 @media (max-width: 619px) {
   .lb-dock {
+    /* 347px is the rest of the dock, and 7px either side. */
     --lb-tl-w: 48px;
-    /* 339px is the rest of the dock, and 7px either side. */
-    --lb-tl-open: min(260px, calc(100vw - 339px));
+    --lb-tl-open: min(260px, calc(100vw - 347px));
+    --sl-group: 4px;
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
   }
@@ -1024,18 +1036,19 @@
 
   /* The readout is up by the title here, so the drawer stops below it too. */
   .lt-bodies {
-    max-height: calc(100dvh - 190px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 206px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   }
 }
 
-/* Under 390px the dock and its margins are wider than the phone. The spacing
+/* Under 395px the dock and its margins are wider than the phone. The spacing
    closes up first, all but the tape's, then the tape gives way while playing,
    never under 20px, and opens to what is left when paused. 307px is the rest
    of the dock closed up, and 7px either side. */
-@media (max-width: 389px) {
+@media (max-width: 394px) {
   .lb-dock {
     --lb-tl-w: max(20px, min(48px, calc(100vw - 307px)));
     --lb-tl-open: max(var(--lb-tl-w), calc(100vw - 307px));
+    --sl-group: 0px;
     gap: 0;
     padding: 5px 4px;
   }

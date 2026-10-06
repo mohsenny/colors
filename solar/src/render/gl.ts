@@ -13,9 +13,11 @@
  */
 
 import type { Eye } from './camera'
-import { across, circleOf, cross, dot, frameOf, len, norm, scale, viewRotation } from './camera'
+import { across, circleOf, cross, dot, frameOf, len, magnification, norm, scale, viewRotation } from './camera'
 import type { BodyId } from '../sky/bodies'
 import type { Vec3 } from '../sky/ephemeris'
+import { DARK, LIGHTS } from '../sky/light'
+import type { Glare } from '../sky/light'
 import type { Stars } from '../sky/stars'
 
 /** How a body is lit. */
@@ -42,8 +44,8 @@ export interface BodyDraw {
   shine: { dir: Vec3; k: number; tint: readonly [number, number, number] } | null
   air: { depth: number; tint: readonly [number, number, number] } | null
   rings: { inner: number; outer: number } | null
-  /** What the body looks like when it is too far to be more than a point. */
-  dot: readonly [number, number, number]
+  /** When it is too far to be more than a point: its colour times how strongly it shows, that strength, 0 to 1, and how wide, CSS px. */
+  dot: { rgb: readonly [number, number, number]; a: number; size: number }
   /** How much of it shows, 0 to 1: a moon a pixel from its planet folds into the planet's point. */
   fade: number
 }
@@ -64,6 +66,9 @@ export interface FrameDraw {
   sunSeen: number
   cover: { rel: Vec3; radius: number } | null
   orbits: OrbitDraw[]
+  /** The lights in view, for the haze they put over the stars, and the magnitudes the lens adds to what the eye reaches. */
+  glare: Glare[]
+  lens: number
   /** Real seconds, for the Sun's surface to boil on. */
   clock: number
 }
@@ -142,6 +147,7 @@ uniform vec4 uAir;
 uniform vec2 uRing;
 uniform float uPx;
 uniform vec3 uDot;
+uniform float uDotA;
 uniform float uDotMix;
 uniform float uDotR;
 uniform float uClock;
@@ -344,11 +350,11 @@ void main() {
 
   res.rgb += encode(glow) * (1.0 - res.a);
 
-  // Too far to be more than a point: a point, in the colour it shows.
+  // Too far to be more than a point: a point, drawn as a star as bright is.
   float ang = asin(clamp(length(dl.xy), 0.0, 1.0));
   float r = ang / uPx;
   float pt = exp(-(r * r) / (uDotR * uDotR));
-  vec4 point = vec4(uDot * pt, pt);
+  vec4 point = vec4(uDot * pt, uDotA * pt);
   o = mix(res, point, uDotMix) * uFade;
 }`
 
@@ -363,6 +369,7 @@ out vec4 o;
 uniform mat3 uToLocal;
 uniform float uAng;
 uniform float uPx;
+uniform float uHalo;
 uniform float uSeen;
 uniform float uCorona;
 uniform vec3 uCover;
@@ -377,9 +384,11 @@ void main() {
   float core = exp(-(th * th) / (rc * rc)) * small;
   // From the very edge of the limb: a rim of fire hugging it, never more than
   // a few dozen pixels deep, inside a wide soft halo that goes close up,
-  // where its glare would only wash over the sky.
+  // where its glare would only wash over the sky. Against sunlit ground the
+  // glare is as strong from Pluto as from the Earth, so however small the
+  // disc the halo keeps its size in the eye.
   float off = max(small, smoothstep(1.0 - 1.0 / max(px, 1e-3), 1.0 + 1.5 / max(px, 1e-3), x));
-  float rh = max(uAng * 2.2, 12.0 * uPx);
+  float rh = max(uAng * 2.2, uHalo);
   float near = 1.0 - smoothstep(0.3, 0.7, uAng);
   float halo = pow(rh / (th + rh), 2.3) * off * near;
   float rim = exp(-max(th - uAng, 0.0) / min(0.1 * uAng, 36.0 * uPx)) * off * (1.0 - small);
@@ -396,6 +405,10 @@ void main() {
  * Stars and orbit lines are projected a point at a time: x and y over one
  * plus how far ahead the point is, the view looking down -z. A star right
  * behind the eye would land at infinity, so it is left out.
+ *
+ * Each star shows by how far it is over the faintest the eye makes out
+ * against the sky behind it, which the lights in view lighten round
+ * themselves: sky/light.ts, line for line.
  */
 const STARS_VS = `#version 300 es
 layout(location = 1) in vec3 aDir;
@@ -403,13 +416,29 @@ layout(location = 2) in vec4 aLook;
 uniform mat3 uView;
 uniform vec2 uScale;
 uniform float uDpr;
-uniform float uDim;
+uniform float uLens;
+uniform float uDark;
+uniform vec4 uGlare[${LIGHTS}];
+uniform float uGlareMin[${LIGHTS}];
+uniform int uGlareN;
 out vec4 vLook;
 void main() {
+  float L = uDark;
+  for (int i = 0; i < ${LIGHTS}; i++) {
+    if (i < uGlareN) {
+      vec3 g = uGlare[i].xyz;
+      float th = max(uGlareMin[i], atan(length(cross(aDir, g)), dot(aDir, g)));
+      L += uGlare[i].w / (th * th);
+    }
+  }
+  float x = 7.93 - 5.0 * log(1.0 + 63.0 * sqrt(L)) * 0.4342945 + uLens + 0.172 - aLook.w;
+  float b = max(x, 0.0) * 1.33;
+  float a = min(1.0, 0.1 + 0.085 * b) * smoothstep(-0.25, 0.3, x);
+  float size = b <= 11.0 ? 2.2 + 0.36 * b : 9.0 - 2.84 * exp(-0.36 * (b - 11.0) / 2.84);
   vec3 v = uView * aDir;
-  gl_Position = v.z < 0.999 ? vec4(v.xy / uScale, 0.0, 1.0 - v.z) : vec4(0.0, 0.0, 2.0, 1.0);
-  gl_PointSize = aLook.w * uDpr;
-  vLook = vec4(aLook.rgb * uDim, 1.0);
+  gl_Position = v.z < 0.999 && a > 0.0 ? vec4(v.xy / uScale, 0.0, 1.0 - v.z) : vec4(0.0, 0.0, 2.0, 1.0);
+  gl_PointSize = size * uDpr;
+  vLook = vec4(aLook.rgb * a, 1.0);
 }`
 
 const STARS_FS = `#version 300 es
@@ -472,8 +501,10 @@ function uniforms(gl: WebGL2RenderingContext, p: WebGLProgram): Uniforms {
   return out
 }
 
-/** The blur of a point, device px. */
-const DOT_R = 1.25
+/** A point's sprite falls to exp(-3.2) at its edge: as a blur, its size over this. */
+const SPRITE = Math.sqrt(12.8)
+/** The least the Sun's halo reaches, radians as the eye sees the widest lens. */
+const HALO = (0.3 * Math.PI) / 180
 /** Thousands of km: the unit orbit lines are handed over in. */
 export const ORBIT_UNIT = 1000
 
@@ -581,13 +612,7 @@ export class Renderer {
   setStars(stars: Stars): void {
     const gl = this.gl
     const look = new Float32Array(stars.count * 4)
-    for (let i = 0; i < stars.count; i++) {
-      // Each step of five magnitudes is a hundred times fainter.
-      const bright = Math.max(0, 6.8 - stars.mag[i]) * 1.33
-      const a = Math.min(1, 0.1 + 0.085 * bright)
-      const [r, g, b] = starColour(stars.bv[i])
-      look.set([r * a, g * a, b * a, 2.2 + 0.36 * bright], i * 4)
-    }
+    for (let i = 0; i < stars.count; i++) look.set([...starColour(stars.bv[i]), stars.mag[i]], i * 4)
     gl.bindVertexArray(this.starsVao)
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
     gl.bufferData(gl.ARRAY_BUFFER, stars.dir, gl.STATIC_DRAW)
@@ -624,13 +649,21 @@ export class Renderer {
     // A device pixel on the plane, and the sky it covers in a direction.
     const unit = (2 * fr.sy) / h
     const pxAt = (d: Vec3): number => unit * (1 + dot(d, fr.forward))
+    const power = magnification(eye.fov)
 
     if (this.starCount) {
       gl.useProgram(this.starsProg)
       gl.uniformMatrix3fv(this.su.uView, false, view)
       gl.uniform2f(this.su.uScale, fr.sx, fr.sy)
       gl.uniform1f(this.su.uDpr, this.dpr)
-      gl.uniform1f(this.su.uDim, 1)
+      gl.uniform1f(this.su.uLens, frame.lens)
+      gl.uniform1f(this.su.uDark, DARK)
+      const glare = frame.glare.slice(0, LIGHTS)
+      gl.uniform1i(this.su.uGlareN, glare.length)
+      if (glare.length) {
+        gl.uniform4fv(this.su.uGlare, glare.flatMap((g) => [g.dir[0], g.dir[1], g.dir[2], g.k]))
+        gl.uniform1fv(this.su.uGlareMin, glare.map((g) => g.min))
+      }
       gl.bindVertexArray(this.starsVao)
       gl.drawArrays(gl.POINTS, 0, this.starCount)
     }
@@ -704,12 +737,14 @@ export class Renderer {
       if (f.D <= b.radius) return
       const ang = Math.asin(b.radius / f.D)
       const px = pxAt(f.w)
-      const reachAng = Math.min(Math.PI / 2, 16 * Math.max(ang * 2.2, 12 * px))
+      const halo = HALO / power
+      const reachAng = Math.min(Math.PI / 2, 16 * Math.max(ang * 2.2, halo))
       gl.useProgram(this.glow)
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
       if (!place(this.gu, f, reachAng)) return
       gl.uniform1f(this.gu.uAng, ang)
       gl.uniform1f(this.gu.uPx, px)
+      gl.uniform1f(this.gu.uHalo, halo)
       gl.uniform1f(this.gu.uSeen, seen)
       gl.uniform1f(this.gu.uCorona, corona)
       const c = frame.cover
@@ -732,9 +767,13 @@ export class Renderer {
       const reach = Math.max(1 + (b.air ? b.air.depth * 1.2 : 0), b.rings ? b.rings.outer / R : 1) * R
       const px = pxAt(f.w)
       const rpx = Math.asin(R / f.D) / px
-      // Small bodies are drawn as points, which need room around them.
-      const dotMix = 1 - smoothstep(0.7, 2.2, rpx)
-      const room = Math.max(f.D > reach * 1.0001 ? Math.asin(reach / f.D) : Math.PI, 6 * DOT_R * this.dpr * px)
+      // Small bodies are drawn as points, which need room around them. A
+      // bright one's point is wider than its disc first is, so it gives way
+      // only once the disc has grown into it.
+      const blur = (b.dot.size * this.dpr) / SPRITE
+      const full = Math.max(2.2, 1.5 * blur)
+      const dotMix = 1 - smoothstep(0.32 * full, full, rpx)
+      const room = Math.max(f.D > reach * 1.0001 ? Math.asin(reach / f.D) : Math.PI, 0.6 * b.dot.size * this.dpr * px)
       if (!place(u, f, room)) return
       gl.uniform1f(u.uD, f.D / R)
       gl.uniform3fv(u.uPole, inLocal(b.axes[2], f))
@@ -761,9 +800,10 @@ export class Renderer {
       if (b.rings) gl.uniform2f(u.uRing, b.rings.inner / R, b.rings.outer / R)
       else gl.uniform2f(u.uRing, 0, 0)
       gl.uniform1f(u.uPx, px)
-      gl.uniform3f(u.uDot, b.dot[0], b.dot[1], b.dot[2])
+      gl.uniform3f(u.uDot, b.dot.rgb[0], b.dot.rgb[1], b.dot.rgb[2])
+      gl.uniform1f(u.uDotA, b.dot.a)
       gl.uniform1f(u.uDotMix, dotMix)
-      gl.uniform1f(u.uDotR, DOT_R * this.dpr)
+      gl.uniform1f(u.uDotR, blur)
       gl.uniform1f(u.uClock, frame.clock)
       gl.uniform1f(u.uFade, b.fade)
       this.bind(0, b.id)
