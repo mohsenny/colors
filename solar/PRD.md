@@ -24,8 +24,8 @@ Speed the clock up and the sky starts to move: the Moon's phases, the Earth turn
 5. **Dragging turns you round on the spot.** The eye swings round the seat, which stays under you and level. Across, the sky follows the hand: on the Moon with the Earth ahead, a drag across the screen brings the Sun behind you into view. Up and down, you look the way you drag, as a camera tilts. Through a telescope the sky moves at most ten times as fast as the hand, so it can still be aimed. Clicking the target again brings it back to the middle.
 6. **A speed knob in the units things move in.** At true scale 2× and 100× look exactly like real time: nothing visibly moves. So the knob rests on real time in the middle and, turned either way, starts at 1 min/s (the Moon crosses its own width in a minute) and climbs evenly through 1 hr/s, 1 day/s (the Earth turns once a second) and 1 mo/s (the Moon's phases once a second) to 1 yr/s (the planets wheel round) at the end. Right runs the clock forward, left backward. Its only words are the speed it is at, signed and in two figures: +2.5 hr/s, −1 day/s. The arrow keys, <kbd>.</kbd> and <kbd>,</kbd> stop at the round speeds: 1 and 10 min, 1 and 6 hr, 1 day, 1 wk, 1 mo and 1 yr a second.
 7. **The tape: the last two minutes as you watched them.** A moment that has gone by can be found again. The clock is sampled thirty times a second of playing whatever the rate, so an eclipse watched slowly takes as much tape as a year that flew by. Pausing or grabbing it opens it out, as in Lattice; playing on from a moment drops what came after. A jump, back to now or to an eclipse, stays a jump, and the eclipse peaks it ran through are gold marks a drag snaps to.
-8. **An eclipse is a jump and a seat to watch it from.** The plus drawer lists the next solar and lunar eclipse with kind, date and time. Choosing one moves the clock to 90 minutes (solar) or two hours (lunar) before the peak, runs it at 10 min/s and seats you where it shows best: on the Moon looking at the Earth, so the shadow crosses the day side, or on the Earth looking at the Moon as it turns copper.
-9. **Photographs, not paint.** The planets and the Moon wear Solar System Scope maps (CC BY 4.0, credited in the plus drawer), the moons of Jupiter and Saturn the Voyager, Galileo and Cassini mosaics of NASA, JPL and the USGS. Titan has none: its haze hides the ground, so it is a ball of orange haze. The Earth has day, night and cloud layers; Saturn has its ring map. The Sun is its own map's fire: boiling slowly, hotter and yellower in the middle, darker and redder at the limb, granulated close up, with a rim of fire hugging the edge.
+8. **An eclipse is a jump and a seat to watch it from.** The plus drawer has a row for solar eclipses and one for lunar, each showing, with kind, date and time, the one the clock is at (lit, within three hours of its peak) or else the next. A step back and a step on either side walk through them to the first and last in the clock's range, and the drawer stays open so the steps can follow one another. Choosing or stepping to one moves the clock to 90 minutes (solar) or two hours (lunar) before the peak, runs it at 10 min/s and seats you where it shows best: on the Moon looking at the Earth, so the shadow crosses the day side, or on the Earth looking at the Moon as it turns copper.
+9. **Photographs, not paint.** The planets and the Moon wear Solar System Scope maps (CC BY 4.0, credited in the README), the moons of Jupiter and Saturn the Voyager, Galileo and Cassini mosaics of NASA, JPL and the USGS. Titan has none: its haze hides the ground, so it is a ball of orange haze. The Earth has day, night and cloud layers; Saturn has its ring map. The Sun is its own map's fire: boiling slowly, hotter and yellower in the middle, darker and redder at the limb, granulated close up, with a rim of fire hugging the edge.
 10. **The Sun lights everything.** Each body is lit from where the Sun really is. Night sides are dark and the Earth's shows its cities. Air glows at the limb, blue where the Sun is up and red where it is setting. The Moon's dust throws light straight back, so a full Moon is a flat disc, and the moons of the giants are lit the same way. A moon's night side catches its planet's light: earthshine on the Moon, a warmer glow from Jupiter and Saturn. A planet and its moons shadow each other for real, umbra and penumbra: the Moon on the Earth, the Earth on the Moon, the black dots of Jupiter's moons on Jupiter. Only the Moon turns copper in shadow, lit through the Earth's air. The stars are the Yale Bright Star Catalogue, about 9,100 of them to magnitude 6.5, in their own colours.
 11. **The lights are out.** Lightbox and Lattice are lit white rooms. Space is black, and a white sky would be a lie the photographs cannot survive. So Solar is the same room from the dark side: the same smoked-glass chrome, radii, timings, type and fibre, with white ink at the strengths the light rooms use for dark. The family is in the objects, not the background.
 12. **The big moons of the giants, and no others.** Jupiter's four and Saturn's seven round ones are big enough to show as discs from nearby and to drop shadows you can see on their planet; the rest would be names without sights. They are not on the number keys, which stay the ten, but under their planet in the bodies drawer. A moon a few pixels from its planet folds into the planet's point, name and all, so Jupiter from the Earth is one bright dot until you zoom in.
@@ -55,23 +55,25 @@ Speed the clock up and the sky starts to move: the Moon's phases, the Earth turn
 | Stop time | <kbd>Space</kbd> |
 | Faster, slower, backward | Turn the knob in the dock, or <kbd>.</kbd> and <kbd>,</kbd>. Double-click it for real time |
 | Find a moment again | Pause, or drag the tape in the dock |
-| Back to now | <kbd>N</kbd>, or Back to now in the plus drawer |
-| Watch the next eclipse | The plus drawer |
+| Back to now | <kbd>N</kbd>, or Now in the dock |
+| Watch an eclipse | The plus drawer: the next, or step back and on through them |
 | Go to Lightbox or Lattice | Its name, top left |
 
 ## 5. Chrome
 
 **Title, top left.** All three names, white here: the shared title takes its two shades from properties.
 
-**Dock, bottom centre.** Left to right: the seat chip (its sphere and name, opening the bodies drawer), play or pause, the date and time in UTC, the tape, the speed knob with its speed, and the plus. Paused, the tape opens out to the right while the rest stays put. Fades when idle and playing, as in the other two.
+**Dock, bottom centre.** Left to right: the seat chip (its sphere and name, opening the bodies drawer), play or pause, the date and time in UTC, Now, the tape, the speed knob with its speed, and the plus. Now's dot is red while the clock plays the present at real time, as on a live stream; once it has left, the dot is a ring and Now takes it back. Paused, the tape opens out to the right while the rest stays put. Fades when idle and playing, as in the other two.
 
-**Drawers.** Bodies: the ten, Sun outward, each with its sphere, name, kind and number key, and the moons of Jupiter and Saturn by name under their planet. It scrolls where the screen is short. Plus: the next solar and the next lunar eclipse, Back to now, and the credit line.
+**Drawers.** Bodies: the ten, Sun outward, each with its sphere, name, kind and number key, and the moons of Jupiter and Saturn by name under their planet. It scrolls where the screen is short. Plus: the solar and the lunar eclipses, each between a step back and a step on.
 
 **Readout, top right.** The target and where it is seen from, then `DISTANCE`, `LIGHT` (how long its light takes to arrive), `SIZE` (across, in the sky) and `LIT` (how much of the disc you see is in daylight). On a globe: `ABOVE`, `SUN`, `SUNLIGHT` and `RADIUS`.
 
-**Legend, bottom left.** `DRAG look around`, `SCROLL zoom`, `CLICK look at it`, `DOUBLE-CLICK go there`.
+**Legend, bottom left.** `DRAG look around`, `SCROLL zoom`, `CLICK look at it`, `DOUBLE-CLICK go there`. Hidden under 1,080 px, where the dock would reach it.
 
-**Under 620 px.** Legend hidden, readout at a 10 px inset, the chip shows its sphere only, the clock stacks the date over the time and the tape is short until it opens.
+**Under 760 px.** Now shows its dot only and the clock drops UTC, so the tape has room to open.
+
+**Under 620 px.** Readout at a 10 px inset, the chip shows its sphere only, the clock stacks the date over the time and the tape is short until it opens.
 
 ## 6. What's NOT in v1
 
@@ -94,7 +96,7 @@ solar/src/ui/      Dock, Timeline, Knob, Bodies, Options, Readout, Legend, Spher
 solar/src/styles/  global (the dark tokens), stage, ui
 ```
 
-All 21 positions are worked out every frame. Eclipse searches take a few ms, so they run at most twice a second. The maps of the planets and the Moon are 6 MB and load after the first frame; the giants' moons have 4 MB more, each fetched when it first comes near enough to show. Until its map arrives a body shows its own colour.
+All 21 positions are worked out every frame. Eclipse searches take a few ms, so they run at most twice a second; the first and last of each kind in the clock's range are found once. The maps of the planets and the Moon are 6 MB and load after the first frame; the giants' moons have 4 MB more, each fetched when it first comes near enough to show. Until its map arrives a body shows its own colour.
 
 ## 8. Acceptance
 
@@ -103,7 +105,7 @@ As unit tests:
 - The Earth is 0.9833 AU from the Sun at perihelion and 1.0166 at aphelion; the Moon stays between 356,000 and 407,000 km.
 - The Earth's axis tilts 23.44°. At noon UTC on the March equinox the Sun is over Greenwich, and at the June solstice over the Tropic of Cancer. The Moon keeps one face to the Earth, within its libration.
 - Jupiter's and Saturn's moons are where JPL Horizons has them in 2020 and 2026: within 1,000 km for Jupiter's, 2,500 for Saturn's inner five, 4,000 for Titan and 10,000 for Iapetus. All but Iapetus stay within 2° of their planet's equator, and each keeps one face to its planet and leads with 90°W.
-- Solar eclipses from 2024-04-08 (total) to 2027-08-02 (total), and lunar ones from 2025-03-14 (total) to 2027-02-20 (penumbral), come back in order and of the right kind; the 2024 one peaks over Mexico.
+- Solar eclipses from 2024-04-08 (total) to 2027-08-02 (total), and lunar ones from 2025-03-14 (total) to 2027-02-20 (penumbral), come back in order and of the right kind, and the same backward, as do two partial solar eclipses a month apart in 2018; the 2024 one peaks over Mexico. A step from an eclipse goes to the one either side of it, from between two to the last or the next, and none goes past the first or last in the clock's range.
 - The knob rests on real time in the middle, only climbs either side of it, runs back symmetrically and steps through the round speeds. Speeds and light time carry into the next unit rather than reading 60, and the clock reads in UTC.
 - Disc overlap is exact for none, total, annular and partial cover.
 - The horizon lands where asked for a far target and for Mercury seen from the Sun through a 0.04° lens. With air, a narrow lens keeps the glow below the target.

@@ -63,6 +63,7 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         onDial={(dial) => instrument.setDial(dial)}
         onBecome={(id) => instrument.become(id)}
         onWatch={(e) => instrument.watch(e)}
+        onStep={(type, way) => instrument.stepEclipse(type, way)}
         onNow={() => instrument.now()}
       />
       <div className="lb-sr" aria-live="polite">

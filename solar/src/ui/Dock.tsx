@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { Snapshot } from '../app/instrument'
 import type { BodyId } from '../sky/bodies'
-import type { Eclipse } from '../sky/eclipses'
+import type { Eclipse, EclipseType } from '../sky/eclipses'
 import { Bodies } from './Bodies'
 import { PauseIcon, PlayIcon, PlusIcon } from './Icons'
 import { Knob } from './Knob'
@@ -20,6 +20,7 @@ export interface DockProps {
   onDial(dial: number): void
   onBecome(id: BodyId): void
   onWatch(e: Eclipse): void
+  onStep(type: EclipseType, way: 1 | -1): void
   onNow(): void
 }
 
@@ -29,7 +30,7 @@ const IDLE_MS = 2400
 type Drawer = 'bodies' | 'options' | null
 
 export function Dock(props: DockProps): ReactElement {
-  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onNow } = props
+  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onStep, onNow } = props
   const { playing } = snap
   const [idle, setIdle] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
@@ -124,6 +125,20 @@ export function Dock(props: DockProps): ReactElement {
         <span className="sl-clock-zone">UTC</span>
       </div>
 
+      {/* As on a live stream: lit while the clock plays the present, and the way back to it once it has left. */}
+      <button
+        type="button"
+        className="sl-now"
+        aria-label="Back to now"
+        aria-disabled={snap.live || undefined}
+        onClick={snap.live ? undefined : onNow}
+      >
+        <span className="sl-now-dot" />
+        <span className="sl-now-label" aria-hidden="true">
+          Now
+        </span>
+      </button>
+
       <Timeline {...timeline} />
 
       <Knob dial={snap.dial} onDial={onDial} />
@@ -132,7 +147,7 @@ export function Dock(props: DockProps): ReactElement {
         ref={moreRef}
         type="button"
         className={`lb-btn lb-btn-more${drawer === 'options' ? ' is-on' : ''}`}
-        aria-label="Eclipses and more"
+        aria-label="Eclipses"
         aria-expanded={drawer === 'options'}
         onClick={() => toggle('options')}
       >
@@ -147,20 +162,7 @@ export function Dock(props: DockProps): ReactElement {
           setDrawer(null)
         }}
       />
-      <Options
-        open={drawer === 'options'}
-        solar={snap.solar}
-        lunar={snap.lunar}
-        live={snap.live}
-        onWatch={(e) => {
-          onWatch(e)
-          setDrawer(null)
-        }}
-        onNow={() => {
-          onNow()
-          setDrawer(null)
-        }}
-      />
+      <Options open={drawer === 'options'} solar={snap.solar} lunar={snap.lunar} onWatch={onWatch} onStep={onStep} />
     </div>
   )
 }

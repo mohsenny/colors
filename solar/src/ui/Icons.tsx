@@ -38,6 +38,15 @@ export function PauseIcon(): ReactElement {
   )
 }
 
+/** A step on, or back when flipped. */
+export function StepIcon({ back = false }: { back?: boolean }): ReactElement {
+  return (
+    <Icon flip={back}>
+      <path d="M5.4 3.3 9.1 7l-3.7 3.7" />
+    </Icon>
+  )
+}
+
 /** The plus, and the cross it becomes. */
 export function PlusIcon({ open }: { open: boolean }): ReactElement {
   return (

@@ -60,6 +60,3 @@ export const EARTH_NIGHT = earthNight
 export const EARTH_CLOUDS = earthClouds
 export const SATURN_RING = saturnRing
 export const STARS = stars
-
-export const CREDIT =
-  'Maps: Solar System Scope, CC BY 4.0; moons of Jupiter and Saturn, NASA/JPL/USGS. Stars: Yale Bright Star Catalogue.'

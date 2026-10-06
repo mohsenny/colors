@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { AU_KM, BODIES } from './bodies'
 import type { BodyId } from './bodies'
-import { nextEclipse } from './eclipses'
-import type { EclipseType } from './eclipses'
-import { posesAt } from './ephemeris'
+import { nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
+import type { Eclipse, EclipseType } from './eclipses'
+import { TIME_MAX, TIME_MIN, posesAt } from './ephemeris'
 import type { Vec3 } from './ephemeris'
 
 function len(a: Vec3): number {
@@ -143,14 +143,14 @@ describe('the moons of Jupiter and Saturn', () => {
 })
 
 describe('eclipses', () => {
-  const day = (ms: number): string => new Date(ms).toISOString().slice(0, 10)
+  const say = (e: Eclipse | null): string => (e ? `${new Date(e.peak).toISOString().slice(0, 10)} ${e.kind}` : 'none')
 
-  function run(type: EclipseType, from: number, n: number): string[] {
+  function run(type: EclipseType, from: number, n: number, way: 1 | -1 = 1): string[] {
     const out: string[] = []
     let ms = from
     for (let i = 0; i < n; i++) {
-      const e = nextEclipse(type, ms)
-      out.push(`${day(e.peak)} ${e.kind}`)
+      const e = way > 0 ? nextEclipse(type, ms) : previousEclipse(type, ms)
+      out.push(say(e))
       ms = e.peak
     }
     return out
@@ -177,6 +177,49 @@ describe('eclipses', () => {
       '2026-08-28 Partial',
       '2027-02-20 Penumbral',
     ])
+  })
+
+  it('finds them going back, six months apart or one', () => {
+    expect(run('solar', Date.UTC(2027, 1, 7), 7, -1)).toEqual(run('solar', Date.UTC(2024, 2, 1), 7).reverse())
+    expect(run('lunar', Date.UTC(2027, 1, 21), 5, -1)).toEqual(run('lunar', Date.UTC(2025, 2, 1), 5).reverse())
+    // Two partial solar eclipses a lunar month apart.
+    expect(run('solar', Date.UTC(2018, 7, 12), 3, -1)).toEqual(['2018-08-11 Partial', '2018-07-13 Partial', '2018-02-15 Partial'])
+  })
+
+  it('steps from between two to the last and the next, and from one to either side of it', () => {
+    const now = Date.UTC(2026, 9, 6)
+    expect(say(stepTo('solar', now, -1))).toBe('2026-08-12 Total')
+    expect(say(stepTo('solar', now, 1))).toBe('2027-02-06 Annular')
+    expect(stepsFrom(nearEclipse('solar', now), now)).toMatchObject({ at: false, back: true, on: true })
+    // Watching that one, from 90 minutes before its peak to two hours after.
+    const peak = nextEclipse('solar', now).peak
+    for (const ms of [peak - 90 * 60_000, peak + 2 * 3_600_000]) {
+      expect(say(stepTo('solar', ms, -1))).toBe('2026-08-12 Total')
+      expect(say(stepTo('solar', ms, 1))).toBe('2027-08-02 Total')
+      expect(stepsFrom(nearEclipse('solar', ms), ms)).toMatchObject({ at: true, back: true, on: true })
+    }
+  })
+
+  it("stops at either end of the clock's range", () => {
+    const end = TIME_MAX - 86_400_000
+    for (const [type, first, last] of [
+      ['solar', '1000-04-13 Total', '2999-10-30 Partial'],
+      ['lunar', '1000-03-28 Penumbral', '2999-11-14 Total'],
+    ] as const) {
+      expect(say(stepTo(type, TIME_MIN, -1))).toBe('none')
+      expect(say(stepTo(type, TIME_MIN, 1))).toBe(first)
+      expect(stepsFrom(nearEclipse(type, TIME_MIN), TIME_MIN)).toMatchObject({ at: false, back: false, on: true })
+      expect(say(stepTo(type, end, 1))).toBe('none')
+      expect(say(stepTo(type, end, -1))).toBe(last)
+      expect(stepsFrom(nearEclipse(type, end), end)).toMatchObject({ e: null, back: true, on: false })
+      // At the first and the last themselves.
+      for (const [e, back, on] of [
+        [nextEclipse(type, TIME_MIN), false, true],
+        [previousEclipse(type, TIME_MAX), true, false],
+      ] as const) {
+        expect(stepsFrom(nearEclipse(type, e.peak), e.peak)).toMatchObject({ at: true, back, on })
+      }
+    }
   })
 
   it('says where a solar eclipse falls', () => {

@@ -43,6 +43,13 @@
   color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
 }
 
+/* Solar's dock is the widest of the three, and under this it reaches the legend. */
+@media (max-width: 1079px) {
+  .lb-legend {
+    display: none;
+  }
+}
+
 /* -------------------------------------------------------------------- dock */
 
 .lb-dock {
@@ -81,8 +88,14 @@
 }
 
 /* There has to be room on the right to absorb the shift. Under this the dock
-   grows from the centre, rather than off the edge of the screen. */
-@media (max-width: 879px) {
+   grows from the centre, rather than off the edge of the screen, and the tape
+   opens only as far as there is room: 540px is the rest of the dock, with the
+   longest name in the chip, and a margin either side. */
+@media (max-width: 959px) {
+  .lb-dock {
+    --lb-tl-open: min(260px, calc(100vw - 540px));
+  }
+
   .lb-dock.is-expanded {
     transform: translateX(-50%);
   }
@@ -630,6 +643,56 @@
   color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
 }
 
+/* Back to the present, as a live stream has it: the dot is lit while the
+   clock plays now at real speed, and a ring to press once it has left. */
+.sl-now {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px 0 8px;
+  border-radius: var(--lb-r-pill, 999px);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.sl-now:hover:not([aria-disabled='true']) {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
+}
+
+.sl-now:active:not([aria-disabled='true']) {
+  background: var(--sl-press, rgba(255, 255, 255, 0.11));
+}
+
+.sl-now[aria-disabled='true'] {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  cursor: default;
+}
+
+.sl-now-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  transition:
+    background-color var(--lb-t-grow, 180ms) ease,
+    box-shadow var(--lb-t-grow, 180ms) ease;
+}
+
+.sl-now[aria-disabled='true'] .sl-now-dot {
+  background: var(--sl-live, #ff5b4f);
+  box-shadow: 0 0 6px var(--sl-live-glow, rgba(255, 91, 79, 0.6));
+}
+
 /* ------------------------------------------------------------------ marks */
 
 /* An eclipse peak the clock ran through: the Sun's gold, so it reads as one. */
@@ -720,91 +783,121 @@
 
 /* --------------------------------------------------------------- eclipses */
 
-.sl-options {
-  gap: 2px;
-  padding: 6px;
-  min-width: 300px;
+.lb-opt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.sl-next {
+/* Lightbox's stepper, with the eclipse where its count is. */
+.lb-stepper {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.lb-step-btn {
   display: grid;
-  grid-template-columns: 92px auto 1fr;
-  align-items: baseline;
-  gap: 10px;
-  height: 30px;
-  padding: 0 8px;
-  border-radius: 6px;
-  text-align: left;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--lb-r-pill, 999px);
   color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
   transition:
     color var(--lb-t-quick, 120ms) ease,
     background-color var(--lb-t-quick, 120ms) ease;
 }
 
-.sl-next > * {
-  align-self: center;
+.lb-step-btn:hover:not(:disabled) {
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+  background: var(--sl-on, rgba(255, 255, 255, 0.1));
 }
 
-.sl-next:hover:not(:disabled) {
+.lb-step-btn:active:not(:disabled) {
+  background: var(--sl-press, rgba(255, 255, 255, 0.11));
+}
+
+/* At either end of the clock's range the button stays put and goes quiet. */
+.lb-step-btn:disabled {
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Fixed in width, so stepping never moves the next step out from under the pointer. */
+.sl-eclipse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 200px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--lb-r-pill, 999px);
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+  transition:
+    color var(--lb-t-quick, 120ms) ease,
+    background-color var(--lb-t-quick, 120ms) ease;
+}
+
+.sl-eclipse:hover:not(:disabled) {
   color: var(--lb-ink, rgba(255, 255, 255, 0.86));
   background: var(--sl-hover, rgba(255, 255, 255, 0.07));
 }
 
-.sl-next-kind {
+/* The one the clock is at. */
+.sl-eclipse[aria-current='true'] {
+  color: var(--lb-ink-strong, #fff);
+  background: var(--sl-on, rgba(255, 255, 255, 0.1));
+}
+
+.sl-eclipse:disabled {
+  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+  cursor: default;
+}
+
+.sl-eclipse-kind {
   font-size: 11px;
   font-weight: 500;
 }
 
-.sl-next-when {
-  justify-self: end;
+.sl-eclipse-when {
   font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10.5px;
   font-variant-numeric: slashed-zero tabular-nums;
   white-space: nowrap;
 }
 
-.sl-now {
-  height: 28px;
-  margin-top: 2px;
-  border-radius: 6px;
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
-  background: rgba(255, 255, 255, 0.045);
-  transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
-}
+/* ------------------------------------------------ narrow viewports (760px) */
 
-.sl-now:hover:not(:disabled) {
-  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
-  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
-}
+/* Now keeps its dot and the clock drops UTC, to leave the tape room to open. */
+@media (max-width: 759px) {
+  .lb-dock {
+    --lb-tl-open: min(260px, calc(100vw - 480px));
+  }
 
-.sl-now:disabled {
-  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
-  background: none;
-}
+  .sl-now {
+    justify-content: center;
+    width: 26px;
+    padding: 0;
+  }
 
-.sl-credit {
-  padding: 6px 8px 2px;
-  font-size: 9px;
-  line-height: 1.4;
-  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+  .sl-now-label,
+  .sl-clock-zone {
+    display: none;
+  }
 }
 
 /* ------------------------------------------------- small viewports (620px) */
 
 @media (max-width: 619px) {
-  .lb-legend {
-    display: none;
-  }
-
   .lb-dock {
     --lb-tl-w: 48px;
-    --lb-tl-open: min(260px, calc(100vw - 282px));
+    --lb-tl-open: min(260px, calc(100vw - 311px));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
   }
@@ -820,8 +913,7 @@
     padding: 0;
   }
 
-  .lt-chip-label,
-  .sl-clock-zone {
+  .lt-chip-label {
     display: none;
   }
 
@@ -844,9 +936,5 @@
 
   .lt-readout .lb-tray-list {
     min-width: 0;
-  }
-
-  .sl-options {
-    min-width: min(300px, calc(100vw - 24px));
   }
 }

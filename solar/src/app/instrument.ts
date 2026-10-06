@@ -7,8 +7,8 @@
 
 import { AU_KM, BODIES, KEYED, LIGHT_KM_S, RINGS, bodyById } from '../sky/bodies'
 import type { Body, BodyId } from '../sky/bodies'
-import { nextEclipse } from '../sky/eclipses'
-import type { Eclipse } from '../sky/eclipses'
+import { NEAR_MS, nearEclipse, stepTo, stepsFrom } from '../sky/eclipses'
+import type { Eclipse, EclipseSteps, EclipseType } from '../sky/eclipses'
 import { PERIOD, TIME_MAX, TIME_MIN, orbitOf, posesAt } from '../sky/ephemeris'
 import type { Poses, Vec3 } from '../sky/ephemeris'
 import { unpackStars } from '../sky/stars'
@@ -47,13 +47,13 @@ export interface Snapshot {
   playing: boolean
   /** Where the speed knob is turned, -1 to 1: below 0 the clock runs back, 0 is real time. */
   dial: number
-  /** True when the clock shows the present at real speed. */
+  /** True when the clock is playing the present at real speed. */
   live: boolean
   seat: Body
   look: Body
   readout: Array<[string, string]>
-  solar: Eclipse | null
-  lunar: Eclipse | null
+  solar: EclipseSteps
+  lunar: EclipseSteps
   announce: string
   /** Where the clock is on the tape, 1 its newest moment. */
   position: number
@@ -189,6 +189,8 @@ export class Instrument {
   private dirty = true
 
   private ms = Date.now()
+  /** The wall clock at the last frame. */
+  private wall = Date.now()
   private dial = 0
   private playing = true
   private seat: BodyId = 'earth'
@@ -335,8 +337,13 @@ export class Instrument {
   }
 
   private step(dt: number, now: number): void {
+    // At real time the clock keeps to the wall clock, so a while in another
+    // tab, or asleep, does not leave it behind.
+    const wall = Date.now()
+    const real = wall - this.wall
+    this.wall = wall
     if (this.playing) {
-      const next = this.ms + dt * 1000 * rateOf(this.dial)
+      const next = this.ms + (this.dial === 0 ? real : dt * 1000 * rateOf(this.dial))
       if (next <= TIME_MIN || next >= TIME_MAX) {
         this.ms = Math.max(TIME_MIN, Math.min(TIME_MAX, next))
         this.playing = false
@@ -579,6 +586,12 @@ export class Instrument {
     this.eclipses.from = NaN
     this.touch(`${e.kind} ${e.type} eclipse, ${dayLabel(e.peak)}`)
     this.emit(true)
+  }
+
+  /** To the eclipse of a type before the one the clock is at or coming to, or on to the one after. */
+  stepEclipse(type: EclipseType, way: 1 | -1): void {
+    const to = stepTo(type, this.ms, way)
+    if (to) this.watch(to)
   }
 
   /** Taking hold of the tape: the clock stops while a moment is found. */
@@ -969,24 +982,29 @@ export class Instrument {
 
   // ------------------------------------------------------------ snapshot
 
-  /** The next eclipse of each kind. Searching takes a few ms, so at speed it is done twice a second at most. */
-  private upcoming(): { solar: Eclipse | null; lunar: Eclipse | null } {
+  /**
+   * The eclipse of each type the clock is at or coming to, and where a step
+   * either way can go. Searching takes a few ms, so at speed it is done twice
+   * a second at most.
+   */
+  private upcoming(): { solar: EclipseSteps; lunar: EclipseSteps } {
     const e = this.eclipses
     const now = performance.now()
     const stale =
       Number.isNaN(e.from) ||
       this.ms < e.from ||
-      (e.solar !== null && this.ms > e.solar.peak) ||
-      (e.lunar !== null && this.ms > e.lunar.peak)
+      (e.solar !== null && this.ms >= e.solar.peak + NEAR_MS) ||
+      (e.lunar !== null && this.ms >= e.lunar.peak + NEAR_MS)
     if (stale && (Number.isNaN(e.from) || now - e.at > 500)) {
       try {
-        this.eclipses = { solar: nextEclipse('solar', this.ms), lunar: nextEclipse('lunar', this.ms), from: this.ms, at: now }
+        this.eclipses = { solar: nearEclipse('solar', this.ms), lunar: nearEclipse('lunar', this.ms), from: this.ms, at: now }
         for (const next of [this.eclipses.solar, this.eclipses.lunar]) if (next) this.tape.know(next.peak)
       } catch {
         this.eclipses = { solar: null, lunar: null, from: this.ms, at: now }
       }
     }
-    return this.eclipses
+    const steps = (x: Eclipse | null): EclipseSteps => (x ? stepsFrom(x, this.ms) : { e: null, at: false, back: false, on: false })
+    return { solar: steps(this.eclipses.solar), lunar: steps(this.eclipses.lunar) }
   }
 
   private makeSnapshot(): Snapshot {
@@ -1019,7 +1037,7 @@ export class Instrument {
     return {
       playing: this.playing,
       dial: this.dial,
-      live: this.dial === 0 && Math.abs(this.ms - Date.now()) < 5000,
+      live: this.playing && this.dial === 0 && Math.abs(this.ms - Date.now()) < 5000,
       seat,
       look,
       readout: rows,
