@@ -129,6 +129,16 @@ const PICK_PX = 14
 const DOUBLE_MS = 500
 /** The nearest a flight between bodies comes to any of them or their planets, radii: under the nearest a globe is seen from. */
 const CLEAR = 1.05
+/**
+ * Scrolling in at the narrowest lens: a scroll that starts after a pause this
+ * long, ms, is a new one and goes on into the body, so the tail of the one that
+ * brought the lens to its end, a trackpad's fling, stops there.
+ */
+const PUSH_GAP_MS = 250
+/** How far on the zoom axis the new scroll goes past the end before the eye goes in: two notches of a wheel. */
+const PUSH = 0.3
+/** A push left this long, ms, starts again from nothing. */
+const PUSH_FORGET_MS = 1500
 /** A star of 6.5, the faintest drawn, on a dark sky: what you are looking at never shows fainter. */
 const FINDABLE = excess(6.5, DARK, 0)
 /** The nearest the haze round a light is reckoned, radians as the eye sees the widest lens. */
@@ -141,7 +151,7 @@ const BY_SIZE: BodyId[] = [...BODIES].sort((a, b) => b.radius - a.radius).map((b
 
 interface Flight {
   from: Eye
-  /** Where the eye started, from the old seat's centre, so the start moves with it. */
+  /** Where the eye started, from the centre of the body it was reckoned from, so the start moves with it. */
   fromSeat: BodyId
   rel: Vec3
   start: number
@@ -308,6 +318,11 @@ export class Instrument {
   private dived: [number, number] | null = null
   /** The body the last click picked, where and when. */
   private clicked: { id: BodyId; x: number; y: number; at: number } | null = null
+  /** When the last scroll came, ms, and how far a new one has gone past the narrowest lens; null when none has. */
+  private wheelAt = -Infinity
+  private push: number | null = null
+  /** The scroll that went into a body, swallowed till it ends. */
+  private held = false
   private tape = new Tape()
   /** Where on the tape the clock is, 1 its newest moment. Below 1 only while paused or scrubbing. */
   private back = 1
@@ -561,12 +576,14 @@ export class Instrument {
     return at
   }
 
-  private fly(ms: number): void {
+  /** A flight to wherever the eye now rests, reckoned from `round`: the seat, or a body the eye goes straight into. */
+  private fly(ms: number, round: BodyId = this.seat): void {
     this.dived = null
+    this.push = null
     this.flight = {
       from: this.eye,
-      fromSeat: this.seat,
-      rel: sub(this.eye.at, this.at(this.seat)),
+      fromSeat: round,
+      rel: sub(this.eye.at, this.at(round)),
       start: performance.now(),
       ms,
     }
@@ -861,6 +878,11 @@ export class Instrument {
     e.preventDefault()
     const k = e.deltaMode === 1 ? 0.06 : 0.002
     const step = e.deltaY * k
+    const gap = e.timeStamp - this.wheelAt
+    this.wheelAt = e.timeStamp
+    if (this.held && gap <= PUSH_GAP_MS) return
+    this.held = false
+    if (step === 0) return
     const r = this.radius(this.seat)
     const rect = this.canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
@@ -870,10 +892,23 @@ export class Instrument {
     if (this.dived && Math.hypot(x - this.dived[0], y - this.dived[1]) > CLICK_PX) this.dived = null
     const under = this.dived ? null : this.underPointer(x, y)
     if (this.seat === this.look) {
+      this.push = null
       this.zg = Math.max(ZG_MIN, Math.min(zgMax(r), this.zg + step))
       if (under) this.keepUnder(under)
     } else if (under && step < 0) this.dive(under, step, x, y)
-    else this.z = Math.max(Z_MIN, Math.min(zMax(r), this.z + step))
+    else if (step < 0 && this.z <= Z_MIN && !this.flight) {
+      if (this.push === null ? gap > PUSH_GAP_MS : gap > PUSH_FORGET_MS) this.push = 0
+      if (this.push === null) return
+      this.push -= step
+      if (this.push < PUSH) return
+      const into = this.passTarget(e.clientX, e.clientY, rect)
+      if (!into) return
+      this.passInto(into)
+      this.held = true
+    } else {
+      this.push = null
+      this.z = Math.max(Z_MIN, Math.min(zMax(r), this.z + step))
+    }
   }
 
   /** The seat's ground under the pointer, as the eye will see it once it comes to rest. Null over the sky. */
@@ -899,6 +934,53 @@ export class Instrument {
     this.yaw = Math.atan2(under.n[1], under.n[0])
     this.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, Math.asin(under.n[2])))
     this.touch(`Looking at ${(bodyById(this.seat) as Body).name}`)
+    this.emit(true)
+  }
+
+  /**
+   * What a scroll past the narrowest lens goes into: the body under the
+   * pointer, or else the one looked at if it is in the frame. The eye goes
+   * straight at its middle, so a nearer body in front of that is met first,
+   * and if that is the seat, nothing is.
+   */
+  private passTarget(cx: number, cy: number, rect: DOMRect): BodyId | null {
+    const hit = this.pick(cx, cy, rect)
+    const aim = hit && hit !== this.seat ? hit : this.look
+    const p = this.placed.get(aim)
+    if (!p) return null
+    if (aim !== hit && !(p.x >= 0 && p.x <= this.width && p.y >= 0 && p.y <= this.height)) return null
+    let into = aim
+    let d = p.d
+    for (const [id, o] of this.placed) {
+      if (o.d >= d || id === aim || angle(o.dir, p.dir) >= o.ang) continue
+      into = id
+      d = o.d
+    }
+    return into === this.seat ? null : into
+  }
+
+  /**
+   * Scrolled on past the narrowest lens: the eye goes on into the body, along
+   * the way it was looking, to its globe on the side it was seen from. It comes
+   * to rest with the whole globe in the frame, or as near as the middle of the
+   * body already looked if that is nearer.
+   */
+  private passInto(id: BodyId): void {
+    const rel = sub(this.eye.at, this.at(id))
+    const d = len(rel)
+    const r = this.radius(id)
+    // The ground in the middle as large in the globe's lens as in this one: it
+    // is d - r away, and a lens magnifies it as 1 / tan(fov / 4). Matching the
+    // outline instead lands a body wider than the lens on its ground.
+    const back = 1 + ((d / r - 1) * Math.tan(this.eye.fov / 4)) / Math.tan(FOV / 4)
+    this.fly(1300 + 260 * Math.max(0, Math.log10(d / 1e5)), id)
+    this.seat = id
+    this.look = id
+    const n = norm(rel)
+    this.yaw = Math.atan2(n[1], n[0])
+    this.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, Math.asin(n[2])))
+    this.zg = Math.max(ZG_MIN, Math.min(this.globeFit(id), Math.log(back / GLOBE)))
+    this.touch(`On ${(bodyById(id) as Body).name}`)
     this.emit(true)
   }
 
