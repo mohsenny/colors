@@ -1,96 +1,73 @@
-import type { Chapter, Crossing } from './life'
+import { TAB_PROUD, TAB_W } from '../../src/core/constants'
+import type { Chapter } from './life'
 
 /*
- * Where the sheets lie. Two rows, learning on top and work below, laid along
- * a line of years from the oldest on the left. Everything here is in sheet
- * widths (u) until `fit` turns it into stage pixels, so the same life lays
- * out on a phone and a wall and only the camera differs.
+ * Where the sheets lie: one row, left to right in time, under the story and
+ * over the dock. Everything here is in sheet widths (u) until `fit` turns it
+ * into stage pixels, so the same life lays out on a phone and a wall and only
+ * the camera differs.
  *
- * Under 620px the line turns on its side: the rows become two columns and the
- * years run down. "Along" is the axis the years run on, "across" the one the
- * rows sit on, and only `toStage` knows which of x and y each one is.
+ * Across a desktop the row fits the width when it can and the camera holds
+ * still. Under 620px a sheet is set by the phone's width instead, the row runs
+ * off both sides, and the camera keeps the current sheet in the middle.
  */
 
-/** The next chapter in the same row, from the last one's left edge. A tenth of a sheet clear, plus the room a lean takes. */
+/** The next sheet, from the last one's left edge. A tenth of a sheet clear, plus the room a lean takes. */
 export const STEP = 1.12
 
-/** A chapter that crossed the last one sits this far on, in the other row, so the two share 0.4 of a sheet along. */
-export const CROSS = 0.6
-
-/** How far the rows overlap, across. Together with CROSS that is the crossing: 0.4 by 0.3 of a sheet. */
-export const OVERLAP = 0.3
-
-/** The life's width across both rows. */
-export const ACROSS = 2 - OVERLAP
-
-/** Under this width the life runs down instead of across, the same break as the rest of the chrome. */
+/** Under this width the row is a strip that pans, the same break as the rest of the chrome. */
 export const NARROW = 620
 
-/** Clear of the card above and the dock below, and of the stage's sides when the life is wider. */
+/** Clear of the story above, the dock below and the stage's sides. */
 export const MARGIN = 40
 
-/**
- * A life a little wider than the room gives up its side margins, down to
- * this, before the camera pans. At 1280 the 160px floor makes it 1248px:
- * with 40 a side the camera would pan and cut Growing up at the left edge,
- * with 16 a side it fits.
- */
-export const MARGIN_TIGHT = 16
-
-/**
- * A phone's margin above and below the band, half the desktop's. At 320x568
- * the facts card leaves 231px between itself and the dock, and a 174px sheet
- * with its 18px tab only fits the band with 20 either side. Above the band
- * the life fades out across this margin rather than passing under the card.
- */
+/** A phone's margin above and below the band, half the desktop's: at 320x568 there is no room for more. */
 export const MARGIN_NARROW = MARGIN / 2
 
-/** A sheet's width on screen, px. The smallest keeps a 60px tab and some film beside it; the largest is Lightbox's own. */
-export const U_MIN = 160
-export const U_MAX = 560
+/**
+ * A sheet's width on screen, px, across a desktop. The smallest keeps a
+ * 60px tab and some film beside it, and lets the row fit at 1024 (143px)
+ * without panning. The largest is what 1920x1080 comes to by width, 279px,
+ * with some to spare. A stage too short for the smallest, a phone on its
+ * side, gets what its band holds with a phone's margins, down to a tab's
+ * width: 82px at 844x390, where ui.css sets the story small.
+ */
+export const U_MIN = 120
+export const U_MAX = 320
 
-/** A phone's columns stand this far in from each side, together. */
-export const NARROW_SIDES = 24
+/** A phone's sheet, as a share of its width: at 390 a 215px sheet in the middle and 62px of each neighbour. */
+export const PHONE_U = 0.55
 
-/** One sheet as laid: its centre in u, along and across, and its lean in degrees. */
+/** The smallest a phone's sheet comes to when the story leaves it little height. */
+export const PHONE_U_MIN = 100
+
+/**
+ * The current sheet stands up off the row by this much of a sheet, and grows
+ * by this share: 12px and 8px at 1440, enough to read as picked up, and its
+ * neighbours still a tenth of a sheet clear less the leans.
+ */
+export const LIFT = 0.06
+export const GROW = 0.04
+
+/** One sheet as laid: its centre in u along the row, and its lean in degrees. */
 export interface Placed {
   along: number
-  across: number
   lean: number
 }
 
-/** Whether two chapters are declared to cross, either way round. */
-export function crosses(crossings: readonly Crossing[], a: string, b: string): boolean {
-  return crossings.some((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a))
+/** The life in sheet widths, centres, in the chapters' own order, a step apart. */
+export function place(chapters: readonly Chapter[]): Placed[] {
+  return chapters.map((c, i) => ({ along: i * STEP + 0.5, lean: c.lean }))
 }
 
-/**
- * The life in sheet widths, centres, in the chapters' own order. The gap to
- * the next chapter is the only decision: a full step on when it started after
- * the last one ended, a shorter one into the other row when they ran at once.
- * With the life's eight chapters that puts the left edges at 0, 1.12, 2.24,
- * 2.84, 3.96, 5.08, 6.2 and 6.8.
- */
-export function place(chapters: readonly Chapter[], crossings: readonly Crossing[]): Placed[] {
-  const out: Placed[] = []
-  let left = 0
-  for (let i = 0; i < chapters.length; i++) {
-    const c = chapters[i] as Chapter
-    const last = chapters[i - 1]
-    if (last) left += crosses(crossings, last.id, c.id) ? CROSS : STEP
-    out.push({ along: left + 0.5, across: c.row === 'learn' ? 0.5 : 1.5 - OVERLAP, lean: c.lean })
-  }
-  return out
-}
-
-/** How long the life is along, in u: from the first sheet's near edge to the furthest far edge. */
+/** How long the row is, in u: from the first sheet's near edge to the last one's far edge. */
 export function length(placed: readonly Placed[]): number {
   let end = 0
   for (const p of placed) end = Math.max(end, p.along + 0.5)
   return end
 }
 
-/** The stage and the room left in it, px. `top` is the card's lower edge, `bottom` the dock's upper one. */
+/** The stage and the room left in it, px. `top` is the story's lower edge, `bottom` the dock's upper one. */
 export interface Room {
   width: number
   height: number
@@ -102,69 +79,59 @@ export interface Room {
 export interface Fit {
   /** A sheet's width, px. */
   u: number
-  /** The years run down rather than across. */
+  /** A phone's strip, which keeps the current sheet in the middle. */
   narrow: boolean
-  /** The band the life is laid in along, stage px, and its middle across. */
+  /** The band the row is laid in across the stage, px, and the height of its middle. */
   near: number
   far: number
   middle: number
-  /** The life's length, u. */
+  /** The row's length, u. */
   length: number
-  /**
-   * On a phone, the card's lower edge, stage px: the life fades out between
-   * here and `near`, so nothing panned above the band shows under the card or
-   * the title. Null across a desktop, where the life lies beside the card.
-   */
-  edge: number | null
 }
 
 /**
- * The size of a sheet and the band it is laid in. Across a desktop the life
- * fills the width less the margins, a sheet 7.8 of it, and no taller than
- * the room between the card and the dock; at 1440x900 that is 174px, and at
- * 1024 the floor of 160 makes the life wider than the stage and the camera
- * pans. On a phone a sheet is set by the width alone, both columns and the
- * margins across it, 215px at 390.
+ * The size of a sheet and where the row lies. The band is the room between
+ * the story and the dock less a margin each side, and a sheet is as large as
+ * fits it with its tab and its lift, and no wider than the width allows: the
+ * row across the width less the margins on a desktop, 206px at 1440x900, and
+ * a share of the width on a phone. The row lies in the middle of the band,
+ * its tabs counted in.
  */
 export function fit(room: Room, len: number): Fit {
-  const clamp = (u: number): number => Math.min(U_MAX, Math.max(U_MIN, u))
-  if (room.width < NARROW) {
-    const top = room.top + MARGIN_NARROW
-    const bottom = room.bottom - MARGIN_NARROW
-    return {
-      u: (room.width - NARROW_SIDES) / ACROSS,
-      narrow: true,
-      near: top,
-      far: Math.max(top, bottom),
-      middle: room.width / 2,
-      length: len,
-      edge: room.top,
-    }
-  }
-  const top = room.top + MARGIN
-  const bottom = Math.max(top, room.bottom - MARGIN)
-  const u = clamp(Math.min((room.width - 2 * MARGIN) / len, (bottom - top) / ACROSS))
-  const side = Math.max(MARGIN_TIGHT, Math.min(MARGIN, (room.width - len * u) / 2))
-  // Only when that is enough to fit: a life that pans anyway keeps the full margin.
-  const sides = room.width - 2 * side >= len * u - 0.5 ? side : MARGIN
+  const narrow = room.width < NARROW
+  const margin = narrow ? MARGIN_NARROW : MARGIN
+  // Lifted, a sheet stands LIFT higher and grows GROW, half of it upward.
+  const across = (band: number): number => (band - TAB_PROUD) / (1 + 2 * LIFT + GROW)
+  const tall = across(room.bottom - room.top - 2 * margin)
+  const wide = narrow ? room.width * PHONE_U : (room.width - 2 * MARGIN) / len
+  // A desktop floor that the band cannot hold gives way to what fits it
+  // with a phone's margins, so the row stays between the story and the dock.
+  const floor = Math.max(TAB_W, Math.min(U_MIN, across(room.bottom - room.top - 2 * MARGIN_NARROW)))
+  const u = narrow
+    ? Math.max(PHONE_U_MIN, Math.min(wide, tall))
+    : Math.min(U_MAX, Math.max(floor, Math.min(wide, tall)))
+  const side = narrow ? 0 : MARGIN
   return {
     u,
-    narrow: false,
-    near: sides,
-    far: room.width - sides,
-    middle: (top + bottom) / 2,
+    narrow,
+    near: side,
+    far: room.width - side,
+    // The tab stands up off the sheet, so the sheet sits half a tab low, in
+    // the middle of the room whichever margin it keeps.
+    middle: (room.top + room.bottom + TAB_PROUD) / 2,
     length: len,
-    edge: null,
   }
 }
 
 /**
- * Where the camera can look, in u along: the middle of the life when it fits
- * the band, and otherwise anywhere that keeps the band full of life, so a
- * chapter at either end comes to rest at the band's edge rather than in the
- * middle of an empty stage.
+ * Where the camera looks, in u along. A phone keeps the sheet it is given in
+ * the middle, from the first sheet's to the last one's. A desktop row that
+ * fits the band is looked at whole, and one that does not is panned only as
+ * far as keeps the band full, so a sheet at either end comes to rest at the
+ * band's edge rather than in the middle of an empty stage.
  */
 export function aim(f: Fit, along: number): number {
+  if (f.narrow) return Math.min(f.length - 0.5, Math.max(0.5, along))
   const half = (f.far - f.near) / 2 / f.u
   if (f.length <= 2 * half) return f.length / 2
   return Math.min(f.length - half, Math.max(half, along))
@@ -178,12 +145,17 @@ export interface Laid {
   rot: number
 }
 
-/** One placed sheet on the stage, with the camera looking at `camera` u along. */
-export function toStage(f: Fit, p: Placed, camera: number): Laid {
-  const along = (f.near + f.far) / 2 + (p.along - camera) * f.u
-  const across = f.middle + (p.across - ACROSS / 2) * f.u
-  const rot = (p.lean * Math.PI) / 180
-  return f.narrow ? { x: across, y: along, side: f.u, rot } : { x: along, y: across, side: f.u, rot }
+/**
+ * One placed sheet on the stage, with the camera looking at `camera` u along
+ * and the sheet `lift` of the way up: 0 at rest, 1 the current one.
+ */
+export function toStage(f: Fit, p: Placed, camera: number, lift = 0): Laid {
+  return {
+    x: (f.near + f.far) / 2 + (p.along - camera) * f.u,
+    y: f.middle - lift * LIFT * f.u,
+    side: f.u * (1 + lift * GROW),
+    rot: (p.lean * Math.PI) / 180,
+  }
 }
 
 /** A laid sheet's four corners, clockwise from its top left, px. */

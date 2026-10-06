@@ -97,7 +97,8 @@ The small moons show as plain colours.
 
 **[The site's front page](https://mohsenny.github.io/whoami/)** is my CV: my life laid out
 as sheets of the same film, with the CV as text one press away. Its source is in
-[cv/](cv/).
+[cv/](cv/). The logos on it are their owners' trademarks; [cv/logos.md](cv/logos.md) says
+where each came from.
 
 ## Running it locally
 

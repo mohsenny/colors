@@ -1,5 +1,5 @@
 /*
- * The life, as data: every word the CV page says, and every fact the card,
+ * The life, as data: every word the CV page says, and every fact the story,
  * the sheets, the tape and the text CV are drawn from. Nothing else on the
  * page holds copy.
  *
@@ -13,6 +13,7 @@
  */
 
 import type { Dye } from '../../src/core/types.ts'
+import type { LogoId } from './logos.ts'
 
 /** A fact not known yet, written so the ship gate can find it. */
 export type Unknown = `[unknown: ${string}]`
@@ -21,8 +22,9 @@ export type Year = number | Unknown
 
 /** One job or one degree. Dates as a reader writes them, `Feb 2013`; a year alone where that is all there is. */
 export interface Role {
+  kind: 'job' | 'degree'
   org: string
-  /** The org where the facts card has no room for all of it. */
+  /** The org where the facts at Now have no room for all of it. */
   short?: string
   title: string
   /** Left out where it is not known. */
@@ -36,26 +38,24 @@ export interface Chapter {
   /** Also its hash, so lowercase words: never Lightbox's `s=`. */
   id: string
   name: string
-  /** Learning on the top row, work below. */
-  row: 'learn' | 'work'
   /** Growing up has no year to start at, so its tab and the clock say where instead. */
   from: Year | 'Iran'
   to: Year | 'now'
   where?: string
-  /** Two sentences at most. */
+  /** The story's big line. */
+  headline: string
+  /** Three sentences at most. */
   copy: string
+  /** Where it happened, drawn larger than the tools. */
+  orgs: LogoId[]
+  /** What it was done with. */
+  tools: LogoId[]
+  /** The tools as stickers, each a little askew: the games. */
+  stickers?: true
   roles?: Role[]
   dye: Dye
-  /** Degrees, fixed. Within 1.5 either way, so same-row sheets keep their gap. */
+  /** Degrees, fixed. Within 1.5 either way, so neighbouring sheets keep their gap. */
   lean: number
-}
-
-/** Two chapters that ran at once, where their sheets cross. */
-export interface Crossing {
-  a: string
-  b: string
-  name: string
-  copy: string
 }
 
 export interface Life {
@@ -65,7 +65,6 @@ export interface Life {
   reach: { email: string; linkedin: string; github: string; medium: string }
   /** In start order, which is also left to right. */
   chapters: Chapter[]
-  crossings: Crossing[]
   skills: string
   /** Medium articles, after the profile in reach. An empty url lists the title without a link. */
   writing: { title: string; url: string }[]
@@ -75,14 +74,9 @@ export interface Life {
 }
 
 /*
- * The dyes are one roll of src/palette/palette.ts, eight sheets from seed
- * 2607, dealt to the chapters so the two crossings get the roll's cleanest
- * pair each: lilac over deep rose goes violet, yellow over sky goes green,
- * each at least 0.17 in OKLab from both of its sheets in paint, and no two
- * sheets sit closer than 0.13. Out of 4,000 seeds, the best on both counts.
- * The roll thinned six sheets below the 0.75 density floor (Master's 0.34,
- * Berlin 0.544, MessageBird 0.523, Bachelor's, With AI and Leading QA 0.68),
- * and those were lifted to it.
+ * The dyes are set by eye, not rolled: six hues from Lightbox's family,
+ * thinned to 0.5 to 0.55 so the lamp comes through the film and the picture
+ * on it (art.ts) reads in a deep shade of the same hue.
  */
 export const LIFE: Life = {
   name: 'Mohsen Nasiri',
@@ -98,24 +92,30 @@ export const LIFE: Life = {
     {
       id: 'growing-up',
       name: 'Growing up',
-      row: 'learn',
       from: 'Iran',
       to: 2008,
       where: 'Tehran',
-      copy: 'I grew up in Tehran and played a lot of video games.',
-      dye: { L: 0.842, C: 0.247, h: 147.6, d: 0.803 },
+      headline: 'Tehran, and a lot of games',
+      copy: 'Growing up in Tehran, I played a lot of video games. StarCraft, Warcraft and Dota were the ones I kept coming back to.',
+      orgs: [],
+      tools: ['starcraft', 'warcraft', 'dota'],
+      stickers: true,
+      dye: { L: 0.8, C: 0.17, h: 65, d: 0.55 },
       lean: -0.9,
     },
     {
       id: 'bachelor',
       name: "Bachelor's",
-      row: 'learn',
       from: 2008,
       to: 2012,
       where: 'Tehran',
-      copy: 'B.Sc. in Software Engineering at Iran University of Science and Technology.',
+      headline: 'Physics, maths, then software',
+      copy: 'At school I was good at physics and maths, so engineering was the natural next step. I did a B.Sc. in Software Engineering at Iran University of Science and Technology.',
+      orgs: ['iust'],
+      tools: [],
       roles: [
         {
+          kind: 'degree',
           org: 'Iran University of Science and Technology',
           title: 'B.Sc. Software Engineering',
           place: 'Tehran, Iran',
@@ -124,19 +124,22 @@ export const LIFE: Life = {
           points: [],
         },
       ],
-      dye: { L: 0.705, C: 0.191, h: 48.7, d: 0.75 },
+      dye: { L: 0.78, C: 0.2, h: 148, d: 0.5 },
       lean: 0.7,
     },
     {
-      id: 'master',
-      name: "Master's",
-      row: 'learn',
+      id: 'finland',
+      name: 'Finland',
       from: 2012,
       to: 2015,
       where: 'Joensuu',
-      copy: 'Then Finland, for an M.Sc. in Computer Science at the University of Eastern Finland.',
+      headline: 'A new life in Finland',
+      copy: 'In 2012 I moved to Joensuu for an M.Sc. in Computer Science at the University of Eastern Finland. Long winters, deep snow, saunas, and my first job alongside the studies: full-stack developer at Arbonaut.',
+      orgs: ['uef', 'arbonaut'],
+      tools: ['php', 'javascript', 'openlayers', 'postgresql', 'dotnet'],
       roles: [
         {
+          kind: 'degree',
           org: 'University of Eastern Finland',
           short: 'Eastern Finland',
           title: 'M.Sc. Computer Science',
@@ -145,20 +148,8 @@ export const LIFE: Life = {
           to: '2015',
           points: [],
         },
-      ],
-      dye: { L: 0.819, C: 0.144, h: 318.7, d: 0.75 },
-      lean: -0.5,
-    },
-    {
-      id: 'arbonaut',
-      name: 'Arbonaut',
-      row: 'work',
-      from: 2013,
-      to: 2015,
-      where: 'Finland',
-      copy: 'Full-stack developer while I studied. Web apps in PHP, JavaScript and OpenLayers, GIS plugins, and .NET apps for Windows.',
-      roles: [
         {
+          kind: 'job',
           org: 'Arbonaut',
           title: 'Full-stack Developer',
           place: 'Finland',
@@ -171,18 +162,22 @@ export const LIFE: Life = {
           ],
         },
       ],
-      dye: { L: 0.345, C: 0.136, h: 4, d: 0.88 },
-      lean: 1.1,
+      dye: { L: 0.72, C: 0.15, h: 240, d: 0.55 },
+      lean: -0.5,
     },
     {
-      id: 'berlin',
-      name: 'Berlin',
-      row: 'work',
+      id: 'automation',
+      name: 'Automation',
       from: 2016,
-      to: 2022,
-      copy: 'Senior QA Engineer at Hubrick, then QA Lead at OSRAM, HeyJobs and Talentspace. I built QA teams and test automation, and put quality on dashboards.',
+      to: 2018,
+      where: 'Berlin',
+      headline: 'Berlin, and testing as a craft',
+      copy: 'In 2016 I moved to Berlin and its start-up scene, as a Senior QA Engineer at Hubrick. Automation became my thing: WebdriverIO and CI/CD, load tests in JMeter and Python, and quality metrics in Grafana.',
+      orgs: ['hubrick'],
+      tools: ['selenium', 'webdriverio', 'cypress', 'k6', 'jmeter', 'python', 'grafana', 'prometheus', 'datadog', 'testrail'],
       roles: [
         {
+          kind: 'job',
           org: 'Hubrick',
           title: 'Senior QA Engineer',
           place: 'Berlin',
@@ -194,7 +189,22 @@ export const LIFE: Life = {
             'QA metrics with Prometheus and Grafana.',
           ],
         },
+      ],
+      dye: { L: 0.68, C: 0.17, h: 300, d: 0.5 },
+      lean: 1.1,
+    },
+    {
+      id: 'leading-qa',
+      name: 'Leading QA',
+      from: 2018,
+      to: 'now',
+      headline: 'Leading QA, from start-ups to big companies',
+      copy: 'In 2018 I stepped up to QA lead, and built and grew teams at OSRAM, HeyJobs and Talentspace. Then came the big companies: MessageBird in Amsterdam, LucaNet, and now CompuGroup Medical, where I lead manual and automation QAs.',
+      orgs: ['osram', 'heyjobs', 'talentspace', 'messagebird', 'lucanet', 'cgm'],
+      tools: [],
+      roles: [
         {
+          kind: 'job',
           org: 'OSRAM',
           title: 'QA Lead',
           place: 'Berlin',
@@ -207,6 +217,7 @@ export const LIFE: Life = {
           ],
         },
         {
+          kind: 'job',
           org: 'HeyJobs',
           title: 'QA Lead',
           place: 'Berlin',
@@ -219,6 +230,7 @@ export const LIFE: Life = {
           ],
         },
         {
+          kind: 'job',
           org: 'Talentspace',
           title: 'QA Lead',
           place: 'Berlin',
@@ -230,20 +242,8 @@ export const LIFE: Life = {
             'Quality of service dashboards on Datadog, plus SonarCloud and FullStory.',
           ],
         },
-      ],
-      dye: { L: 0.558, C: 0.085, h: 192.7, d: 0.75 },
-      lean: -1.2,
-    },
-    {
-      id: 'messagebird',
-      name: 'MessageBird',
-      row: 'work',
-      from: 2022,
-      to: 2024,
-      where: 'Amsterdam',
-      copy: 'Senior QA Engineer. Web and API automation, a load testing framework in k6, and bug triage for every product team.',
-      roles: [
         {
+          kind: 'job',
           org: 'MessageBird',
           title: 'Senior QA Engineer',
           place: 'Amsterdam',
@@ -255,19 +255,8 @@ export const LIFE: Life = {
             'Bug reporting and triage for all product teams, and dashboards, monitors and alerts on quality metrics.',
           ],
         },
-      ],
-      dye: { L: 0.544, C: 0.252, h: 270.3, d: 0.75 },
-      lean: 0.8,
-    },
-    {
-      id: 'leading-qa',
-      name: 'Leading QA',
-      row: 'work',
-      from: 2024,
-      to: 'now',
-      copy: 'QA Lead at LucaNet, then at CompuGroup Medical, where I am now. I lead manual and automation QAs.',
-      roles: [
         {
+          kind: 'job',
           org: 'LucaNet',
           title: 'QA Lead',
           from: '2024',
@@ -275,6 +264,7 @@ export const LIFE: Life = {
           points: ['Led the manual and automation QAs.'],
         },
         {
+          kind: 'job',
           org: 'CompuGroup Medical',
           title: 'QA Lead',
           from: '2025',
@@ -286,32 +276,20 @@ export const LIFE: Life = {
           ],
         },
       ],
-      dye: { L: 0.778, C: 0.149, h: 226, d: 0.75 },
-      lean: -0.4,
+      dye: { L: 0.7, C: 0.17, h: 20, d: 0.5 },
+      lean: -0.8,
     },
     {
       id: 'with-ai',
       name: 'With AI',
-      row: 'learn',
       from: 2024,
       to: 'now',
-      copy: "From 2024 I used AI for test frameworks and docs, and since 2025 I build real things with it, like this site. Off screen it's space and physics, quantum field theory especially, and my golden retriever.",
-      dye: { L: 0.851, C: 0.175, h: 95.7, d: 0.75 },
-      lean: 1.3,
-    },
-  ],
-  crossings: [
-    {
-      a: 'master',
-      b: 'arbonaut',
-      name: 'Both at once',
-      copy: "The master's and my first job ran side by side, 2013 to 2015.",
-    },
-    {
-      a: 'leading-qa',
-      b: 'with-ai',
-      name: 'QA with AI',
-      copy: 'At CGM I built a test reporting dashboard and an AI workflow hub that is becoming the standard AI workflow tool at CGM in Germany.',
+      headline: 'Building with AI',
+      copy: 'Since 2024 AI has been part of how I work, and since 2025 I build real things with it. At CGM: a test reporting dashboard, and an AI workflow hub that chains Claude agents into reviewed QA workflows. Outside work: this site.',
+      orgs: [],
+      tools: ['claude', 'jira', 'confluence', 'figma', 'react', 'webgl'],
+      dye: { L: 0.75, C: 0.14, h: 190, d: 0.55 },
+      lean: 0.6,
     },
   ],
   skills:
@@ -339,20 +317,38 @@ export const LIFE: Life = {
  * A chapter's years as a reader says them, `2008 to 2012`, or `until 2008`
  * with no year to start at. Lowercase, because it mostly follows a comma:
  * the live message, the tape's value and the tabs all say `Growing up, until
- * 2008`. Where it starts a line, the card capitalises it.
+ * 2008`. Where it starts a line, the story capitalises it.
  */
 export function yearsOf(chapter: Chapter): string {
   return typeof chapter.from === 'number' ? `${chapter.from} to ${chapter.to}` : `until ${chapter.to}`
 }
 
-/** Every job, oldest first, from the work row. */
-export function jobs(life: Life = LIFE): Role[] {
-  return life.chapters.filter((c) => c.row === 'work').flatMap((c) => c.roles ?? [])
+/** Every role, oldest first, in the order the chapters hold them. */
+function roles(life: Life): Role[] {
+  return life.chapters.flatMap((c) => c.roles ?? [])
 }
 
-/** Every degree, oldest first, from the learning row. */
+/** Every job, oldest first. */
+export function jobs(life: Life = LIFE): Role[] {
+  return roles(life).filter((r) => r.kind === 'job')
+}
+
+/** Every degree, oldest first. */
 export function degrees(life: Life = LIFE): Role[] {
-  return life.chapters.filter((c) => c.row === 'learn').flatMap((c) => c.roles ?? [])
+  return roles(life).filter((r) => r.kind === 'degree')
+}
+
+/**
+ * Where the hashes of the eight-sheet page land now, so a link someone
+ * kept still opens on the right chapter.
+ */
+export const MOVED: Record<string, string> = {
+  master: 'finland',
+  arbonaut: 'finland',
+  'master-arbonaut': 'finland',
+  berlin: 'automation',
+  messagebird: 'leading-qa',
+  'leading-qa-with-ai': 'with-ai',
 }
 
 /** The address as it is shown: no scheme, no www, no closing slash. */
@@ -360,14 +356,14 @@ export function bare(url: string): string {
   return url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 }
 
-/** One row of the facts card at Now. */
+/** One line of the facts at Now. */
 export interface Fact {
   label: string
   value: string
 }
 
 /**
- * The card at Now, derived rather than written, so it cannot fall behind the
+ * The facts at Now, derived rather than written, so it cannot fall behind the
  * chapters: the current job, the three before it, the newest degree, where he
  * lives and how to reach him.
  */

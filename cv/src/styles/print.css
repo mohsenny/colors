@@ -1,5 +1,5 @@
 /*
- * Printed, the CV is its text and nothing else: no film, no title, no card,
+ * Printed, the CV is its text and nothing else: no film, no title, no story,
  * no dock. The paper is in index.html before any script, so this holds with
  * the script off too, and it prints whether the paper is out or put away.
  * Imported last from main.tsx; the build links it in the head all the same.

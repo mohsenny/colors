@@ -1,9 +1,10 @@
 /*
  * The CV's own chrome. Everything it is made of is Lightbox's: the paper is
- * `.lb-paper` from src/styles/stage.css, the card is the tray's glass with
- * Gravity's readout type, copied below with the lb- and lt- names kept so the
- * four pages can be diffed, and nothing here brings a size, a colour or a
- * timing of its own. Its own names are cv- so they never meet Lightbox's.
+ * `.lb-paper` from src/styles/stage.css, the dock and the legend are copied
+ * below with the lb- and lt- names kept so the four pages can be diffed, and
+ * the story is set in Lightbox's ink, its small capitals and its timings. The
+ * story's type is the one size the CV brings of its own. Its own names are
+ * cv- so they never meet Lightbox's.
  *
  * Lightbox's room comes in by @import rather than from main.tsx. Imported as
  * modules by two pages, the two files became a chunk of their own that the
@@ -14,6 +15,7 @@
 
 @import '../../../src/styles/global.css';
 @import '../../../src/styles/stage.css';
+@import './art.css';
 
 /* ------------------------------------------------------------------- paper */
 
@@ -26,7 +28,7 @@
 .cv-paper {
   /* Fixed rather than the stage's absolute, so it holds before the app takes it in. */
   position: fixed;
-  /* Over the sheets (10 and up), under the title, the card and the dock (200).
+  /* Over the sheets (10 and up), under the title and the dock (200).
      Lightbox's is 5, under its sheets, because there they lie on it. */
   z-index: 100;
   display: block;
@@ -198,18 +200,8 @@ body > .cv-paper .cv-text {
   pointer-events: none;
 }
 
-/* On a phone the years run down, and the life panned above the band fades
-   out over the margin under the card instead of passing under it and the
-   title. A mask on each layer, the canvas included, and none on the film:
-   that would isolate the paint from the surface it multiplies with. */
-.cv-film.is-narrow .lb-paint,
-.cv-film.is-narrow .cv-mounts {
-  -webkit-mask-image: linear-gradient(transparent var(--cv-edge), #000 var(--cv-near));
-  mask-image: linear-gradient(transparent var(--cv-edge), #000 var(--cv-near));
-}
-
 /* Pictures on the table here, not things to pick up: the press goes through
-   to the film, which knows a crossing from a sheet. The tab is a button, so
+   to the film, which knows which sheet it was on. The tab is a button, so
    it takes its own. */
 .cv-film .lb-frame {
   pointer-events: none;
@@ -221,16 +213,10 @@ body > .cv-paper .cv-text {
   cursor: pointer;
 }
 
-/* In the fade, or above it, on a phone. */
-.cv-film .lb-tab.is-away {
-  pointer-events: none;
-}
-
 /* ------------------------------------------------------------------ legend */
 
 /*
- * Bottom left, at the same inset as the card top right, so the corners of the
- * chrome sit on one margin. Type on the lit surface, and nothing else: a
+ * Bottom left, at the dock's inset, so the chrome sits on one margin. Type on the lit surface, and nothing else: a
  * caption, not another thing to operate.
  */
 .lb-legend {
@@ -277,7 +263,7 @@ body > .cv-paper .cv-text {
 
 /* Under this, with the longest name in the chip, the dock comes within 15px
    of the legend. */
-@media (max-width: 939px) {
+@media (max-width: 930px) {
   .lb-legend {
     display: none;
   }
@@ -335,9 +321,9 @@ body > .cv-paper .cv-text {
 }
 
 /* There has to be room on the right to absorb the shift. With the longest
-   name in the chip 771px leaves 15px of it. Under it the dock
+   name in the chip 762px leaves 15px of it. Under it the dock
    grows from the centre, rather than off the edge of the screen. */
-@media (max-width: 770px) {
+@media (max-width: 761px) {
   .lb-dock.is-expanded {
     transform: translateX(-50%);
   }
@@ -569,10 +555,10 @@ body > .cv-paper .cv-text {
   background: rgba(30, 34, 48, 0.075);
 }
 
-/* Wide enough for the longest name, "Both at once" at 85.3px, so the dock
-   holds still from Now through every chapter and crossing. */
+/* Wide enough for the longest name, "Automation" at 76.2px, so the dock
+   holds still from Now through every chapter. */
 .lt-chip-label {
-  min-width: 86px;
+  min-width: 77px;
   font-size: 9.5px;
   font-weight: 500;
   letter-spacing: 0.11em;
@@ -668,46 +654,6 @@ body > .cv-paper .cv-text {
   font-weight: 400;
   letter-spacing: 0;
   font-variant-numeric: slashed-zero tabular-nums;
-}
-
-/* The crossings, under the chapter that made them, their names in line with
-   the chapters'. */
-.lt-moons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px 2px;
-  padding: 0 0 3px 23px;
-}
-
-.lt-moon {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 5px;
-  font-size: 10.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-  transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
-}
-
-.lt-moon .lb-tray-swatch {
-  width: 10px;
-  height: 10px;
-}
-
-.lt-moon:hover {
-  color: var(--lb-ink, #1a1a1e);
-  background: rgba(30, 34, 48, 0.045);
-}
-
-.lt-moon[aria-pressed='true'] {
-  color: var(--lb-ink-strong, #101014);
-  background: rgba(30, 34, 48, 0.065);
 }
 
 /* ------------------------------------------------------------------- clock */
@@ -940,37 +886,10 @@ body > .cv-paper .cv-text {
   color: var(--lb-ink-strong, #101014);
 }
 
-/* ------------------------------------------------------------- tray card */
+/* ------------------------------------------------------------------ swatch */
 
-.lb-tray {
-  position: fixed;
-  right: calc(16px + env(safe-area-inset-right, 0px));
-  top: calc(16px + env(safe-area-inset-top, 0px));
-  z-index: 200;
-  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
-}
-
-.lb-tray-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 5px;
-  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
-  border-radius: var(--lb-r-chip, 7px);
-  background-color: var(--lb-panel, rgba(255, 255, 255, 0.82));
-  background-image: var(--lb-fibre);
-  background-size: 64px 64px;
-  backdrop-filter: blur(12px) saturate(1.04);
-  -webkit-backdrop-filter: blur(12px) saturate(1.04);
-  box-shadow:
-    var(
-      --lb-shadow-soft,
-      1.9px 5.5px 16.7px rgba(46, 52, 72, 0.119),
-      0.5px 1.4px 3.6px rgba(46, 52, 72, 0.073)
-    ),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
+/* A chapter's film at chip size, as Lightbox's tray shows a colour: the chip,
+   the drawer and the tape's tip all use it. */
 .lb-tray-swatch {
   flex: none;
   width: 14px;
@@ -982,262 +901,420 @@ body > .cv-paper .cv-text {
     0 0 0 0.5px rgba(255, 255, 255, 0.7);
 }
 
-/* --------------------------------------------------------------- readout */
+/* ------------------------------------------------------------------- story */
 
-.lt-readout .lb-tray-list {
-  gap: 2px;
-  padding: 8px 10px 9px;
-  min-width: 196px;
+/*
+ * The story: open type on the lit surface, in the top half of the stage, the
+ * sheets laid under it. Centred in that half when it fits, and from the top
+ * down when it does not, so it never runs up under the title. The half itself
+ * takes no pointer; the column does, and holds Play while the pointer is on
+ * it. Over the mounts (10) and under the paper (100), which covers it.
+ *
+ * Every face lies unseen in the probe, in the same cell, so the column is as
+ * tall as the tallest face and the sheets keep their place as faces come and
+ * go. Each face is centred in that cell on its own, so a short chapter does
+ * not leave all the room under it, and one leaving moves nothing.
+ */
+.cv-story {
+  /* 56px clears the title (14px down, 22px tall) by 20px. */
+  --cv-top: 56px;
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: min(680px, 100%);
+  justify-content: center;
+  align-content: safe center;
+  min-height: 50%;
+  padding: calc(var(--cv-top) + env(safe-area-inset-top, 0px)) 24px 0;
+  pointer-events: none;
+  transition:
+    opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    visibility 0s linear;
 }
 
-.lt-readout-name {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 4px;
+/* The story's place in the page, which is no box of its own: the story is
+   laid against the stage as if it were the stage's child. */
+.cv-story-slot {
+  display: contents;
+}
+
+/* Focus kept in the story while a face it was in goes out: nothing to see. */
+.cv-story:focus {
+  outline: none;
+}
+
+.cv-faces {
+  display: grid;
+  grid-area: 1 / 1;
+  min-width: 0;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: text;
+  -webkit-user-select: text;
+  color: var(--lb-ink, #1a1a1e);
+}
+
+.cv-probe {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The old face and the new, laid over each other. */
+.cv-face {
+  grid-area: 1 / 1;
+  align-self: center;
+  min-width: 0;
+}
+
+/* The probe's are what set the cell, so they keep to the top of it. */
+.cv-probe .cv-face {
+  align-self: start;
+}
+
+/*
+ * The paper comes out over the left of the stage. Where the story still fits
+ * to the right of it, 560px and the column's 680 and 24px either side, it
+ * moves over into the rest; where it does not, it goes, the paper being the
+ * whole of it.
+ */
+.cv-story.is-reading {
+  transform: translateX(280px);
+}
+
+@media (max-width: 1287px) {
+  .cv-story.is-reading {
+    visibility: hidden;
+    opacity: 0;
+    transition:
+      opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+      visibility 0s linear var(--lb-t-enter, 240ms);
+  }
+}
+
+/* When and where, in the legend's small capitals, a size up to sit over the headline. */
+.cv-kicker {
+  margin-bottom: 10px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+}
+
+/* The title's face and tracking at display size: 40px at 1440x900, by the
+   width above that and by the height below it, 32px at 1280x720. */
+.cv-headline {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: clamp(24px, min(2.8vw, 4.4vh), 40px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.028em;
+  /* Not balance, which broke "start-ups" at its hyphen. */
+  text-wrap: pretty;
   color: var(--lb-ink-strong, #101014);
 }
 
-.lt-readout-label {
+/* 18px at 1440x900 and over, down to 15px at 1280x720. */
+.cv-copy {
+  margin-top: 14px;
+  font-size: clamp(15px, min(1.25vw, 2vh), 18px);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------------ logos */
+
+/*
+ * Where it happened, then what with, in the ink at the paper's soft strength,
+ * each at its row's height times its own optical scale. The places are the
+ * taller row. Under the pointer or focus a logo takes its own colour and its
+ * name in small capitals under it.
+ */
+.cv-logos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 32px;
+  margin-top: 22px;
+}
+
+.cv-orgs,
+.cv-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cv-orgs {
+  --cv-row: 36px;
+  gap: 14px 26px;
+}
+
+.cv-tools {
+  --cv-row: 24px;
+  gap: 12px 18px;
+}
+
+.cv-logo {
+  position: relative;
+  display: block;
+  flex: none;
+  height: calc(var(--cv-row) * var(--cv-scale, 1));
+  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  outline: none;
+  transition: color var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.cv-logo svg {
+  display: block;
+  width: auto;
+  height: 100%;
+  overflow: visible;
+}
+
+.cv-logo:hover,
+.cv-logo:focus-visible {
+  color: var(--cv-brand);
+}
+
+.cv-logo:focus-visible {
+  outline: 2px solid var(--lb-focus, rgba(26, 30, 44, 0.55));
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+/* Centred under the logo, out of the flow, so naming one moves nothing, and
+   nudged in from the column's edge (Story.tsx) where it would run past it. */
+.cv-logo-name {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
   font-size: 9.5px;
   font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink, #1a1a1e);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(calc(-50% + var(--cv-nudge, 0px)), -2px);
+  transition:
+    opacity var(--lb-t-quick, 120ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-quick, 120ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.cv-logo:hover .cv-logo-name,
+.cv-logo:focus-visible .cv-logo-name {
+  opacity: 1;
+  transform: translate(calc(-50% + var(--cv-nudge, 0px)), 0);
+}
+
+/*
+ * A place's mark alone in its chapter, with its name beside it in the
+ * label's small capitals a size up, in two lines: the lockup a letterhead
+ * would set. 200px takes "Iran University of" and "Science and Technology"
+ * evenly. `type`, a logo that is only its name, is set the same way, in the
+ * middle of its row.
+ */
+.cv-logo.is-named,
+.cv-logo.is-type {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cv-logo.is-named {
+  height: auto;
+}
+
+.cv-logo.is-named svg {
+  height: calc(var(--cv-row) * var(--cv-scale, 1));
+}
+
+.cv-logo-type,
+.cv-logo.is-type {
+  max-width: 200px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+/*
+ * The games, stuck on rather than set: each on a scrap of the mount's white,
+ * a little askew and off the line, and pressed flat a moment under the
+ * pointer. Content-box, so the padding is round the logo and not out of it.
+ */
+.is-stickers .cv-tools {
+  --cv-row: 40px;
+  gap: 14px 20px;
+}
+
+.is-stickers .cv-logo {
+  box-sizing: content-box;
+  padding: 9px 13px;
+  border-radius: 6px;
+  background:
+    var(--lb-fibre) 0 0 / 64px 64px,
+    var(--lb-mount, #fdfdfc);
+  box-shadow:
+    0 1px 2px rgba(30, 34, 48, 0.14),
+    0 4px 12px rgba(46, 52, 72, 0.1);
+  color: var(--lb-ink, #1a1a1e);
+  transform: translateY(var(--cv-drop, 0)) rotate(var(--cv-tilt, 0deg));
+  transition:
+    color var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-enter, 240ms) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.is-stickers .cv-logo:nth-child(3n + 1) {
+  --cv-tilt: -4deg;
+  --cv-drop: 3px;
+}
+
+.is-stickers .cv-logo:nth-child(3n + 2) {
+  --cv-tilt: 3deg;
+  --cv-drop: -4px;
+}
+
+.is-stickers .cv-logo:nth-child(3n) {
+  --cv-tilt: -1.5deg;
+  --cv-drop: 5px;
+}
+
+.is-stickers .cv-logo:hover,
+.is-stickers .cv-logo:focus-visible {
+  transform: translateY(calc(var(--cv-drop, 0px) - 3px)) rotate(calc(var(--cv-tilt, 0deg) * 0.4)) scale(1.04);
+}
+
+.is-stickers .cv-logo-name {
+  top: calc(100% + 9px);
+}
+
+/* -------------------------------------------------------------------- now */
+
+/* At Now: the facts in four columns, the ways to him, and two asides. */
+.cv-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  justify-content: start;
+  gap: 10px 36px;
+  margin-top: 22px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.cv-label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.4;
   letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
 }
 
-.lt-readout-value {
-  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10.5px;
-  font-variant-numeric: slashed-zero tabular-nums;
-  white-space: nowrap;
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-}
-
-/* -------------------------------------------------------------------- card */
-
-/*
- * Where Solar's readout sits, 264px of it: the facts at Now, a chapter or a
- * crossing otherwise. The only words on the page that can be selected besides
- * the paper's.
- */
-.cv-card {
-  width: 264px;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.cv-card .lb-tray-list {
-  gap: 0;
-}
-
-/* The old face fades out laid over the new one fading in, out of the flow,
-   so the card takes the new one's height at once. The facts lie there
-   unseen too, for nowBottom in App.tsx to measure. */
-.cv-card-faces {
-  position: relative;
-  display: grid;
-  overflow: hidden;
-}
-
-.cv-card-face {
-  grid-area: 1 / 1;
-  min-width: 0;
-}
-
-.cv-card-face.is-leaving,
-.cv-card-probe {
-  position: absolute;
-  inset: 0 0 auto;
-}
-
-.cv-card-probe {
-  visibility: hidden;
-}
-
-.cv-card-face.is-entering {
-  animation: cv-card-in var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
-}
-
-.cv-card-face.is-leaving {
-  pointer-events: none;
-  animation: cv-card-out var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
-}
-
-@keyframes cv-card-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes cv-card-out {
-  to {
-    opacity: 0;
-  }
-}
-
-/* The chapter's years, where Solar says where you are looking from. */
-.cv-card-years {
-  margin-left: auto;
-  padding-left: 10px;
-  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10.5px;
-  font-weight: 500;
-  font-variant-numeric: slashed-zero tabular-nums;
-  white-space: nowrap;
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-}
-
-/* Prose at the paper's size. */
-.cv-card-copy {
-  margin: 2px 0 6px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--lb-ink, #1a1a1e);
-}
-
-.cv-card-rows {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 3px 12px;
-  margin: 2px 0 6px;
-}
-
-.cv-card-rows .lt-readout-label {
+/* Labelled as a fact is, the four ways under it in one line that wraps. */
+.cv-contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 18px;
+  margin-top: 16px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
-.cv-card-value {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
-  font-size: 11px;
-  line-height: 1.4;
+.cv-contact .cv-label {
+  flex-basis: 100%;
+}
+
+.cv-aside {
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
 }
 
-.cv-card-roles {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin: 2px 0 6px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+.cv-signoff {
+  margin-top: 6px;
 }
 
-.cv-card-roles li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.cv-card-link {
+.cv-link {
   color: var(--lb-ink, #1a1a1e);
   text-decoration: underline;
   text-decoration-color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
   transition: text-decoration-color var(--lb-t-grow, 180ms) var(--lb-ease, ease);
 }
 
-.cv-card-link:hover {
+.cv-link:hover {
   text-decoration-color: currentColor;
 }
 
-/* The way to the crossing, and from it to either chapter. */
-.cv-card-cross {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 7px;
-  margin: 0 0 6px;
-  font-size: 11px;
-  font-weight: 500;
-  text-align: left;
-  color: var(--lb-ink, #1a1a1e);
-}
-
-/* The chapter it crossed, where a row has its value. */
-.cv-card-with {
-  margin-left: auto;
-  padding-left: 10px;
-  font-weight: 400;
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-}
-
-.cv-card-roles .cv-card-cross {
-  width: auto;
-  margin: 0;
-}
-
-.cv-card-cross .lb-tray-swatch {
-  width: 10px;
-  height: 10px;
-}
-
-.cv-card-cross:hover span:not(.cv-card-with) {
-  text-decoration: underline;
-  text-decoration-color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-  text-underline-offset: 2px;
-}
-
-.cv-card-closing {
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-}
-
-/* Always the last row, under a hairline, the way to the whole of it. */
-.cv-card-text {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-top: 2px;
-  padding: 7px 0 0;
-  border-top: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--lb-ink-strong, #101014);
-}
-
-.cv-card-text[aria-pressed='true'] {
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-}
-
-/* The key is no help on a touch screen, which has no keyboard to press it on. */
-@media (hover: none) {
-  .cv-card-text .lt-readout-label {
-    display: none;
-  }
-}
+/* ----------------------------------------------------------- story motion */
 
 /*
- * While the paper is out and the two would overlap, the card is only its
- * last row, which then puts the paper away. 856px is the paper's 560, the
- * card's 264 and the 16px either side of it.
+ * The old face fades as it drifts up a little; the new one rises line by
+ * line, the first as the old is half gone and the last by 450ms (ENTER_MS in
+ * Story.tsx). Reduced motion keeps the swap and drops the movement: with
+ * global.css's 1ms and no delays it is a cut.
  */
-@media (max-width: 855px) {
-  .cv-card.is-reading .cv-card-faces {
-    display: none;
-  }
+.cv-face.is-leaving {
+  pointer-events: none;
+  animation: cv-leave var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+}
 
-  .cv-card.is-reading .cv-card-text {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
+.cv-face.is-entering > * {
+  animation: cv-rise 230ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)) 100ms both;
+}
+
+.cv-face.is-entering > :nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.cv-face.is-entering > :nth-child(3) {
+  animation-delay: 180ms;
+}
+
+.cv-face.is-entering > :nth-child(n + 4) {
+  animation-delay: 220ms;
+}
+
+@keyframes cv-leave {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes cv-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-face.is-entering > * {
+    animation-delay: 0s !important;
   }
 }
 
 /* ------------------------------------------------- narrow viewports (760px) */
 
-/* The Now dot alone, as in Solar. 310px is the rest of the dock with the
+/* The Now dot alone, as in Solar. 302px is the rest of the dock with the
    longest name in the chip, and 7px either side. */
 @media (max-width: 759px) {
   .lb-dock {
-    --lb-tl-w: min(112px, calc(100vw - 310px));
-    --lb-tl-open: min(260px, calc(100vw - 310px));
+    --lb-tl-w: min(112px, calc(100vw - 302px));
+    --lb-tl-open: min(260px, calc(100vw - 302px));
     --sl-group: 8px;
   }
 
@@ -1262,28 +1339,59 @@ body > .cv-paper .cv-text {
     padding: 0 18px 0 calc(14px + env(safe-area-inset-left, 0px));
   }
 
-  /* Under the card's one row, which is 30px tall here, by the same 10px. */
-  :root:has(.cv-card) .cv-text {
-    top: calc(80px + env(safe-area-inset-top, 0px));
+  /* Under the title by 14px and at its inset, from the top down. */
+  .cv-story {
+    --cv-top: 44px;
+    align-content: start;
+    padding-inline: calc(14px + env(safe-area-inset-left, 0px)) calc(14px + env(safe-area-inset-right, 0px));
   }
 
-  /* Under the title, as Gravity's and Solar's readouts are, and the width of
-     the phone less 6px either side. */
-  .cv-card {
-    left: calc(6px + env(safe-area-inset-left, 0px));
-    right: calc(6px + env(safe-area-inset-right, 0px));
-    top: calc(40px + env(safe-area-inset-top, 0px));
-    width: auto;
+  /* Each face from the top of the cell too, under the title where a reader
+     looks, so a short chapter leaves its room below it in one band. */
+  .cv-face {
+    align-self: start;
   }
 
-  .lt-readout .lb-tray-list {
-    min-width: 0;
+  .cv-kicker {
+    margin-bottom: 8px;
+    font-size: 10px;
   }
 
-  /* Across the phone, the card lies over the sheets panned out above the
-     band, and at the tray's 0.82 they read through the text. */
-  .cv-card .lb-tray-list {
-    background-color: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
+  .cv-copy {
+    margin-top: 10px;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  .cv-logos {
+    gap: 12px 24px;
+    margin-top: 16px;
+  }
+
+  .cv-orgs {
+    --cv-row: 28px;
+    gap: 12px 20px;
+  }
+
+  .cv-tools {
+    --cv-row: 20px;
+    gap: 10px 14px;
+  }
+
+  .is-stickers .cv-tools {
+    --cv-row: 30px;
+  }
+
+  .cv-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 20px;
+    margin-top: 16px;
+    font-size: 13px;
+  }
+
+  .cv-contact,
+  .cv-aside {
+    font-size: 13px;
   }
 
   .lb-dock {
@@ -1295,7 +1403,7 @@ body > .cv-paper .cv-text {
     gap: 2px;
   }
 
-  /* The chip is its swatch alone: the chapter is on the card above. */
+  /* The chip is its swatch alone: the chapter is in the story above. */
   .lt-chip {
     justify-content: center;
     width: 26px;
@@ -1310,11 +1418,126 @@ body > .cv-paper .cv-text {
     margin-left: 2px;
     font-size: 9.5px;
   }
+}
 
-  /* The card is under the title here, so the drawer stops below where the
-     card's one row ends. */
-  .lt-bodies {
-    max-height: calc(100dvh - 160px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+/*
+ * A short phone gives the sheets the height Now's last lines would take:
+ * under 760px the closing line goes, under 600px the aside too, the copy
+ * comes down a size, and the facts and the ways to him are set as the paper
+ * sets them, a label beside each. At 375x667 that leaves a 139px sheet, and
+ * at 320x568 Now about as tall as the longest chapter. All of it is on the
+ * paper.
+ */
+@media (max-width: 619px) and (max-height: 759px) {
+  .cv-signoff {
+    display: none;
+  }
+}
+
+@media (max-width: 619px) and (max-height: 599px) {
+  .cv-aside {
+    display: none;
+  }
+
+  .cv-copy {
+    font-size: 14px;
+  }
+
+  /* 56px is "Studied", the widest label, at 50px, and some air. */
+  .cv-facts,
+  .cv-contact {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    align-items: baseline;
+    gap: 2px 10px;
+    margin-top: 12px;
+  }
+
+  .cv-facts > div {
+    display: contents;
+  }
+
+  .cv-facts .cv-label {
+    margin-bottom: 0;
+  }
+
+  .cv-contact > :not(.cv-label) {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+/*
+ * A desktop stage too short for the story and a row under it, a phone on
+ * its side. The story comes down from the top in the phone's sizes and
+ * smaller, the facts and the ways to him set as on a short phone, and the
+ * asides go to the paper: that ends the story at 185px at 844x390, which
+ * leaves an 82px sheet between it and the dock, and 118px at 932x430.
+ */
+@media (min-width: 620px) and (max-height: 519px) {
+  /* As wide as the stage allows, so the facts and the ways to him are a line each. */
+  .cv-story {
+    --cv-top: 46px;
+    grid-template-columns: min(800px, 100%);
+    align-content: start;
+  }
+
+  .cv-face {
+    align-self: start;
+  }
+
+  .cv-kicker {
+    margin-bottom: 6px;
+    font-size: 10px;
+  }
+
+  .cv-headline {
+    font-size: 20px;
+  }
+
+  .cv-copy {
+    margin-top: 6px;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .cv-logos {
+    gap: 8px 20px;
+    margin-top: 10px;
+  }
+
+  .cv-orgs {
+    --cv-row: 22px;
+    gap: 8px 16px;
+  }
+
+  .cv-tools {
+    --cv-row: 16px;
+    gap: 8px 12px;
+  }
+
+  .is-stickers .cv-tools {
+    --cv-row: 24px;
+  }
+
+  .is-stickers .cv-logo {
+    padding: 6px 9px;
+  }
+
+  .cv-aside {
+    display: none;
+  }
+
+  .cv-facts {
+    gap: 6px 28px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+
+  .cv-contact {
+    gap: 0 14px;
+    margin-top: 8px;
+    font-size: 13px;
   }
 }
 
@@ -1338,12 +1561,11 @@ body > .cv-paper .cv-text {
 
 /*
  * Idle (src/ui/idle.ts, shared): the title, the tabs and the rest of the
- * chrome leave, which leaves the life as a picture. The card stays, being
+ * chrome leave, which leaves the life as a picture. The story stays, being
  * what a reader came for.
  */
 .is-idle .lb-dock,
 .is-idle .lb-legend,
-.is-idle .lb-tray:not(.cv-card),
 .is-idle .lb-tab {
   opacity: 0;
   pointer-events: none;
@@ -1351,6 +1573,6 @@ body > .cv-paper .cv-text {
 }
 
 .is-idle,
-.is-idle *:not(.cv-card, .cv-card *) {
+.is-idle *:not(.cv-story, .cv-story *) {
   cursor: none !important;
 }

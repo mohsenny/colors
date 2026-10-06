@@ -11,7 +11,8 @@ import type { Dye, RenderOptions, SimState, SlideState, Viewport } from '../../.
 import { measureViewport } from '../../../src/app/viewport'
 import { Painter } from '../../../src/render/paint'
 import { shadowStack } from '../../../src/render/shadow'
-import { crosses, inside, toStage } from '../layout'
+import { ART, inkOf } from '../art'
+import { inside, toStage } from '../layout'
 import type { Fit, Laid, Placed } from '../layout'
 import { yearsOf } from '../life'
 import type { Life } from '../life'
@@ -21,7 +22,9 @@ import type { Life } from '../life'
  * mounts and tabs in the DOM, laid where layout.ts says and never moving on
  * their own. Nothing here runs Lightbox's stage or simulation. The painter is
  * handed a SimState that is only ever a still picture, so the film is the same
- * film, mixed the same way, with none of the drift, sway or tubes.
+ * film, mixed the same way, with none of the drift, sway or tubes. Each
+ * mount carries its chapter's picture (art.ts) over the film, as a printed
+ * transparency does.
  *
  * It draws when the camera, the selection or the hover has changed, and not
  * otherwise: `draw` compares the picture it is asked for with the last one.
@@ -33,9 +36,6 @@ const Z_BASE = 10
 /** Heights as stage.ts quantises them, so the shadow string is built once per visible step. */
 const Z_SHADOW_STEPS = 250
 
-/** What a press on the life is about: one chapter, or two where they cross. */
-export type Target = { kind: 'chapter'; index: number } | { kind: 'crossing'; index: number }
-
 /** The picture to draw. */
 export interface View {
   fit: Fit
@@ -43,7 +43,9 @@ export interface View {
   camera: number
   /** Each sheet's height off the surface, 0 to 1, in the shadow formula's terms. */
   z: readonly number[]
-  /** The sheets that are the current chapter, or both of the current crossing. */
+  /** How far each sheet stands up off the row, 0 to 1. */
+  lift: readonly number[]
+  /** The sheet that is the current chapter. */
   current: readonly boolean[]
   hovered: readonly boolean[]
 }
@@ -102,34 +104,25 @@ function still(id: number, dye: Dye): SlideState {
 
 export class Film {
   private readonly root: HTMLElement
-  private readonly life: Life
   private readonly placed: readonly Placed[]
   private readonly painter: Painter
   private readonly state: SimState
-  /**
-   * The mounts' own layer, so a phone can fade them out above the band in one
-   * mask. The canvas takes its own mask: one on the film as a whole would
-   * isolate it, and the paint would multiply with nothing instead of the lit
-   * surface.
-   */
+  /** The mounts' own layer, which stacks with the story, the paper and the chrome. */
   private readonly layer: HTMLDivElement
   private readonly mounts: Mount[] = []
   private laid: Laid[] = []
-  private fit: Fit | null = null
   private viewport: Viewport
   private key = ''
 
   constructor(root: HTMLElement, life: Life, placed: readonly Placed[], onTab: (index: number) => void) {
     this.root = root
-    this.life = life
     this.placed = placed
     this.painter = new Painter(root)
     this.viewport = measureViewport(root)
     this.state = {
       t: 0,
       aspect: this.viewport.aspect,
-      // Paint, not light: the crossing is the colour a painter would mix, and
-      // the one life.test.ts holds to being a third colour.
+      // Paint, not light, as Lightbox opens in.
       modeMix: 0,
       paletteEpoch: 0,
       crowd: 0,
@@ -170,7 +163,15 @@ export class Film {
       year.textContent = String(c.from)
       tab.append(year)
       tab.addEventListener('click', () => onTab(i))
-      frame.append(edge, tab)
+      // The picture, first, so the edge and the tab are drawn over it.
+      const art = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      art.setAttribute('class', 'cv-art')
+      art.setAttribute('viewBox', '0 0 100 100')
+      art.setAttribute('preserveAspectRatio', 'xMidYMid slice')
+      art.setAttribute('aria-hidden', 'true')
+      art.innerHTML = ART[c.id] ?? ''
+      art.style.color = inkOf(c.dye)
+      frame.append(art, edge, tab)
       this.layer.append(frame)
       this.mounts.push({
         frame,
@@ -206,23 +207,16 @@ export class Film {
       view.fit.narrow ? 'n' : 'w',
       (view.camera * view.fit.u).toFixed(1),
       view.z.map((z) => Math.round(z * Z_SHADOW_STEPS)).join(','),
+      view.lift.map((l) => l.toFixed(3)).join(','),
       view.current.map(Number).join(''),
       view.hovered.map(Number).join(''),
     ].join('|')
     if (key === this.key) return
     this.key = key
 
-    const { edge, near } = view.fit
-    this.root.classList.toggle('is-narrow', edge !== null)
-    if (edge !== null) {
-      this.root.style.setProperty('--cv-edge', `${edge.toFixed(1)}px`)
-      this.root.style.setProperty('--cv-near', `${near.toFixed(1)}px`)
-    }
-
     const vp = this.viewport
     const vh = vp.height
-    this.fit = view.fit
-    this.laid = this.placed.map((p) => toStage(view.fit, p, view.camera))
+    this.laid = this.placed.map((p, i) => toStage(view.fit, p, view.camera, view.lift[i] ?? 0))
 
     for (let i = 0; i < this.laid.length; i++) {
       const s = this.laid[i] as Laid
@@ -265,12 +259,9 @@ export class Film {
         m.hovered = hovered
         m.frame.classList.toggle('is-hovered', hovered)
       }
-      // A tab standing in the fade or above it is not there to press.
-      m.tab.classList.toggle('is-away', edge !== null && s.y - s.side / 2 < near)
-      // Work over learning, so a work tab standing up into a learning sheet
-      // is never under it; the hovered sheet over those, the current over all.
-      const work = this.life.chapters[i]?.row === 'work' ? 1 : 0
-      const rank = (current ? 4 : hovered ? 2 : 0) + work
+      // The hovered sheet over the rest, the current over all, so a grown
+      // sheet's shadow falls on its neighbours and not under them.
+      const rank = current ? 2 : hovered ? 1 : 0
       if (rank !== m.rank) {
         m.rank = rank
         m.frame.style.zIndex = String(rank)
@@ -287,22 +278,8 @@ export class Film {
     this.painter.draw(this.state, opts)
   }
 
-  /**
-   * What is under a stage point. The painter answers first, because a
-   * crossing is a region only it knows: two sheets there that the life says
-   * ran at once are the crossing. Anywhere else on a sheet, the mount
-   * included, is the sheet nearest the top.
-   */
-  targetAt(x: number, y: number): Target | null {
-    // Faded out above a phone's band, so nothing there to press.
-    const f = this.fit
-    if (f && f.edge !== null && y < f.near) return null
-    const hit = this.painter.sampleAt(x, y)
-    if (hit && hit.ids.length === 2) {
-      const [a, b] = hit.ids.map((id) => this.life.chapters[id]?.id ?? '')
-      const index = this.life.crossings.findIndex((c) => crosses([c], a ?? '', b ?? ''))
-      if (index >= 0) return { kind: 'crossing', index }
-    }
+  /** The chapter whose sheet is under a stage point, mount included, the one nearest the top. */
+  targetAt(x: number, y: number): number | null {
     let best = -1
     let rank = -1
     for (let i = 0; i < this.laid.length; i++) {
@@ -312,6 +289,6 @@ export class Film {
         rank = m.rank
       }
     }
-    return best >= 0 ? { kind: 'chapter', index: best } : null
+    return best >= 0 ? best : null
   }
 }

@@ -3,7 +3,7 @@ import type { CSSProperties, ReactElement } from 'react'
 import type { Snapshot } from '../app/instrument'
 import { LIFE } from '../life'
 import { Chapters } from './Chapters'
-import { chapterHex, crossingHex } from './hex'
+import { chapterHex } from './hex'
 import { PauseIcon, PlayIcon } from './Icons'
 import { Timeline } from './Timeline'
 import type { TimelineProps } from './Timeline'
@@ -17,7 +17,6 @@ export interface DockProps {
   onToggleList(): void
   onCloseList(): void
   onGo(index: number): void
-  onCrossing(index: number): void
   onNow(): void
   onPaper(): void
 }
@@ -30,10 +29,8 @@ const ALL = `linear-gradient(90deg, ${LIFE.chapters
   .map((_, i, all) => `${chapterHex(i)} ${(i / all.length) * 100}% ${((i + 1) / all.length) * 100}%`)
   .join(', ')})`
 
-/** What the chip says and shows: the crossing or the chapter being read, or all of them at Now. */
+/** What the chip says and shows: the chapter being read, or all of them at Now. */
 function chipOf(snap: Snapshot): { name: string; swatch: string } {
-  const x = snap.crossing === null ? undefined : LIFE.crossings[snap.crossing]
-  if (x) return { name: x.name, swatch: crossingHex(x) }
   const c = snap.chapter === null ? undefined : LIFE.chapters[snap.chapter]
   if (c && snap.chapter !== null) return { name: c.name, swatch: chapterHex(snap.chapter) }
   return { name: 'Chapters', swatch: ALL }
@@ -44,13 +41,12 @@ function chipOf(snap: Snapshot): { name: string; swatch: string } {
  * Play and the tape, and the CV as text. No knob, no Save and no plus.
  */
 export function Dock(props: DockProps): ReactElement {
-  const { snap, attachClock, timeline, onTogglePlay, onToggleList, onCloseList, onGo, onCrossing, onNow, onPaper } =
-    props
+  const { snap, attachClock, timeline, onTogglePlay, onToggleList, onCloseList, onGo, onNow, onPaper } = props
   const { playing, list } = snap
   const rootRef = useRef<HTMLDivElement | null>(null)
   const chipRef = useRef<HTMLButtonElement | null>(null)
   const clockRef = useRef<HTMLSpanElement | null>(null)
-  const live = snap.chapter === null && snap.crossing === null
+  const live = snap.chapter === null
   const chip = chipOf(snap)
 
   useEffect(() => {
@@ -132,13 +128,8 @@ export function Dock(props: DockProps): ReactElement {
       <Chapters
         open={list}
         chapter={snap.chapter}
-        crossing={snap.crossing}
         onSelect={(i) => {
           onGo(i)
-          onCloseList()
-        }}
-        onCrossing={(i) => {
-          onCrossing(i)
           onCloseList()
         }}
       />

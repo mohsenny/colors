@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
+import { createPortal } from 'react-dom'
 import { Instrument } from './app/instrument'
 import type { Snapshot } from './app/instrument'
 import { LIFE, yearsOf } from './life'
 import { PAPER_ID } from './text'
-import { Card } from './ui/Card'
-import type { CardActions } from './ui/Card'
 import { Dock } from './ui/Dock'
 import { chapterHex } from './ui/hex'
 import { Legend } from './ui/Legend'
 import { Paper } from './ui/Paper'
+import { Story } from './ui/Story'
+import type { StoryActions } from './ui/Story'
 import type { Mark } from './ui/Timeline'
 import { useIdle } from '../../src/ui/idle'
 import { Title } from '../../src/ui/Title'
@@ -23,32 +24,14 @@ const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'])
 
 /** What the tape's input says where the clock is: the chapter and its years, or Now. */
 function momentOf(snap: Snapshot): string {
-  const x = snap.crossing === null ? undefined : LIFE.crossings[snap.crossing]
-  if (x) return x.name
   const c = snap.chapter === null ? undefined : LIFE.chapters[snap.chapter]
   return c ? `${c.name}, ${yearsOf(c)}` : 'Now'
 }
 
-/**
- * Where the card's lower edge is when it shows the facts, whatever it shows
- * now, from the facts laid out unseen inside it. The life is laid under that,
- * so a page opened on a chapter lays the sheets where Now will, and no card
- * coming or going moves them. Null while the faces are put away.
- */
-function nowBottom(card: HTMLElement): number | null {
-  const faces = card.querySelector('.cv-card-faces')
-  const probe = card.querySelector('.cv-card-probe')
-  if (!faces || !probe) return null
-  const shown = faces.getBoundingClientRect().height
-  const at = probe.getBoundingClientRect().height
-  if (at === 0) return null
-  return card.getBoundingClientRect().bottom - shown + at
-}
-
-function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
+function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: HTMLElement | null }): ReactElement {
   const snap: Snapshot = useSyncExternalStore(instrument.subscribe, instrument.getSnapshot)
   const [note, setNote] = useState<Note | null>(null)
-  const card = useRef<HTMLElement | null>(null)
+  const probe = useRef<HTMLDivElement | null>(null)
   const attachClock = useCallback((el: HTMLElement | null) => instrument.attachClock(el), [instrument])
   const attachTape = useCallback(
     (el: HTMLElement | null, input: HTMLInputElement | null) => instrument.attachTape(el, input),
@@ -65,31 +48,27 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
   // An open paper or list holds the chrome up, as an open drawer does.
   useIdle(snap.paper || snap.list)
 
-  // The life is laid under the card as it is at Now, whatever card is up, so
-  // the sheets keep their place when a chapter's card comes up longer or
-  // shorter, and a page opened on a chapter lays them where Now will. The
-  // facts lie unseen in the card, so a font arriving or the paper going away
-  // on a phone measures again.
+  // The life is laid under the story at its tallest, whichever face is up,
+  // so the sheets keep their place as faces come and go, and a page opened
+  // on a chapter lays them where Now will. Every face lies unseen in the
+  // probe, so a font arriving or the width changing measures again.
   const measure = useCallback(() => {
-    const at = card.current ? nowBottom(card.current) : null
-    if (at !== null) instrument.setCard(at)
+    const rect = probe.current?.getBoundingClientRect()
+    if (rect && rect.height > 0) instrument.setStory(rect.bottom)
   }, [instrument])
-  useLayoutEffect(measure, [measure])
+  useLayoutEffect(measure, [measure, storySlot])
   useEffect(() => {
-    const probe = card.current?.querySelector('.cv-card-probe')
     const observer = new ResizeObserver(measure)
-    if (probe) observer.observe(probe)
+    if (probe.current) observer.observe(probe.current)
     window.addEventListener('resize', measure)
     return () => {
       observer.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [measure])
+  }, [measure, storySlot])
+  const attachStory = useCallback((el: HTMLElement | null) => instrument.attachStory(el), [instrument])
 
-  const actions: CardActions = {
-    go: (i) => instrument.go(i),
-    goCrossing: (i) => instrument.goCrossing(i),
-    togglePaper: () => instrument.togglePaper(),
+  const actions: StoryActions = {
     copyEmail: () => {
       // Where the page may not write the clipboard, the address opens in the
       // mail app instead, so a press is never for nothing.
@@ -145,13 +124,8 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
 
   return (
     <>
-      <Card
-        snap={snap}
-        actions={actions}
-        cardRef={(el) => {
-          card.current = el
-        }}
-      />
+      {storySlot &&
+        createPortal(<Story snap={snap} actions={actions} storyRef={attachStory} probeRef={probe} />, storySlot)}
       <Paper open={snap.paper} />
       <Legend away={snap.paper} />
       <Dock
@@ -172,7 +146,6 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         onToggleList={() => instrument.toggleList()}
         onCloseList={closeList}
         onGo={(i) => instrument.go(i)}
-        onCrossing={(i) => instrument.goCrossing(i)}
         onNow={() => instrument.now()}
         onPaper={() => instrument.togglePaper()}
       />
@@ -185,13 +158,14 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
 }
 
 /*
- * The lit surface with the life laid on it, the card over it and the paper
+ * The lit surface with the life laid on it, the story over it and the paper
  * one press away. Until the instrument is up, and without script at all, the
  * paper is out, so the page is the CV as text.
  */
 export default function App(): ReactElement {
   const filmRef = useRef<HTMLDivElement | null>(null)
   const [instrument, setInstrument] = useState<Instrument | null>(null)
+  const [storySlot, setStorySlot] = useState<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const film = filmRef.current
@@ -226,9 +200,13 @@ export default function App(): ReactElement {
       >
         Read the CV as text
       </a>
-      <div ref={filmRef} className="cv-film" />
+      {/* The rest in the order a reader takes it, which is the order Tab
+          does: the title, the story, the sheets, then the paper, the legend
+          and the dock. The story is the chrome's, set in here. */}
       <Title active="mohsen" />
-      {instrument ? <Chrome instrument={instrument} /> : <Paper open />}
+      <div ref={setStorySlot} className="cv-story-slot" />
+      <div ref={filmRef} className="cv-film" />
+      {instrument ? <Chrome instrument={instrument} storySlot={storySlot} /> : <Paper open />}
     </main>
   )
 }

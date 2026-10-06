@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { TAB_PROUD, TAB_W } from '../../src/core/constants'
 import { shoelace } from '../../src/render/paint'
 import { LIFE } from './life'
-import { MARGIN, MARGIN_NARROW, MARGIN_TIGHT, U_MAX, U_MIN, aim, corners, crosses, fit, length, place, toStage } from './layout'
+import { MARGIN, PHONE_U_MIN, U_MAX, U_MIN, aim, corners, fit, length, place, toStage } from './layout'
 import type { Fit, Laid } from './layout'
 
 /** Clip a convex polygon to the inside of another, clockwise on screen. Sutherland-Hodgman. */
@@ -41,114 +42,120 @@ function overlap(a: Laid, b: Laid): number {
   return p.length < 6 ? 0 : shoelace(p)
 }
 
-const placed = place(LIFE.chapters, LIFE.crossings)
+/** The highest and lowest a laid sheet reaches, px. */
+function reach(s: Laid): [number, number] {
+  const ys = corners(s).filter((_, i) => i % 2 === 1)
+  return [Math.min(...ys), Math.max(...ys)]
+}
+
+const placed = place(LIFE.chapters)
 const len = length(placed)
 
-const WIDE: Fit = fit({ width: 1440, height: 900, top: 260, bottom: 844 }, len)
-const NARROW: Fit = fit({ width: 390, height: 844, top: 380, bottom: 794 }, len)
+// The story's lower edge at 1440x900 and at 390x844, as measured, and the dock's upper one.
+const WIDE: Fit = fit({ width: 1440, height: 900, top: 420, bottom: 844 }, len)
+const PHONE: Fit = fit({ width: 390, height: 844, top: 480, bottom: 794 }, len)
 
 describe('place', () => {
-  it('puts the left edges where the spacing rule says', () => {
+  it('lays the six a step apart, left to right in time', () => {
     const lefts = placed.map((p) => Math.round((p.along - 0.5) * 100) / 100)
-    expect(lefts).toEqual([0, 1.12, 2.24, 2.84, 3.96, 5.08, 6.2, 6.8])
-    expect(len).toBeCloseTo(7.8, 9)
-  })
-
-  it('keeps learning on the top row and work below', () => {
-    for (const [i, c] of LIFE.chapters.entries()) {
-      const p = placed[i]
-      expect(p?.across, c.id).toBe(c.row === 'learn' ? 0.5 : 1.2)
-    }
+    expect(lefts).toEqual([0, 1.12, 2.24, 3.36, 4.48, 5.6])
+    expect(len).toBeCloseTo(6.6, 9)
   })
 })
 
-describe('only the declared crossings overlap', () => {
+describe('no two sheets overlap', () => {
   for (const [name, f] of [
     ['across a desktop', WIDE],
-    ['down a phone', NARROW],
+    ['along a phone', PHONE],
   ] as const) {
     it(name, () => {
-      const laid = placed.map((p) => toStage(f, p, aim(f, len / 2)))
-      const met: string[] = []
-      for (let i = 0; i < laid.length; i++) {
-        for (let j = i + 1; j < laid.length; j++) {
-          const area = overlap(laid[i] as Laid, laid[j] as Laid)
-          const a = LIFE.chapters[i]?.id ?? ''
-          const b = LIFE.chapters[j]?.id ?? ''
-          if (crosses(LIFE.crossings, a, b)) {
-            // 0.4 by 0.3 of a sheet, give or take what the leans turn in.
-            expect(area / f.u ** 2, `${a} x ${b}`).toBeGreaterThan(0.1)
-            met.push(`${a} x ${b}`)
-          } else {
-            expect(area, `${a} x ${b}`).toBe(0)
-          }
+      for (const current of [null, 0, 3, 5]) {
+        const camera = aim(f, current === null ? len / 2 : (placed[current]?.along ?? 0))
+        const laid = placed.map((p, i) => toStage(f, p, camera, i === current ? 1 : 0))
+        for (let i = 0; i < laid.length - 1; i++) {
+          expect(overlap(laid[i] as Laid, laid[i + 1] as Laid), `${current}: ${i} and ${i + 1}`).toBe(0)
         }
       }
-      expect(met).toHaveLength(LIFE.crossings.length)
     })
   }
 
-  it('still holds with every lean at the most it may be, either way', () => {
+  it('with every lean at the most it may be, either way, and one lifted', () => {
     for (const sign of [1, -1]) {
       const leant = placed.map((p, i) => ({ ...p, lean: (i % 2 === 0 ? sign : -sign) * 1.5 }))
-      const laid = leant.map((p) => toStage(WIDE, p, aim(WIDE, len / 2)))
-      for (let i = 0; i < laid.length; i++) {
-        for (let j = i + 1; j < laid.length; j++) {
-          const a = LIFE.chapters[i]?.id ?? ''
-          const b = LIFE.chapters[j]?.id ?? ''
-          if (!crosses(LIFE.crossings, a, b)) expect(overlap(laid[i] as Laid, laid[j] as Laid)).toBe(0)
-        }
+      for (const current of [0, 2, 5]) {
+        const laid = leant.map((p, i) => toStage(WIDE, p, aim(WIDE, 0), i === current ? 1 : 0))
+        for (let i = 0; i < laid.length - 1; i++) expect(overlap(laid[i] as Laid, laid[i + 1] as Laid)).toBe(0)
       }
     }
   })
 })
 
 describe('fit', () => {
-  it('lays the life across the width at 1440 and down the width at 390', () => {
+  it('lays the row across the width at 1440, and a phone sheet at its share of 390', () => {
     expect(WIDE.narrow).toBe(false)
-    expect(WIDE.u).toBeCloseTo(1360 / 7.8, 6)
-    expect(NARROW.narrow).toBe(true)
-    expect(NARROW.u).toBeCloseTo(366 / 1.7, 6)
+    expect(WIDE.u).toBeCloseTo(1360 / 6.6, 6)
+    expect(PHONE.narrow).toBe(true)
+    expect(PHONE.u).toBeCloseTo(0.55 * 390, 6)
   })
 
-  it('keeps a sheet between 160 and 560px', () => {
-    expect(fit({ width: 900, height: 700, top: 200, bottom: 650 }, len).u).toBe(U_MIN)
+  it('keeps a desktop sheet between its least and most, and a phone one over its least', () => {
+    expect(fit({ width: 800, height: 700, top: 400, bottom: 650 }, len).u).toBe(U_MIN)
     expect(fit({ width: 8000, height: 4000, top: 200, bottom: 3950 }, len).u).toBe(U_MAX)
+    expect(fit({ width: 320, height: 568, top: 500, bottom: 518 }, len).u).toBe(PHONE_U_MIN)
   })
 
-  it('centres a life that fits, and pans one that does not only as far as its ends', () => {
+  it('keeps the lifted sheet and its tab in the band', () => {
+    for (const f of [WIDE, PHONE]) {
+      const lifted = toStage(f, placed[2] as (typeof placed)[number], aim(f, 2), 1)
+      const [top, bottom] = reach(lifted)
+      const margin = f.narrow ? MARGIN / 2 : MARGIN
+      expect(top - TAB_PROUD).toBeGreaterThanOrEqual((f.narrow ? 480 : 420) + margin - 0.5)
+      expect(bottom).toBeLessThanOrEqual(f.narrow ? 794 : 844)
+    }
+  })
+
+  it('looks at a desktop row whole when it fits, and pans one that does not only as far as its ends', () => {
     expect(aim(WIDE, 0)).toBeCloseTo(len / 2, 9)
     expect(aim(WIDE, len)).toBeCloseTo(len / 2, 9)
-    const small = fit({ width: 1024, height: 768, top: 260, bottom: 712 }, len)
+    // 120px sheets across 700px of band: too long to see whole.
+    const small = fit({ width: 780, height: 700, top: 300, bottom: 644 }, len)
     const half = (small.far - small.near) / 2 / small.u
+    expect(small.length).toBeGreaterThan(2 * half)
     expect(aim(small, 0)).toBeCloseTo(half, 9)
     expect(aim(small, len)).toBeCloseTo(len - half, 9)
-    expect(aim(small, 4)).toBe(4)
+    expect(aim(small, 3)).toBe(3)
   })
 
-  it('gives up side margin before it pans, at 1280 all of the life in view', () => {
-    const f = fit({ width: 1280, height: 800, top: 300, bottom: 744 }, len)
-    expect(f.u).toBe(U_MIN)
-    expect(f.far - f.near).toBeGreaterThanOrEqual(len * f.u - 0.5)
-    expect(f.near).toBeGreaterThanOrEqual(MARGIN_TIGHT)
-    expect(f.near).toBeLessThan(MARGIN)
+  it('fits the row without panning down to 1024', () => {
+    const f = fit({ width: 1024, height: 768, top: 380, bottom: 712 }, len)
+    expect(f.u).toBeGreaterThan(U_MIN)
     expect(aim(f, 0)).toBeCloseTo(len / 2, 9)
-    // Too wide to fit even then: the full margin, and the camera pans.
-    const small = fit({ width: 1024, height: 768, top: 260, bottom: 712 }, len)
-    expect(small.near).toBe(MARGIN)
+    expect(aim(f, len)).toBeCloseTo(len / 2, 9)
   })
 
-  it('lays a phone band a half margin clear of the card and fades the life above it', () => {
-    expect(NARROW.near).toBe(380 + MARGIN_NARROW)
-    expect(NARROW.far).toBe(794 - MARGIN_NARROW)
-    expect(NARROW.edge).toBe(380)
-    expect(WIDE.edge).toBe(null)
+  it('keeps a phone sheet in the middle, from the first to the last', () => {
+    expect(aim(PHONE, 0)).toBe(0.5)
+    expect(aim(PHONE, 2.74)).toBe(2.74)
+    expect(aim(PHONE, len)).toBeCloseTo(len - 0.5, 9)
+    const laid = toStage(PHONE, placed[3] as (typeof placed)[number], aim(PHONE, placed[3]?.along ?? 0))
+    expect(laid.x).toBeCloseTo(195, 9)
   })
 
-  it('keeps a phone band the right way round when the card leaves no room, and pans it', () => {
-    const f = fit({ width: 320, height: 568, top: 520, bottom: 518 }, len)
-    expect(f.far).toBeGreaterThanOrEqual(f.near)
-    expect(aim(f, 0)).toBeCloseTo(0, 9)
-    expect(aim(f, len)).toBeCloseTo(len, 9)
+  it('gives a stage too short for the desktop floor what its band holds, down to a tab', () => {
+    // A phone on its side, 844x390: the story's lower edge as measured, and the dock's upper one.
+    const f = fit({ width: 844, height: 390, top: 185, bottom: 334 }, len)
+    expect(f.narrow).toBe(false)
+    expect(f.u).toBeLessThan(U_MIN)
+    const lifted = toStage(f, placed[2] as (typeof placed)[number], aim(f, 2), 1)
+    const [top, bottom] = reach(lifted)
+    expect(top - TAB_PROUD).toBeGreaterThanOrEqual(185)
+    expect(bottom).toBeLessThanOrEqual(334)
+    expect(fit({ width: 844, height: 390, top: 360, bottom: 334 }, len).u).toBe(TAB_W)
+  })
+
+  it('keeps a phone band the right way round when the story leaves no room', () => {
+    const f = fit({ width: 320, height: 568, top: 560, bottom: 518 }, len)
+    expect(f.u).toBe(PHONE_U_MIN)
+    expect(Number.isFinite(f.middle)).toBe(true)
   })
 })

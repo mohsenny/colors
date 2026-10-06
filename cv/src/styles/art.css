@@ -1,0 +1,58 @@
+/*
+ * The pictures on the films (cv/src/art.ts), and the one hand they are all
+ * drawn in. Each sits in its mount's window, the padding box, under the edge
+ * and the tab, and takes no pointer: the press goes through to the film as it
+ * did before there was a picture.
+ *
+ * The ink is the film's own hue, deep (inkOf in art.ts), written on the svg as
+ * its colour. Laid flat over the film rather than multiplied: the mounts are a
+ * layer of their own, so a multiply here would meet nothing under it.
+ */
+.cv-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--lb-radius-inner);
+  pointer-events: none;
+  fill: none;
+  stroke: currentColor;
+  /* 1.3 of 100 is 1.8px on a 150px sheet and 2.4px on a 200px one: the
+     lightest line that still reads at the smaller. */
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Under full so the ink sits in the film rather than on it: at 1 it read as
+     printed on top of the palest films, the apricot and the green. */
+  opacity: 0.85;
+  /* The lamp behind the slide: brighter at the middle, falling off to the
+     corners in the ink's own hue, as a projected slide does. A fifth of white
+     is the most before the middle of the sky blue washed out. */
+  background: radial-gradient(
+    closest-corner at 50% 45%,
+    rgb(255 255 255 / 0.2) 0%,
+    rgb(255 255 255 / 0) 55%,
+    color-mix(in srgb, currentColor 12%, transparent) 100%
+  );
+}
+
+/* The patterns: under half the line, and half as strong. Judged at 150px,
+   where thinner lost the graph paper and stronger fought the motif. */
+.cv-art .cv-fine {
+  stroke-width: 0.5;
+  opacity: 0.5;
+}
+
+/* Enough to tell a filled shape from an open one on the sky blue, the deepest
+   film, short of reading as solid. */
+.cv-art .cv-tint {
+  fill: currentColor;
+  fill-opacity: 0.14;
+  stroke: none;
+}
+
+.cv-art .cv-solid {
+  fill: currentColor;
+  stroke: none;
+}

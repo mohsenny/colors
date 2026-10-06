@@ -6,23 +6,20 @@
  *
  * Time is a position on the tape, 0 to 1, as the tape draws it: Growing up
  * squeezed into the first tenth, true scale from 2008 to today. Every chapter
- * has a stop on it where it starts, and Now is the end. The card, the lifted
+ * has a stop on it where it starts, and Now is the end. The story, the lifted
  * sheet and the camera all follow the position, so a scrub moves through the
  * life the way the tape does, and letting go settles on the nearest stop.
  */
 
-import { LIFE, yearsOf } from '../life'
-import type { Chapter, Crossing, Life } from '../life'
-import { aim, fit, length, place } from '../layout'
+import { LIFE, MOVED, facts, yearsOf } from '../life'
+import type { Chapter, Life } from '../life'
+import { NARROW, PHONE_U_MIN, STEP, aim, fit, length, place } from '../layout'
 import type { Fit, Placed, Room } from '../layout'
 import { Film } from '../render/life'
-import type { Target } from '../render/life'
 
 export interface Snapshot {
   /** The chapter the clock is in, by index, or null at Now. */
   chapter: number | null
-  /** The crossing whose card is up, by index. */
-  crossing: number | null
   /** What the clock says: a year, or for Growing up the place it began. */
   year: string
   playing: boolean
@@ -38,13 +35,21 @@ export const SQUEEZE = 0.1
 
 /**
  * Two chapters that start in the same year get stops this far apart, in
- * years, so each has its own place to settle. Leading QA and With AI both
- * start in 2024; the clock floors the year, so both still read 2024.
+ * years, so each has its own place to settle. None do in this life; the
+ * clock floors the year, so both would still read the same.
  */
 export const TIE = 0.5
 
 /** The glide to a stop, as `--lb-t-mode`. */
 export const GLIDE_MS = 420
+
+/**
+ * Play's way back from Now to the start: the whole strip in one glide, the
+ * lift and the story passing back through every chapter on the way. Three
+ * glides long, about 210ms a chapter, which reads as going back along the
+ * row rather than a jump, and is still under a breath.
+ */
+export const GLIDE_BACK_MS = 3 * GLIDE_MS
 
 /** A sheet rising or settling, as `--lb-t-grow`. */
 export const HOVER_MS = 180
@@ -52,9 +57,13 @@ export const HOVER_MS = 180
 /** Quiet after the last wheel event before the clock settles on a stop. */
 export const SETTLE_MS = 160
 
-/** Play holds each chapter this long, and a second more for each sentence past the first. */
-export const HOLD_MS = 5000
-export const HOLD_PER_SENTENCE_MS = 1000
+/**
+ * Play holds a face long enough to read it: a beat to arrive, then 220ms for
+ * every word and every logo, a glance each. That is 270 words a minute, a
+ * brisk read: Growing up comes to 9.5s, Leading QA to 13.7s and Now to 17s.
+ */
+export const HOLD_MS = 2500
+export const HOLD_PER_WORD_MS = 220
 
 /** Heights off the surface, in the shadow formula's terms: at rest, under the pointer, and the chapter being read. */
 export const Z_REST = 0.2
@@ -67,7 +76,7 @@ const WHEEL_LINE_PX = 16
 /** A touch that travels less than this is a tap. */
 const TAP_PX = 6
 
-/** How far a flick carries the clock on after the finger leaves, in ms of its speed. */
+/** How far a flick carries the clock on after the finger leaves, in ms of its speed. Never past the next sheet. */
 const FLICK_MS = 220
 
 /**
@@ -77,8 +86,8 @@ const FLICK_MS = 220
 const DOCK_PX = 56
 const DOCK_PX_SMALL = 50
 
-/** The card's lower edge until it has been measured, near what the facts card comes to at 1440. */
-const CARD_PX = 260
+/** The story's lower edge until it has been measured, near what the tallest face comes to at 1440x900. */
+const STORY_PX = 440
 
 /** Below this the positions on the tape are the same place. */
 const EPS = 1e-6
@@ -146,19 +155,46 @@ export function yearLabel(position: number, life: Life, now: number): string {
   return String(Math.floor(yearOf(Math.min(1, position), scaleFrom(life), now) + EPS))
 }
 
-/** Full stops that end a sentence, not the ones in B.Sc. or .NET. */
-export function sentences(text: string): number {
-  return text.match(/[.!?](?=\s+[A-Z]|$)/g)?.length ?? 0
+/** Words as a reader counts them: B.Sc. and .NET are one each. */
+export function words(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length
 }
 
-/** How long Play stays on a chapter. */
+/** How long Play stays on a chapter: its headline, its copy and its logos. */
 export function holdOf(chapter: Chapter): number {
-  return HOLD_MS + HOLD_PER_SENTENCE_MS * Math.max(0, sentences(chapter.copy) - 1)
+  const glances = chapter.orgs.length + chapter.tools.length
+  return HOLD_MS + HOLD_PER_WORD_MS * (words(`${chapter.headline} ${chapter.copy}`) + glances)
 }
 
-/** A crossing's place in the address: its two chapters' ids, so lowercase words like theirs and never `s=`. */
-export function crossingId(crossing: Crossing): string {
-  return `${crossing.a}-${crossing.b}`
+/** How long Play stays on Now: all the story says there but the ways to reach him, which are not read but used. */
+export function holdOfNow(life: Life): number {
+  const said = [life.name, life.intro, ...facts(life).filter((f) => f.label !== 'Reach').map((f) => f.value)]
+  return HOLD_MS + HOLD_PER_WORD_MS * words([...said, life.outside, life.closing].join(' '))
+}
+
+/**
+ * A point on the tape counted in chapters: 0 at the first stop, 1 at the
+ * next, and the number of chapters at Now, straight between. A finger moves
+ * the clock in these, so a sheet's step of it is one chapter whether the
+ * years between are four or six, and Play's way back passes each chapter in
+ * the same time.
+ */
+export function indexAt(position: number, stops: readonly number[]): number {
+  const i = chapterAt(position, stops)
+  if (i === null) return stops.length
+  const from = stops[i] as number
+  const to = stops[i + 1] ?? 1
+  if (to - from < EPS) return i
+  return i + Math.min(1, Math.max(0, (position - from) / (to - from)))
+}
+
+/** The point on the tape a count of chapters comes to, the other way. */
+export function positionAt(index: number, stops: readonly number[]): number {
+  const k = Math.min(stops.length, Math.max(0, index))
+  const i = Math.min(stops.length - 1, Math.floor(k))
+  const from = stops[i] ?? 0
+  const to = stops[i + 1] ?? 1
+  return from + (to - from) * (k - i)
 }
 
 /**
@@ -204,15 +240,27 @@ interface Glide {
   camFrom: number
   camTo: number
   start: number
+  ms: number
+  /**
+   * Play's way back: evenly through the chapters rather than the years, the
+   * chapter, its lift and the story following the clock as in a scrub.
+   */
+  through: boolean
 }
 
 interface Drag {
   id: number
+  x: number
   y: number
+  /** Where the finger came down, and the count of chapters the clock stood at then. */
+  x0: number
+  y0: number
+  from: number
+  /** The axis the finger took first, held for the rest of the drag. */
+  axis: 'x' | 'y' | null
   at: number
-  /** Tape per ms, smoothed over the last few moves. */
+  /** Chapters per ms, smoothed over the last few moves. */
   speed: number
-  moved: boolean
 }
 
 export interface InstrumentOptions {
@@ -234,7 +282,6 @@ export class Instrument {
   private dirty = false
 
   private chapter: number | null = null
-  private crossing: number | null = null
   private position = 1
   /** Where the camera looks, u along, before it is kept to the life's ends. */
   private camera: number
@@ -243,22 +290,24 @@ export class Instrument {
   private settleTimer: ReturnType<typeof setTimeout> | undefined
   private playing = false
   private playTimer: ReturnType<typeof setTimeout> | undefined
-  /** The pointer is on the card, and Play waits for it. */
+  /** The pointer is on the story, and Play waits for it. */
   private held = false
   private paper = false
   private list = false
   private announce = ''
   private reduced: boolean
-  private hovered: Target | null = null
+  private hovered: number | null = null
   private readonly z: number[]
+  private readonly holdNow: number
 
   private root: HTMLElement | null = null
+  private story: HTMLElement | null = null
   private film: Film | null = null
   private observer: ResizeObserver | null = null
   private raf = 0
   private last = 0
   private fitted: Fit | null = null
-  private cardBottom = CARD_PX
+  private storyBottom = STORY_PX
   private clockEl: HTMLElement | null = null
   private tapeEl: HTMLElement | null = null
   private tapeInput: HTMLInputElement | null = null
@@ -274,10 +323,11 @@ export class Instrument {
     this.year = options.now ?? yearNow()
     this.reduced = options.reduced ?? false
     this.stops = stopsOf(this.life, this.year)
-    this.placed = place(this.life.chapters, this.life.crossings)
+    this.placed = place(this.life.chapters)
     this.len = length(this.placed)
     this.camera = this.len
     this.z = this.life.chapters.map(() => Z_REST)
+    this.holdNow = holdOfNow(this.life)
     this.snap = this.makeSnapshot()
   }
 
@@ -307,7 +357,6 @@ export class Instrument {
   private makeSnapshot(): Snapshot {
     return {
       chapter: this.chapter,
-      crossing: this.crossing,
       year: yearLabel(this.position, this.life, this.year),
       playing: this.playing,
       paper: this.paper,
@@ -364,13 +413,9 @@ export class Instrument {
     this.observer.observe(root)
     this.resize()
     this.readHash()
-    root.addEventListener('pointermove', this.onMove)
+    this.listen(root)
     root.addEventListener('pointerleave', this.onLeave)
-    root.addEventListener('pointerdown', this.onDown)
-    root.addEventListener('pointerup', this.onUp)
-    root.addEventListener('pointercancel', this.onUp)
     root.addEventListener('click', this.onClick)
-    root.addEventListener('wheel', this.onWheel, { passive: true })
     this.last = performance.now()
     const tick = (now: number): void => {
       this.raf = requestAnimationFrame(tick)
@@ -386,24 +431,46 @@ export class Instrument {
     this.observer?.disconnect()
     const root = this.root
     if (root) {
-      root.removeEventListener('pointermove', this.onMove)
+      this.unlisten(root)
       root.removeEventListener('pointerleave', this.onLeave)
-      root.removeEventListener('pointerdown', this.onDown)
-      root.removeEventListener('pointerup', this.onUp)
-      root.removeEventListener('pointercancel', this.onUp)
       root.removeEventListener('click', this.onClick)
-      root.removeEventListener('wheel', this.onWheel)
       root.style.cursor = ''
     }
+    this.attachStory(null)
     this.film?.destroy()
     this.film = null
     this.root = null
   }
 
-  /** The card's lower edge as it is at Now, px from the top of the stage. The life is laid under it. */
-  setCard(bottom: number): void {
-    if (Math.abs(bottom - this.cardBottom) < 0.5) return
-    this.cardBottom = bottom
+  /** The wheel and a finger move the clock from the film and from the story both. */
+  private listen(el: HTMLElement): void {
+    el.addEventListener('pointermove', this.onMove)
+    el.addEventListener('pointerdown', this.onDown)
+    el.addEventListener('pointerup', this.onUp)
+    el.addEventListener('pointercancel', this.onUp)
+    el.addEventListener('wheel', this.onWheel, { passive: true })
+  }
+
+  private unlisten(el: HTMLElement): void {
+    el.removeEventListener('pointermove', this.onMove)
+    el.removeEventListener('pointerdown', this.onDown)
+    el.removeEventListener('pointerup', this.onUp)
+    el.removeEventListener('pointercancel', this.onUp)
+    el.removeEventListener('wheel', this.onWheel)
+  }
+
+  /** The story over the film, so a scroll or a swipe on its words moves the clock as one on the sheets does. */
+  attachStory(el: HTMLElement | null): void {
+    if (el === this.story) return
+    if (this.story) this.unlisten(this.story)
+    this.story = el
+    if (el) this.listen(el)
+  }
+
+  /** The story's lower edge at its tallest, px from the top of the stage. The life is laid under it. */
+  setStory(bottom: number): void {
+    if (Math.abs(bottom - this.storyBottom) < 0.5) return
+    this.storyBottom = bottom
     this.resize()
   }
 
@@ -422,37 +489,38 @@ export class Instrument {
     const room: Room = {
       width: vp.width,
       height: vp.height,
-      top: this.cardBottom,
-      bottom: vp.height - (vp.width < 620 ? DOCK_PX_SMALL : DOCK_PX),
+      top: this.storyBottom,
+      bottom: vp.height - (vp.width < NARROW ? DOCK_PX_SMALL : DOCK_PX),
     }
     this.fitted = fit(room, this.len)
   }
 
-  /** `#text` puts the paper out, a chapter's or a crossing's id goes to it; anything else is Now. */
+  /**
+   * `#text` puts the paper out, and a chapter's id goes to it, or the id of
+   * one the eight-sheet page had, to where it went. Anything else is Now.
+   */
   private readHash(): void {
-    const id = decodeURIComponent(window.location.hash.slice(1))
-    if (id === 'text') {
+    const said = decodeURIComponent(window.location.hash.slice(1))
+    if (said === 'text') {
       this.paper = true
       this.emit()
       return
     }
+    const id = MOVED[said] ?? said
     const i = this.life.chapters.findIndex((c) => c.id === id)
-    const x = this.life.crossings.findIndex((c) => crossingId(c) === id)
-    if (i < 0 && x < 0) return
+    if (i < 0) return
     // Arriving is not a move, so the life is simply there.
     const reduced = this.reduced
     this.reduced = true
-    if (i >= 0) this.go(i)
-    else this.goCrossing(x)
+    this.go(i)
     this.reduced = reduced
   }
 
   /** The address says what is open, so Back and a shared link come back to it. Replaced, never pushed. */
   private writeHash(): void {
     if (!this.root) return
-    const x = this.crossing === null ? null : this.life.crossings[this.crossing]
     const c = this.chapter === null ? null : this.life.chapters[this.chapter]
-    const hash = this.paper ? '#text' : x ? `#${crossingId(x)}` : c ? `#${c.id}` : ''
+    const hash = this.paper ? '#text' : c ? `#${c.id}` : ''
     if (window.location.hash === hash) return
     history.replaceState(history.state, '', hash || window.location.pathname + window.location.search)
   }
@@ -464,10 +532,17 @@ export class Instrument {
     this.last = now
     const g = this.glide
     if (g) {
-      const t = (now - g.start) / GLIDE_MS
+      const t = (now - g.start) / g.ms
       const e = ease(t)
-      this.position = g.from + (g.to - g.from) * e
-      this.camera = g.camFrom + (g.camTo - g.camFrom) * e
+      if (g.through) {
+        const from = indexAt(g.from, this.stops)
+        this.position = positionAt(from + (indexAt(g.to, this.stops) - from) * e, this.stops)
+        this.camera = alongAt(this.position, this.stops, this.placed, this.len)
+        this.chapter = chapterAt(this.position, this.stops)
+      } else {
+        this.position = g.from + (g.to - g.from) * e
+        this.camera = g.camFrom + (g.camTo - g.camFrom) * e
+      }
       this.dirty = true
       if (t >= 1) {
         this.glide = null
@@ -498,46 +573,34 @@ export class Instrument {
       fit: f,
       camera: aim(f, this.camera),
       z: this.z,
-      current: this.z.map((_, i) => this.isCurrent(i)),
-      hovered: this.z.map((_, i) => this.isHovered(i)),
+      // The lift follows the height, so a hovered sheet stands up part of
+      // the way and the current one all of it, on the same beat.
+      lift: this.z.map((z) => Math.max(0, (z - Z_REST) / (Z_CURRENT - Z_REST))),
+      current: this.z.map((_, i) => this.chapter === i),
+      hovered: this.z.map((_, i) => this.hovered === i),
     })
   }
 
-  private pair(crossing: number): [number, number] {
-    const x = this.life.crossings[crossing]
-    const a = this.life.chapters.findIndex((c) => c.id === x?.a)
-    const b = this.life.chapters.findIndex((c) => c.id === x?.b)
-    return [a, b]
-  }
-
-  private isCurrent(i: number): boolean {
-    if (this.crossing !== null) return this.pair(this.crossing).includes(i)
-    return this.chapter === i
-  }
-
-  private isHovered(i: number): boolean {
-    const h = this.hovered
-    if (!h) return false
-    return h.kind === 'chapter' ? h.index === i : this.pair(h.index).includes(i)
-  }
-
   private zTarget(i: number): number {
-    return this.isCurrent(i) ? Z_CURRENT : this.isHovered(i) ? Z_HOVER : Z_REST
+    return this.chapter === i ? Z_CURRENT : this.hovered === i ? Z_HOVER : Z_REST
   }
 
   // ------------------------------------------------------------ moving
 
   /** Glides the clock and the camera to a stop, or cuts there. */
-  private moveTo(position: number, camera: number): void {
+  private moveTo(position: number, camera: number, ms = GLIDE_MS, through = false): void {
     this.scrubbing = false
     clearTimeout(this.settleTimer)
     if (this.reduced || !this.root) {
       this.glide = null
       this.position = position
       this.camera = camera
+      // A cut passes nothing on the way.
+      if (through) this.chapter = chapterAt(position, this.stops)
       this.settled()
     } else {
-      this.glide = { from: this.position, to: position, camFrom: this.camera, camTo: camera, start: performance.now() }
+      const start = performance.now()
+      this.glide = { from: this.position, to: position, camFrom: this.camera, camTo: camera, start, ms, through }
     }
     this.emit()
   }
@@ -550,11 +613,6 @@ export class Instrument {
   }
 
   private said(): string {
-    if (this.crossing !== null) {
-      const x = this.life.crossings[this.crossing]
-      const [a, b] = this.pair(this.crossing).map((i) => this.life.chapters[i]?.name)
-      return x ? `${x.name}: ${a} and ${b}` : ''
-    }
     const c = this.chapter === null ? null : this.life.chapters[this.chapter]
     return c ? `${c.name}, ${yearsOf(c)}` : 'Now'
   }
@@ -564,27 +622,13 @@ export class Instrument {
     if (!fromPlay) this.stopPlay()
     if (!this.life.chapters[index]) return
     this.chapter = index
-    this.crossing = null
     this.moveTo(this.stops[index] as number, this.placed[index]?.along ?? 0)
   }
 
-  /** To where two chapters cross: the later one's stop, the camera between the two. */
-  goCrossing(index: number): void {
-    this.stopPlay()
-    const [a, b] = this.pair(index)
-    if (a < 0 || b < 0) return
-    const later = Math.max(a, b)
-    this.chapter = later
-    this.crossing = index
-    const mid = ((this.placed[a]?.along ?? 0) + (this.placed[b]?.along ?? 0)) / 2
-    this.moveTo(this.stops[later] as number, mid)
-  }
-
-  /** To the end of the tape, where the card is the facts. */
+  /** To the end of the tape, where the story is who he is now. */
   now(fromPlay = false): void {
     if (!fromPlay) this.stopPlay()
     this.chapter = null
-    this.crossing = null
     this.moveTo(1, this.len)
   }
 
@@ -603,12 +647,7 @@ export class Instrument {
     else this.go(Math.max(0, next))
   }
 
-  pick(target: Target): void {
-    if (target.kind === 'chapter') this.go(target.index)
-    else this.goCrossing(target.index)
-  }
-
-  /** The wheel, or a finger, moving the clock by `dy` px of film. */
+  /** The wheel moving the clock by `dy` px of film, through the years as the tape runs. */
   scroll(dy: number): void {
     const perPx = this.fitted ? 1 / (this.len * this.fitted.u) : 1 / 1000
     this.scrubTo(this.position + dy * perPx)
@@ -626,7 +665,6 @@ export class Instrument {
     this.scrubbing = true
     this.position = Math.min(1, Math.max(0, position))
     this.chapter = chapterAt(this.position, this.stops)
-    this.crossing = null
     this.camera = alongAt(this.position, this.stops, this.placed, this.len)
     clearTimeout(this.settleTimer)
     this.writeTape()
@@ -636,6 +674,17 @@ export class Instrument {
   /** The tape let go of: on to the nearest stop. */
   scrubEnd(): void {
     if (this.scrubbing) this.settle(this.position)
+  }
+
+  /**
+   * A finger moving the clock `chapters` on from where it came down, held
+   * there until it lifts. In chapters rather than years, so the strip keeps
+   * under the finger, and never more than one either way: one swipe is one
+   * chapter, however long.
+   */
+  private slide(from: number, chapters: number): void {
+    const home = Math.round(from)
+    this.scrubTo(positionAt(Math.min(home + 1, Math.max(home - 1, from + chapters)), this.stops))
   }
 
   /** Lets go of a scrub, carried on to `to`: the nearest stop to there. */
@@ -656,38 +705,42 @@ export class Instrument {
     this.playing = true
     this.paper = false
     this.list = false
-    // From the chapter being read, or from the start when there is nothing left to walk to.
-    const last = this.life.chapters.length - 1
-    const from = this.chapter === null || (this.chapter === last && this.crossing === null) ? 0 : this.chapter
-    this.walk(from)
+    // From the chapter being read, or from Now back to the start.
+    if (this.chapter === null) this.back()
+    else this.walk(this.chapter)
   }
 
+  /** On to a chapter, or past the last one to Now, and held there. */
   private walk(index: number): void {
-    const c = this.life.chapters[index]
-    if (!c) {
-      this.now(true)
-      this.playing = false
-      this.emit()
-      return
-    }
-    this.go(index, true)
-    this.hold()
+    if (this.life.chapters[index]) this.go(index, true)
+    else this.now(true)
+    this.hold(GLIDE_MS)
   }
 
-  private hold(): void {
+  /** From Now back to the first chapter, the long way along the row, and held there. */
+  private back(): void {
+    this.moveTo(this.stops[0] as number, this.placed[0]?.along ?? 0, GLIDE_BACK_MS, true)
+    this.hold(GLIDE_BACK_MS)
+  }
+
+  /** Waits out the glide there, then the chapter's hold or Now's, and moves on: after Now, back to the start. */
+  private hold(glide: number): void {
     clearTimeout(this.playTimer)
-    const c = this.chapter === null ? null : this.life.chapters[this.chapter]
-    if (!this.playing || this.held || !c) return
-    const at = this.chapter as number
-    this.playTimer = setTimeout(() => this.walk(at + 1), (this.reduced ? 0 : GLIDE_MS) + holdOf(c))
+    if (!this.playing || this.held) return
+    // On the way back the chapter is still passing; Play is bound for the start.
+    const g = this.glide
+    const at = g?.through ? chapterAt(g.to, this.stops) : this.chapter
+    const c = at === null ? null : this.life.chapters[at]
+    const wait = (this.reduced ? 0 : glide) + (c ? holdOf(c) : this.holdNow)
+    this.playTimer = setTimeout(() => (at === null ? this.back() : this.walk(at + 1)), wait)
   }
 
-  /** The pointer on the card holds Play where it is; leaving it starts the hold again. */
+  /** The pointer on the story holds Play where it is; leaving it starts the hold again, without the glide. */
   holdPlay(on: boolean): void {
     if (on === this.held) return
     this.held = on
     if (on) clearTimeout(this.playTimer)
-    else this.hold()
+    else this.hold(0)
   }
 
   private stopPlay(): void {
@@ -746,45 +799,50 @@ export class Instrument {
   escape(): void {
     if (this.paper) this.closePaper()
     else if (this.list) this.closeList()
-    else if (this.chapter !== null || this.crossing !== null || this.playing) this.now()
+    else if (this.chapter !== null || this.playing) this.now()
   }
 
   // ------------------------------------------------------------ hand
 
-  /** Stage px from a pointer, or null when it is not on the life: on the card, the paper or any other chrome. */
+  /** Stage px from a pointer, or null when it is not on the film: on the story, the paper or any other chrome. */
   private onLife(e: PointerEvent | MouseEvent): { x: number; y: number } | null {
     const t = e.target as Element | null
     if (!t?.closest('.cv-film')) return null
     return { x: e.clientX - this.originX, y: e.clientY - this.originY }
   }
 
-  private targetOf(e: PointerEvent | MouseEvent): Target | null {
+  private targetOf(e: PointerEvent | MouseEvent): number | null {
     const tab = (e.target as Element | null)?.closest<HTMLElement>('.lb-tab')
-    if (tab?.dataset.chapter) return { kind: 'chapter', index: Number(tab.dataset.chapter) }
+    if (tab?.dataset.chapter) return Number(tab.dataset.chapter)
     const p = this.onLife(e)
     return p && this.film ? this.film.targetAt(p.x, p.y) : null
   }
 
-  private setHover(t: Target | null): void {
-    const h = this.hovered
-    if (t?.kind === h?.kind && t?.index === h?.index) return
+  private setHover(t: number | null): void {
+    if (t === this.hovered) return
     this.hovered = t
-    if (this.root) this.root.style.cursor = t ? 'pointer' : ''
+    if (this.root) this.root.style.cursor = t === null ? '' : 'pointer'
   }
 
   private onMove = (e: PointerEvent): void => {
     const d = this.drag
     if (d && d.id === e.pointerId) {
+      const dx = e.clientX - d.x
       const dy = e.clientY - d.y
-      if (!d.moved && Math.abs(dy) < TAP_PX) return
-      d.moved = true
+      if (!d.axis) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < TAP_PX) return
+        d.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
+      }
+      // Finger up or to the left is forward in time, and a sheet's step of
+      // it is one chapter: the strip follows a sideways finger, and an
+      // upward one turns the pages on at the same rate.
+      const step = (this.fitted?.u ?? PHONE_U_MIN) * STEP
+      const ahead = d.axis === 'x' ? d.x0 - e.clientX : d.y0 - e.clientY
+      this.slide(d.from, ahead / step)
       const now = performance.now()
-      const perPx = this.fitted ? 1 / (this.len * this.fitted.u) : 1 / 1000
-      // Finger up is forward in time: the life runs down the phone.
-      this.scroll(-dy)
-      clearTimeout(this.settleTimer)
-      const speed = (-dy * perPx) / Math.max(1, now - d.at)
+      const speed = (d.axis === 'x' ? -dx : -dy) / step / Math.max(1, now - d.at)
       d.speed = d.speed * 0.6 + speed * 0.4
+      d.x = e.clientX
       d.y = e.clientY
       d.at = now
       return
@@ -798,19 +856,26 @@ export class Instrument {
 
   private onDown = (e: PointerEvent): void => {
     this.dragged = false
-    if (e.pointerType === 'mouse' || !this.onLife(e)) return
-    this.drag = { id: e.pointerId, y: e.clientY, at: performance.now(), speed: 0, moved: false }
+    if (e.pointerType === 'mouse') return
+    const { clientX: x, clientY: y } = e
+    const from = indexAt(this.position, this.stops)
+    this.drag = { id: e.pointerId, x, y, x0: x, y0: y, from, axis: null, at: performance.now(), speed: 0 }
   }
 
   private onUp = (e: PointerEvent): void => {
     const d = this.drag
     if (!d || d.id !== e.pointerId) return
     this.drag = null
-    if (!d.moved) return
+    if (!d.axis) return
     this.dragged = true
-    // A finger that stopped before it lifted carries nothing on.
+    // A finger that stopped before it lifted carries nothing on, and a flick
+    // carries on to the next sheet the way it was going, never past it.
+    const k = indexAt(this.position, this.stops)
     const still = performance.now() - d.at > 80
-    this.settle(this.position + (still ? 0 : d.speed * FLICK_MS))
+    const carried = Math.min(Math.ceil(k), Math.max(Math.floor(k), k + (still ? 0 : d.speed * FLICK_MS)))
+    const to = Math.round(carried)
+    if (to >= this.life.chapters.length) this.now()
+    else this.go(to)
   }
 
   private onClick = (e: MouseEvent): void => {
@@ -823,7 +888,7 @@ export class Instrument {
     const p = this.onLife(e)
     if (!p || !this.film) return
     const t = this.film.targetAt(p.x, p.y)
-    if (t) this.pick(t)
+    if (t !== null) this.go(t)
   }
 
   private onWheel = (e: WheelEvent): void => {
