@@ -318,13 +318,13 @@ export const DRIFT_MIN_DEG = 5
 
 // --- the lamps ----------------------------------------------------------------
 /**
- * Four tubes behind the diffuser, each with its own colour temperature, each
- * drifting. Two periods per tube, deliberately not harmonics, so the four never
+ * Three tubes behind the diffuser, each with its own colour temperature, each
+ * drifting. Two periods per tube, deliberately not harmonics, so the three never
  * line up twice: one warms while another cools and the pattern never repeats
  * inside a sitting. An order of magnitude slower than the slide colours, which
  * is the point. You should notice the room has changed, not watch it change.
  */
-export const TUBE_COUNT = 4
+export const TUBE_COUNT = 3
 export const TUBE_SLOW_S = 104
 export const TUBE_FAST_S = 47
 /**

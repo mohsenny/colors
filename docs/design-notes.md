@@ -112,20 +112,21 @@ Total luminance swing across the viewport must stay under ~3.5%, so it reads as
    5.5% of the height top and bottom, `rgb(223,229,240)` under 2% strong. A panel
    loses light where it meets its housing, and the falloff is what says "surface
    with edges" instead of "page that happens to be white".
-5. THE TUBES. Two implied lamps at 27.5% and 72.5% of the height, each a narrow
-   core (rx 50 to 52% of the width, ry ~2%) inside a broad halo (rx 76 to 78%,
-   ry 20 to 21%). Both ellipses are NARROWER than the viewport on purpose: the
-   streak has to fade out before the edges, because a band running edge to edge
-   reads as a gradient and a band with ends reads as a fixture. This is what
-   makes the surface a lightbox rather than a bright background. Making room for
-   it cost the base about 1% of luminance.
+5. THE TUBES. Three upright lamps a third of the width apart, each a narrow
+   core (rx 2.2% of the width, ry 46% of the height) inside a broad halo (rx 15%,
+   ry 90%). Both ellipses are SHORTER than the viewport on purpose: the streak
+   has to fade out before the edges, because a band running edge to edge reads
+   as a gradient and a band with ends reads as a fixture. The base under them is
+   the shade between two lamps, so the tubes have something to be brighter than.
+   Four lamps a quarter apart were tried: their halos met and the box read as an
+   even white again.
 6. Grain: a static `feTurbulence` data URI at about 4% opacity, multiply, 1 CSS px
    cell. Static, never animated: animated grain shimmers when the user pauses,
    which is exactly when they are studying a colour.
 
-Measured profile at 1440x757 (luminance, slides hidden): 251 at the upper tube,
-250 at the lower, 245 in the gap between them, 244 at the left and top rims, 239
-at the bottom-right corner. Total swing ~4.7%, structured rather than smooth.
+Measured profile at 1440x900 (luminance, slides hidden, across the middle): 247 to
+249 at the tubes, 237 to 240 between them, 235 at the side rims. The shade between
+the lamps is the pattern: about 5% under the tubes, structured rather than smooth.
 
 ## 1.6b Material
 

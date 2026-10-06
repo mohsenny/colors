@@ -30,7 +30,7 @@
 }
 
 .lb-stage {
-  /* The four tubes, at Lightbox's neutral resting state. Lightbox drifts them
+  /* The three tubes, at Lightbox's neutral resting state. Lightbox drifts them
      on its clock; here they hold still, so nothing moves but the room. */
   --lb-tube-1: 255 250 240;
   --lb-tube-1-i: 1;
@@ -38,8 +38,6 @@
   --lb-tube-2-i: 1;
   --lb-tube-3: 255 251 243;
   --lb-tube-3-i: 1;
-  --lb-tube-4: 245 249 255;
-  --lb-tube-4-i: 1;
 
   position: fixed;
   inset: 0;
@@ -53,10 +51,10 @@
   background-color: var(--lb-surface);
   /*
    * Bottom to top: the trough between the lamps, two very broad lobes, the rim,
-   * then the four tubes.
+   * then the three tubes.
    *
    * THE TUBES. What makes a lightbox a lightbox is that you can almost see the
-   * lamps through the diffuser. Four of them, upright, each a narrow core
+   * lamps through the diffuser. Three of them, upright, each a narrow core
    * inside a broad halo, and both ellipses are shorter than the viewport so the
    * streak fades out before the edges: that falloff is the whole trick, because
    * a band running edge to edge reads as a gradient and a band with ends reads
@@ -67,50 +65,42 @@
    * something read as brighter than a surface that is already at the top of the
    * range. So the base is the DARK part, the shade between two fixtures, and
    * the tubes bring it back to full white. The peak is still essentially paper
-   * white and the trough is only about 6% under it, which is roughly what a real
-   * diffuser does between lamps 25% of the width apart.
+   * white and the trough about 5% under it, which is roughly what a real diffuser
+   * does between lamps a third of the width apart. Four lamps a quarter apart
+   * were tried first: their halos met, the trough filled in and the box read as
+   * an even white again.
    *
    */
   background-image:
     radial-gradient(
-      1.9% 44% at 12.5% 47%,
+      2.2% 46% at 16.667% 47%,
       rgb(var(--lb-tube-1) / calc(0.92 * var(--lb-tube-1-i))) 0%,
       rgb(var(--lb-tube-1) / 0) 58%
     ),
     radial-gradient(
-      1.9% 44% at 37.5% 50%,
+      2.2% 46% at 50% 50%,
       rgb(var(--lb-tube-2) / calc(0.92 * var(--lb-tube-2-i))) 0%,
       rgb(var(--lb-tube-2) / 0) 58%
     ),
     radial-gradient(
-      1.9% 44% at 62.5% 50%,
+      2.2% 46% at 83.333% 53%,
       rgb(var(--lb-tube-3) / calc(0.92 * var(--lb-tube-3-i))) 0%,
       rgb(var(--lb-tube-3) / 0) 58%
     ),
     radial-gradient(
-      1.9% 44% at 87.5% 53%,
-      rgb(var(--lb-tube-4) / calc(0.92 * var(--lb-tube-4-i))) 0%,
-      rgb(var(--lb-tube-4) / 0) 58%
-    ),
-    radial-gradient(
-      17% 88% at 12.5% 47%,
-      rgb(var(--lb-tube-1) / calc(0.82 * var(--lb-tube-1-i))) 0%,
+      15% 90% at 16.667% 47%,
+      rgb(var(--lb-tube-1) / calc(0.86 * var(--lb-tube-1-i))) 0%,
       rgb(var(--lb-tube-1) / 0) 74%
     ),
     radial-gradient(
-      17% 88% at 37.5% 50%,
-      rgb(var(--lb-tube-2) / calc(0.82 * var(--lb-tube-2-i))) 0%,
+      15% 90% at 50% 50%,
+      rgb(var(--lb-tube-2) / calc(0.86 * var(--lb-tube-2-i))) 0%,
       rgb(var(--lb-tube-2) / 0) 74%
     ),
     radial-gradient(
-      17% 88% at 62.5% 50%,
-      rgb(var(--lb-tube-3) / calc(0.82 * var(--lb-tube-3-i))) 0%,
+      15% 90% at 83.333% 53%,
+      rgb(var(--lb-tube-3) / calc(0.86 * var(--lb-tube-3-i))) 0%,
       rgb(var(--lb-tube-3) / 0) 74%
-    ),
-    radial-gradient(
-      17% 88% at 87.5% 53%,
-      rgb(var(--lb-tube-4) / calc(0.82 * var(--lb-tube-4-i))) 0%,
-      rgb(var(--lb-tube-4) / 0) 74%
     ),
     /* The rim. A panel loses a little light where it meets its housing, and the
        falloff is what tells the eye this is a surface with edges rather than a
@@ -121,7 +111,7 @@
     linear-gradient(to left, rgba(223, 229, 240, 0.28) 0%, rgba(223, 229, 240, 0) 3.5%),
     radial-gradient(154% 146% at 28% 18%, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 66%),
     radial-gradient(158% 150% at 81% 86%, rgba(228, 233, 244, 0.34) 0%, rgba(228, 233, 244, 0) 70%),
-    linear-gradient(118deg, rgb(247, 244, 236) 0%, rgb(239, 242, 250) 100%);
+    linear-gradient(118deg, rgb(244, 241, 233) 0%, rgb(236, 239, 247) 100%);
 }
 
 /*

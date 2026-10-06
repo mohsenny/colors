@@ -115,7 +115,7 @@ const LOCK_SVG =
  *
  * Fifty steps over the whole gesture: an opacity step of 0.02 on 10.5px text is
  * invisible, and this is a custom property on the stage root, so every write
- * invalidates the style of every tab on the surface. The four tube colours are
+ * invalidates the style of every tab on the surface. The three tube colours are
  * quantised to bytes for the same reason a few lines above.
  */
 const SHARE_FADE_STEPS = 50
@@ -444,7 +444,7 @@ export class Stage {
   }
 
   /**
-   * The four tubes, as custom properties the stylesheet builds its gradients
+   * The three tubes, as custom properties the stylesheet builds its gradients
    * from. Rounded to bytes before comparison: on a 100 second cycle a tube's
    * colour only changes a couple of times a second, and a style write on a
    * full-viewport element is not something to do 60 times a second for nothing.

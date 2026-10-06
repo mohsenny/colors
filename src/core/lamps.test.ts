@@ -69,11 +69,11 @@ describe('the tubes', () => {
       const deltas = a.map((l, j) => balance(b[j] as { r: number; b: number }) - balance(l))
       if (Math.max(...deltas) > 0 && Math.min(...deltas) < 0) opposed++
     }
-    // Four tubes sweeping in step would just be one lamp drawn four times.
+    // Three tubes sweeping in step would just be one lamp drawn three times.
     expect(opposed / steps).toBeGreaterThan(0.6)
   })
 
-  it('never has all four agreeing on a colour for long', () => {
+  it('never has all three agreeing on a colour for long', () => {
     let agreed = 0
     for (let t = 0; t < 900; t += 1) {
       const lamps = lampsAt(t)
@@ -186,7 +186,7 @@ describe('the cast', () => {
     expect(castSpread).toBeGreaterThan(plainSpread)
   })
 
-  it('keeps every tube at full brightness and keeps the four disagreeing', () => {
+  it('keeps every tube at full brightness and keeps the three disagreeing', () => {
     let agreed = 0
     let samples = 0
     for (let t = 0; t < 600; t += 1.7) {
@@ -202,7 +202,7 @@ describe('the cast', () => {
         samples++
       }
     }
-    // One gel over four different tubes is not the same as replacing their
+    // One gel over three different tubes is not the same as replacing their
     // colour: they keep their own drift underneath it.
     expect(agreed / samples).toBeLessThan(0.15)
   })
@@ -222,7 +222,7 @@ describe('the cast', () => {
   })
 
   it('goes on gradually, so a strength ramp is a ramp', () => {
-    // Read across all four tubes and all hues at once. A single tube is not
+    // Read across all three tubes and all hues at once. A single tube is not
     // monotone and should not be: a tube already leaning the gel's way has
     // less distance to travel than one leaning against it, and the gel partly
     // cancels its own base colour. What has to rise is how coloured the room

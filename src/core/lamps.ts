@@ -7,7 +7,7 @@
  * no two tubes are quite the same colour, because tubes age at their own rate.
  *
  * So each one carries its own colour temperature and drifts, slowly: two
- * periods per tube that are not harmonics of each other, so the four never line
+ * periods per tube that are not harmonics of each other, so the three never line
  * up the same way twice and one is always warming while another cools. The
  * slowest thing on screen by an order of magnitude. The slides change colour in
  * seconds; the room changes over a minute and a half, and should only ever be
@@ -44,7 +44,7 @@ export interface Lamp {
 const TAU = Math.PI * 2
 
 /**
- * All four tubes at time `t`. Allocates a small array per call: the renderer
+ * All three tubes at time `t`. Allocates a small array per call: the renderer
  * calls this at most a few times a second, because nothing here moves fast
  * enough to be worth a style write on every frame.
  *
@@ -62,9 +62,12 @@ export function lampsAt(t: number, warmth = 0, cast?: Cast): Lamp[] {
   const out: Lamp[] = []
   for (let i = 0; i < TUBE_COUNT; i++) {
     // Rates differ per tube, so the phase relationship between any two of them
-    // keeps sliding. Equal rates would just be four copies of one lamp.
-    const slow = TUBE_SLOW_S * (0.78 + 0.5 * hash01(i, 0x41d7, 0))
-    const fast = TUBE_FAST_S * (0.8 + 0.45 * hash01(i, 0x77b1, 0))
+    // keeps sliding. Equal rates would just be three copies of one lamp. Each
+    // tube draws its rate from its own share of the range, the fast ones in the
+    // other order: with three, two free draws a few percent apart are likely
+    // enough, and those two tubes then warm and cool as one.
+    const slow = TUBE_SLOW_S * (0.78 + (0.5 * (i + hash01(i, 0x41d7, 0))) / TUBE_COUNT)
+    const fast = TUBE_FAST_S * (0.8 + (0.45 * (TUBE_COUNT - 1 - i + hash01(i, 0x77b1, 0))) / TUBE_COUNT)
     const p1 = hash01(i, 0x2c9e, 0)
     const p2 = hash01(i, 0x5f33, 0)
 

@@ -11,12 +11,11 @@
 
 type Pair = readonly [number, number]
 
-/** Where the four tubes stand, as fractions of the stage. */
+/** Where the three tubes stand, as fractions of the stage. */
 const TUBES: readonly Pair[] = [
-  [0.125, 0.47],
-  [0.375, 0.5],
-  [0.625, 0.5],
-  [0.875, 0.53],
+  [0.16667, 0.47],
+  [0.5, 0.5],
+  [0.83333, 0.53],
 ]
 
 const GRAIN_PX = 140
@@ -99,8 +98,8 @@ export function litSurface(
   const dy = -Math.cos(a)
   const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2
   const base = ctx.createLinearGradient(w / 2 - dx * half, h / 2 - dy * half, w / 2 + dx * half, h / 2 + dy * half)
-  base.addColorStop(0, 'rgb(247, 244, 236)')
-  base.addColorStop(1, 'rgb(239, 242, 250)')
+  base.addColorStop(0, 'rgb(244, 241, 233)')
+  base.addColorStop(1, 'rgb(236, 239, 247)')
   ctx.fillStyle = base
   ctx.fillRect(0, 0, w, h)
 
@@ -119,8 +118,8 @@ export function litSurface(
     gain: Number(css.getPropertyValue(`--lb-tube-${i + 1}-i`)) || 1,
   })).reverse()
   // The halos, then the cores in them, the first tube on top of each.
-  for (const t of tubes) ellipse(ctx, w, h, t.at, [0.17, 0.88], t.rgb, Math.min(1, 0.82 * t.gain), 0.74)
-  for (const t of tubes) ellipse(ctx, w, h, t.at, [0.019, 0.44], t.rgb, Math.min(1, 0.92 * t.gain), 0.58)
+  for (const t of tubes) ellipse(ctx, w, h, t.at, [0.15, 0.9], t.rgb, Math.min(1, 0.86 * t.gain), 0.74)
+  for (const t of tubes) ellipse(ctx, w, h, t.at, [0.022, 0.46], t.rgb, Math.min(1, 0.92 * t.gain), 0.58)
 
   const pattern = grain && patternOf(ctx, grain, scale)
   if (pattern) {
