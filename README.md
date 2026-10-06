@@ -89,9 +89,9 @@ chrome with the lights out. Its source is in [solar/](solar/) and the why is in
 
 Its planet and Moon maps are by
 [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0), the round
-moons of Jupiter and Saturn are NASA, JPL and USGS mosaics, Pluto's is drawn in code and
-the stars are the Yale Bright Star Catalogue. The small moons and Charon show as plain
-colours.
+moons of Jupiter and Saturn are NASA, JPL and USGS mosaics, Pluto and Charon are New
+Horizons mosaics (NASA, JHUAPL, SwRI) and the stars are the Yale Bright Star Catalogue.
+The small moons show as plain colours.
 
 ## Running it locally
 

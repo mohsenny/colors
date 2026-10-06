@@ -1,16 +1,19 @@
 /*
  * The surface of every body, as photographed and stitched by Solar System
  * Scope (CC BY 4.0), the round moons of Jupiter and Saturn from the Voyager,
- * Galileo and Cassini mosaics of NASA, JPL and the USGS, and the catalogue
+ * Galileo and Cassini mosaics of NASA, JPL and the USGS, Pluto and Charon
+ * from the New Horizons mosaics of NASA, JHUAPL and SwRI, and the catalogue
  * the stars are drawn from. Each map is an equirectangular picture:
  * longitude across, the prime meridian in the middle, north at the top.
  * Titan's ground is hidden under its haze, so it has none, and nor do the
- * small moons or Charon, which show as their colour. Pluto's is drawn.
+ * small moons, which show as their colour. New Horizons saw neither Pluto
+ * nor Charon south of about 30° S, so there theirs are filled smoothly from
+ * the colours round it, and Pluto's is graded to its true-colour picture.
  */
 
 import type { BodyId } from '../sky/bodies'
-import { plutoMap } from './pluto'
 import callisto from '../assets/callisto.jpg'
+import charon from '../assets/charon.jpg'
 import dione from '../assets/dione.jpg'
 import earthClouds from '../assets/earth_clouds.jpg'
 import earthDay from '../assets/earth_daymap.jpg'
@@ -26,6 +29,7 @@ import mercury from '../assets/mercury.jpg'
 import mimas from '../assets/mimas.jpg'
 import moon from '../assets/moon.jpg'
 import neptune from '../assets/neptune.jpg'
+import pluto from '../assets/pluto.jpg'
 import rhea from '../assets/rhea.jpg'
 import saturn from '../assets/saturn.jpg'
 import saturnRing from '../assets/saturn_ring.png'
@@ -56,10 +60,9 @@ export const SURFACE: Partial<Record<BodyId, string>> = {
   iapetus,
   uranus,
   neptune,
+  pluto,
+  charon,
 }
-
-/** Maps drawn on the page rather than fetched, when first wanted. */
-export const DRAWN: Partial<Record<BodyId, () => string>> = { pluto: plutoMap }
 
 export const EARTH_NIGHT = earthNight
 export const EARTH_CLOUDS = earthClouds

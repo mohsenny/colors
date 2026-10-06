@@ -48,7 +48,7 @@ import {
 import type { Eye, Frame } from '../render/camera'
 import { ORBIT_UNIT, Renderer } from '../render/gl'
 import type { BodyDraw, OrbitDraw, Shade } from '../render/gl'
-import { DRAWN, EARTH_CLOUDS, EARTH_NIGHT, SATURN_RING, STARS, SURFACE } from '../render/maps'
+import { EARTH_CLOUDS, EARTH_NIGHT, SATURN_RING, STARS, SURFACE } from '../render/maps'
 import { png } from '../../../src/photo/save'
 import { isIdle } from '../../../src/ui/idle'
 import { Tape } from './tape'
@@ -314,9 +314,9 @@ export class Instrument {
   }
 
   /**
-   * Every body in its own colour at once, which is all the small moons and
-   * Charon ever have. The giants' big moons fetch their maps once they are
-   * near enough to show them.
+   * Every body in its own colour at once, which is all the small moons ever
+   * have. The giants' big moons, Pluto and Charon fetch their maps once they
+   * are near enough to show them.
    */
   private loadMaps(): void {
     for (const b of BODIES) this.renderer.paint(b.id, b.color)
@@ -332,7 +332,7 @@ export class Instrument {
 
   private loadMap(id: BodyId): void {
     if (this.mapped.has(id)) return
-    const url = SURFACE[id] ?? DRAWN[id]?.()
+    const url = SURFACE[id]
     if (!url) return
     this.mapped.add(id)
     void this.renderer.load(id, url).catch(() => undefined)
