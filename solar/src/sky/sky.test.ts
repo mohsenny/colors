@@ -1,10 +1,12 @@
+import { Body as AE, HelioVector, MakeTime } from 'astronomy-engine'
 import { describe, expect, it } from 'vitest'
 import { AU_KM, BODIES } from './bodies'
 import type { BodyId } from './bodies'
 import { nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
 import type { Eclipse, EclipseType } from './eclipses'
-import { TIME_MAX, TIME_MIN, posesAt } from './ephemeris'
+import { TIME_MAX, TIME_MIN, posesAt, toEcliptic } from './ephemeris'
 import type { Vec3 } from './ephemeris'
+import { keplerMoon } from './kepler'
 
 function len(a: Vec3): number {
   return Math.hypot(a[0], a[1], a[2])
@@ -24,6 +26,17 @@ function onBody(d: Vec3, x: Vec3, y: Vec3, z: Vec3): [number, number] {
 function toward(from: Vec3, to: Vec3): Vec3 {
   return [to[0] - from[0], to[1] - from[1], to[2] - from[2]]
 }
+
+/** UTC milliseconds for a Julian day of Barycentric Dynamical Time, with the gap between the two as Astronomy Engine counts it in any century. */
+function msAt(jd: number): number {
+  const tt = jd - 2451545
+  let ut = tt
+  for (let k = 0; k < 3; k++) ut -= MakeTime(ut).tt - tt
+  return Date.UTC(2000, 0, 1, 12) + ut * 86_400_000
+}
+
+/** 2000-01-01 12:00, 2026-01-05 21:00:41 and 2100-01-01 12:00 TDB. */
+const MOMENTS = [2451545, 2461046.37548, 2488070]
 
 describe('where things are', () => {
   it('keeps the Earth between perihelion and aphelion', () => {
@@ -108,7 +121,71 @@ describe('the moons of Jupiter and Saturn', () => {
     }
   })
 
-  it("keeps them over their planet's equator, but Iapetus, which goes 15 degrees off it", () => {
+  // The rest, on JPL's mean ellipses, against Horizons at the three MOMENTS;
+  // Saturn's small inner ones at the first two only, as Horizons has them from
+  // 1950 to 2050 alone. An ellipse cannot follow everything that pulls these
+  // about: Prometheus and Pandora kick each other chaotically, the Sun drags
+  // Himalia and Phoebe round, and Janus and Epimetheus are only near where
+  // their trading puts them. So each bound is half as much again as the worst
+  // miss at these moments, and the note by it the worst in km over all the
+  // years Horizons covers.
+  const ELLIPSES: Array<[BodyId, number, Vec3[]]> = [
+    // 250, 1610 to 2200
+    ['metis', 250, [[-123_250, 34_868.2, -565.6], [-57_059.9, -114_538.7, -4_934.4], [112_658.5, -60_478.1, -512.1]]],
+    // 320, 1610 to 2200
+    ['adrastea', 150, [[-108_455.9, -69_552.1, -4_068.9], [-119_284.4, -48_792.5, -3_480.8], [-50_714.9, -118_436.1, -4_969]]],
+    // 3,200, 1610 to 2200
+    ['amalthea', 3_000, [[112_555.8, 141_511.7, 7_618.5], [-108_557.3, 145_335.9, 2_539], [103_339.7, 148_405.8, 6_745]]],
+    // 16,000, 1610 to 2200, from 3,100 between 1950 and 2050
+    ['thebe', 7_500, [[-223_902.1, -28_293.4, -6_299.8], [-86_850, 207_325.3, 6_214.8], [146_443.2, -164_716.7, -584.2]]],
+    // 1,400,000, 1800 to 2200
+    [
+      'himalia',
+      2_000_000,
+      [[-4_919_977.6, 8_938_733.5, 4_851_926.1], [3_892_888.4, 8_417_664.1, 2_453_870.9], [11_809_380.7, 2_760_767.7, 5_714_523.8]],
+    ],
+    // 37,000, 1950 to 2050
+    ['prometheus', 25_000, [[-95_293.3, -86_060.7, 54_337.6], [-48_588.5, -114_001.9, 64_430]]],
+    // 62,000, 1950 to 2050
+    ['pandora', 40_000, [[-45_036.6, 121_067.7, -59_099.9], [-20_416.1, -123_039.6, 66_588]]],
+    // 16,000, 1950 to 2050, from 290,000 were they not to trade
+    ['epimetheus', 6_000, [[-77_239.7, -114_180.8, 66_249.2], [-124_443, 78_790.3, -29_175.4]]],
+    // 10,000, 1950 to 2050, from 100,000 were they not to trade
+    ['janus', 4_500, [[86_028.9, 107_414.3, -64_237.8], [-116_205, 90_999.4, -36_666.8]]],
+    // 110,000, 1750 to 2250
+    ['hyperion', 150_000, [[171_049.3, 1_274_310.9, -659_385.8], [43_499.2, -1_201_179.8, 599_085.1], [854_580.8, -933_306.3, 394_564.6]]],
+    // 530,000, 1750 to 2250
+    [
+      'phoebe',
+      550_000,
+      [[-11_732_539.4, -2_733_632.8, 1_338_805.3], [-3_791_524.3, 14_418_435.5, 445_386.1], [4_374_034, 14_263_377.8, -1_275_988.7]],
+    ],
+  ]
+
+  it('puts the small and far ones near where JPL Horizons has them', () => {
+    for (const [id, within, wants] of ELLIPSES) {
+      wants.forEach((want, k) => expect(len(toward(want, fromPlanet(msAt(MOMENTS[k]), id))), id).toBeLessThan(within))
+    }
+  })
+
+  it('keeps Janus and Epimetheus apart as they trade, as Horizons has them 10,225 to 10,654 km apart at their nearest', () => {
+    // Every swap from 1000 to 3000, four years apart, from January 2026's.
+    for (let swap = 2461060 - 250 * 1461.33; swap < 2461060 + 250 * 1461.33; swap += 1461.33) {
+      let nearest = Infinity
+      for (let jd = swap - 40; jd < swap + 40; jd += 0.25) nearest = Math.min(nearest, len(toward(keplerMoon('janus', jd), keplerMoon('epimetheus', jd))))
+      expect(nearest).toBeGreaterThan(9_000)
+      expect(nearest).toBeLessThan(11_000)
+    }
+  })
+
+  it('swings Epimetheus in and out only as far as Horizons has it, 149,850 to 153,050 km from Saturn', () => {
+    const r: number[] = []
+    for (let jd = 2451545; jd < 2451545 + 365; jd += 0.05) r.push(len(keplerMoon('epimetheus', jd)))
+    expect(Math.min(...r)).toBeGreaterThan(149_500)
+    expect(Math.max(...r)).toBeLessThan(153_400)
+  })
+
+  it("keeps them over their planet's equator, but Iapetus, Himalia and Phoebe, which go 15 to 30 degrees off it", () => {
     const most = new Map<BodyId, number>()
     for (let day = 0; day < 80; day += 0.75) {
       const p = posesAt(Date.UTC(2026, 9, 5) + day * 86_400_000)
@@ -120,7 +197,7 @@ describe('the moons of Jupiter and Saturn', () => {
       }
     }
     for (const [id, lat] of most) {
-      if (id === 'iapetus') expect(lat).toBeGreaterThan(10)
+      if (id === 'iapetus' || id === 'himalia' || id === 'phoebe') expect(lat, id).toBeGreaterThan(10)
       else expect(lat, id).toBeLessThan(2)
     }
   })
@@ -133,11 +210,65 @@ describe('the moons of Jupiter and Saturn', () => {
       const [lon, lat] = onBody(toward(m.at, p[b.parent as BodyId].at), m.x, m.y, m.z)
       expect(Math.abs(lon)).toBeLessThan(0.01)
       expect(Math.abs(lat)).toBeLessThan(0.01)
-      // Off -90 only by as much as the orbit is out of round.
+      // Off -90 only by as much as the orbit is out of round: under 2 degrees, but up to 10 for Himalia, Hyperion and Phoebe.
       const way = toward(fromPlanet(ms - 1000, b.id), fromPlanet(ms + 1000, b.id))
       const [wLon, wLat] = onBody(way, m.x, m.y, m.z)
-      expect(Math.abs(wLon + 90), b.id).toBeLessThan(2)
+      const round = b.id === 'himalia' || b.id === 'hyperion' || b.id === 'phoebe' ? 10 : 2
+      expect(Math.abs(wLon + 90), b.id).toBeLessThan(round)
       expect(Math.abs(wLat)).toBeLessThan(0.01)
+    }
+  })
+})
+
+describe('Pluto and Charon', () => {
+  // JPL Horizons at the three MOMENTS, km on the ecliptic of J2000: Pluto from
+  // the Sun, Pluto from the point it and Charon go round, and Charon from Pluto.
+  const PLUTO: Vec3[] = [
+    [-1_477_330_922.3, -4_182_574_867.5, 875_215_480.8],
+    [2_878_433_939.7, -4_435_198_382, -357_822_063.8],
+    [5_935_267_748.3, 3_725_840_949.6, -2_115_788_058.7],
+  ]
+  const OFF_CENTRE: Vec3[] = [
+    [743.7, 1_575.1, 1_229],
+    [-1_198.2, -1_664.5, -580.2],
+    [-264.9, -1_318.9, -1_652.8],
+  ]
+  const CHARON: Vec3[] = [
+    [-6_837.7, -14_480.6, -11_298.6],
+    [11_014.1, 15_300.8, 5_333.4],
+    [2_435.7, 12_126.4, 15_196.4],
+  ]
+
+  it('puts Pluto as near where JPL Horizons has it as Astronomy Engine can', () => {
+    // Astronomy Engine works Pluto out by integrating from a table of states,
+    // and drifts from Horizons away from 2000: about 10,000 km then, 135,000 in
+    // 2026, 310,000 in 2100, and 3.7 million by the years 1000 and 3000, which
+    // from the Sun is under three minutes of arc.
+    const within = [15_000, 200_000, 450_000]
+    MOMENTS.forEach((jd, k) => expect(len(toward(PLUTO[k], posesAt(msAt(jd)).pluto.at))).toBeLessThan(within[k]))
+  })
+
+  it('puts Pluto and Charon either side of the point they go round, as Horizons does', () => {
+    MOMENTS.forEach((jd, k) => {
+      const ms = msAt(jd)
+      const p = posesAt(ms)
+      const c = HelioVector(AE.Pluto, MakeTime(new Date(ms)))
+      const centre = toEcliptic(c.x * AU_KM, c.y * AU_KM, c.z * AU_KM)
+      expect(len(toward(OFF_CENTRE[k], toward(centre, p.pluto.at)))).toBeLessThan(10)
+      expect(len(toward(CHARON[k], toward(p.pluto.at, p.charon.at)))).toBeLessThan(50)
+    })
+  })
+
+  it('keeps the same faces turned to each other', () => {
+    for (const ms of [Date.UTC(1000, 0, 1), Date.UTC(2026, 9, 5), Date.UTC(2999, 11, 31)]) {
+      const p = posesAt(ms)
+      // Pluto's prime meridian is defined as the one under Charon, and the IAU's
+      // rate for it holds within a few degrees over the whole clock.
+      const [lon, lat] = onBody(toward(p.pluto.at, p.charon.at), p.pluto.x, p.pluto.y, p.pluto.z)
+      expect(Math.abs(lon)).toBeLessThan(5)
+      expect(Math.abs(lat)).toBeLessThan(0.01)
+      const [back] = onBody(toward(p.charon.at, p.pluto.at), p.charon.x, p.charon.y, p.charon.z)
+      expect(Math.abs(back)).toBeLessThan(0.01)
     }
   })
 })

@@ -37,7 +37,7 @@ Inside a star's surface the map only has to stay finite and in order (those poin
 
 **Line tone and weight.** Graphite `rgba(26, 30, 44, a)`. Alpha falls with depth (far lines fade into the surface, like aerial perspective) and rises with local compression, so the well reads darker where the ropes converge. A rope at rest is a hairline; where the mass has pulled it in, it gets up to 2 px heavier, so the bent stretch of every rope is its boldest part and the straight runs far out recede. Close in, where nearly every rope on screen is pulled and the bends read on their own, the extra weight eases off. Depth-tested against the body.
 
-**Body.** Matte sphere, soft key light from the upper left like the lamps in Lightbox, cool shadow side. One quiet colour per preset (§5). A black hole is `--lb-ink-strong` with a faint cool rim so it stays a sphere and not a hole in the screen.
+**Body.** Matte sphere, soft key light from the upper left like the lamps in Lightbox, cool shadow side. Earth, Jupiter and the Sun wear their photographed surfaces, Solar's maps, north up the uprights; the Sun is lit from within as Solar draws it, not by the lamps. The rest keep one quiet colour per preset (§5). A black hole is `--lb-ink-strong` with a faint cool rim so it stays a sphere and not a hole in the screen.
 
 **Camera.** Perspective, 38° field of view, orbiting the centre. Turns slowly on its own when idle and playing (as Lightbox's sheets drift on their own). Never turns under reduced motion.
 
@@ -117,13 +117,14 @@ The same places Lightbox uses, and nothing else. No header, no sidebar, no foote
 
 **Title, top left.** Both names, `Lightbox Lattice`, shared by the two pages: Helvetica medium at 22 px (18 px on a phone), tracking pulled in, no panel. The page you are on is dark grey, the other light grey, and clicking it crosses over while the words stay put. When the other page is the one just behind or ahead in the tab's history, it steps there rather than loading it again, so the room comes back as it was left.
 
-**Dock, bottom centre.** One pill, Lightbox's material exactly (panel white at 0.82, fibre, 14 px blur, float shadow, fades to 0.35 when idle and playing). Left to right:
+**Dock, bottom centre.** One pill, Lightbox's material exactly (panel white at 0.82, fibre, 14 px blur, float shadow). Left to right:
 
 1. **Body chip.** A 12 px sphere in the body's colour and its name in micro-type (`SUN`). It holds the place of Lightbox's `New` fan: the one place the chrome carries colour, and the colour is the room's own. Opens the bodies drawer.
 2. Play / pause.
 3. Timeline. Widens when paused, the dock pins its left edge, exactly as Lightbox.
 4. **Light | Probe** segmented control: what moves in the room, and what a double-click releases. Light is the default and comes first. Probe deals three probes in orbit. Light keeps an uneven stream coming, a ray every 0.15 to 0.75 s and at most six in flight, each sent in along a random rope from either end of x, y or z, so it starts on the lattice and leaves it only where the body bends it. Both five letters, for the same reason Lightbox's Paint and Light are: the sliding indicator is a 50% pill.
-5. Plus, opening the options drawer.
+5. Save, an arrow into a tray: the room as a PNG, as idle leaves it.
+6. Plus, opening the options drawer.
 
 **Drawers, above the dock.** Same panel, same unfold. Lightbox's rule holds: the dock is what you reach for while watching, a drawer is a decision about the instrument. The bodies drawer is a list of the seven presets, each a sphere swatch, a name, its kind in micro-type and its number key. The options drawer has **Mass** and **Size** (logarithmic sliders in the timeline's visual language: 4 px track, the paused timeline's round head; the values themselves are in the readout). Size is labelled Horizon while the body is a black hole. Letting go of a slider re-frames the room if the body has left 0.4 to 2.5 units. One drawer open at a time; pressing anywhere else or <kbd>Esc</kbd> closes it.
 
@@ -147,11 +148,15 @@ SPACE           stop time
 DOUBLE-CLICK    release, hold to aim
 ```
 
-While riding it reads `DRAG look around`, `SPACE stop time`, `ESC OR CLICK step off`.
+While riding it reads `DRAG look around`, `SPACE stop time`, `ESC OR CLICK step off`. Hidden under 1,004 px, where the dock would come within 15 px of it.
 
-**Particle colours.** Light is always gold, and nothing else in the room is. Probes take the Lightbox roll at film strength, minus its amber, so the only saturated colour in the room is on the particles and the chip. Probe trails are dots every 0.1 s for 4 s. Light is a streak with no head: widest and hottest where it has just been, narrowing and fading over 1.5 s, so a glance tells it from a probe's dots.
+**Particle colours.** Light is always gold, and nothing else in the room is. Probes take the Lightbox roll at film strength, minus its amber, so the only saturated colour in the room, a photographed body aside, is on the particles and the chip. Probe trails are dots every 0.1 s for 4 s. Light is a streak with no head: widest and hottest where it has just been, narrowing and fading over 1.5 s, so a glance tells it from a probe's dots.
 
-**Under 620 px.** Legend hidden, readout moves to a 10 px inset, chip shows the sphere only. Same breakpoint as Lightbox.
+**Idle.** Three seconds without the mouse, a touch or a key, or the window left for another, and every word and control goes, the tab on a particle and the cursor with them, playing or paused. Any of those brings them back, and a touch on an idle page does only that: the tap that wakes it does nothing in the room or on the dock. An open drawer, a press still down, the mouse resting on the chrome, or focus tabbed into it holds them. Shared with the other two (`src/ui/idle.ts`).
+
+**Save.** A plain download, named as a Mac names a screenshot (`Lattice 2026-10-06 at 12.57.24.png`): the surface and the lattice, no words or controls. Where it goes is the browser's to say, so only a failure gets a note, over the dock. Shared with the other two (`src/photo/`, `src/ui/PhotoButton.tsx`, `src/ui/Toast.tsx`).
+
+**Under 620 px.** Readout moves to a 10 px inset, chip shows the sphere only. Same breakpoint as Lightbox.
 
 ## 8. What's NOT in v1
 
@@ -168,7 +173,7 @@ Same split as Lightbox: everything that moves lives outside React. React subscri
 ```
 src/physics/  bodies (presets, compactness, formatting), lattice (rest net + Flamm deform), motion (probe and light steps)
 src/sim/      world (fixed-step particles, 15 s ring buffer, branch on resume)
-src/render/   camera (orbit + matrices), gl (lines, points, sphere impostor)
+src/render/   camera (orbit + matrices), gl (lines, points, sphere impostor), maps (Solar's, for the Earth, Jupiter and the Sun)
 src/app/      instrument (rAF loop, playback, pointer and keys, URL), snapshot for React
 src/ui/       Dock, Bodies, Options (with its slider), Timeline, Readout, Legend, Sphere, Icons
 src/styles/   global.css and ui.css from Lightbox, plus stage.css for the surface

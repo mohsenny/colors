@@ -4,7 +4,7 @@ import { BODIES, KEYED } from '../sky/bodies'
 import type { Body, BodyId, BodyKind } from '../sky/bodies'
 import { Sphere } from './Sphere'
 
-const KIND: Record<BodyKind, string> = { star: 'Star', planet: 'Planet', moon: 'Moon' }
+const KIND: Record<BodyKind, string> = { star: 'Star', planet: 'Planet', dwarf: 'Dwarf planet', moon: 'Moon' }
 
 /** The moons with no key of their own, under their planet. */
 const MOONS = new Map<BodyId, Body[]>(
@@ -18,8 +18,9 @@ export interface BodiesProps {
 }
 
 /**
- * The drawer behind the seat chip: the ten bodies you can be, Sun outward, on
- * the number keys, and the moons of Jupiter and Saturn under their planet.
+ * The drawer behind the seat chip: the Sun, the planets and Pluto, Sun
+ * outward, the first ten on the number keys, and the moons of Jupiter, Saturn
+ * and Pluto under what they go round.
  */
 export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {
   const tab = open ? undefined : -1
@@ -38,7 +39,7 @@ export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {
             <span className="lt-body-name">{b.name}</span>
             <span className="lt-body-kind">{KIND[b.kind]}</span>
             <span className="lt-body-key" aria-hidden="true">
-              {(i + 1) % 10}
+              {i < 10 ? (i + 1) % 10 : ''}
             </span>
           </button>
           {MOONS.get(b.id)?.length ? (

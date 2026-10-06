@@ -12,6 +12,7 @@ import type { Mat4 } from './camera'
 import { VIEW_AT, levelView } from '../physics/lattice'
 import type { Level, Net } from '../physics/lattice'
 import type { Vec3 } from '../physics/motion'
+import type { Surface } from './maps'
 
 /*
  * Each rope is drawn a segment at a time, as a ribbon turned to face the
@@ -152,12 +153,32 @@ uniform float uHole;
 uniform float uGlow;
 uniform float uAlpha;
 uniform float uDpr;
+// A photographed surface: 0 none, 1 under the lamps, 2 lit from within as
+// Solar draws the Sun. uFace is the longitude that faces +z.
+uniform int uSurface;
+uniform sampler2D uMap;
+uniform sampler2D uClouds;
+uniform float uCloud;
+uniform float uFace;
 // Strikes: where, as a unit vector from the centre, and how far through
 // (0 to 1), then the colour of what struck.
 uniform vec4 uHit[${MAX_IMPACTS}];
 uniform vec3 uHitInk[${MAX_IMPACTS}];
 uniform int uHits;
 out vec4 o;
+const float PI = 3.14159265;
+const float TAU = 6.28318531;
+// The maps are filtered in linear light. This gives back the display values
+// the flat colours are in.
+vec3 display(vec3 c) {
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+}
+// Solar's: a shoulder rather than a hard clip, so a highlight rolls off
+// instead of flattening.
+vec3 encode(vec3 c) {
+  vec3 s = mix(c, 1.0 - 0.2 * exp(-(c - 0.8) / 0.2), step(0.8, c));
+  return pow(max(s, 0.0), vec3(1.0 / 2.2));
+}
 void main() {
   vec4 far = uInv * vec4(vNdc, 1.0, 1.0);
   vec3 dir = normalize(far.xyz / far.w - uEye);
@@ -166,11 +187,31 @@ void main() {
   float c = dot(rel, rel) - uR * uR;
   float disc = b * b - c;
   float w = fwidth(disc);
-  if (disc < -w || -b < 0.0) discard;
-  float edge = clamp(disc / w + 1.0, 0.0, 1.0);
+  // Only what is well clear of the edge yet, so every pixel drawn still has
+  // its neighbours for the map's gradients.
+  if (disc < -3.0 * w || -b < 0.0) discard;
   float t = -b - sqrt(max(disc, 0.0));
   vec3 hit = uEye + dir * t;
   vec3 n = normalize(hit - uCenter);
+  vec3 albedo = vec3(0.0);
+  float cloud = 0.0;
+  if (uSurface > 0) {
+    // North up the uprights, east to the right seen from outside.
+    float lon = uFace + atan(n.x, n.z);
+    float lat = asin(clamp(n.y, -1.0, 1.0));
+    vec2 uv = vec2(0.5 + lon / TAU, 0.5 - lat / PI);
+    // The Sun's map is smeared pale at the poles: stop short of them.
+    if (uSurface == 2) uv.y = 0.5 + (uv.y - 0.5) * 0.86;
+    vec2 gx = dFdx(uv);
+    vec2 gy = dFdy(uv);
+    // Across the seam at the back the longitude jumps a whole turn: take the short way.
+    gx.x -= floor(gx.x + 0.5);
+    gy.x -= floor(gy.x + 0.5);
+    albedo = textureGrad(uMap, uv, gx, gy).rgb;
+    if (uCloud > 0.5) cloud = textureGrad(uClouds, uv, gx, gy).r;
+  }
+  if (disc < -w) discard;
+  float edge = clamp(disc / w + 1.0, 0.0, 1.0);
   float facing = max(dot(n, -dir), 0.0);
   float rim = pow(1.0 - facing, 3.0);
   vec3 col;
@@ -180,12 +221,24 @@ void main() {
   } else if (uGlow > 0.5) {
     // Light has no surface for the lamps to shade: hot in the middle, gold at the rim.
     col = mix(uColor, uHot, facing * facing);
+  } else if (uSurface == 2) {
+    // The Sun as Solar draws it: hotter and yellower in the middle, darker
+    // and redder toward the limb, where the eye only reaches the cooler gas
+    // higher up. Yellower by shifting the hue rather than adding white, so it
+    // never goes pink.
+    vec3 s = albedo * (0.34 + 0.66 * sqrt(facing)) * vec3(1.0, 0.86 + 0.14 * facing, 0.7 + 0.3 * facing);
+    float heat = smoothstep(0.45, 1.0, facing);
+    s.g += s.r * 0.18 * heat;
+    s.b += s.r * 0.03 * heat;
+    col = encode(s * 1.3);
   } else {
     // The lamps are upper left, as they are in Lightbox; the shadow side goes
-    // cool, as the shadows there do.
+    // cool, as the shadows there do. A photographed body takes them on its
+    // map, the Earth's cloud laid over as Solar lays it.
+    vec3 base = uSurface == 1 ? display(mix(albedo, vec3(0.9), cloud * 0.9)) : uColor;
     float l = clamp(dot(n, uLight) * 0.5 + 0.5, 0.0, 1.0);
     l = l * l;
-    col = uColor * (0.58 + 0.5 * l);
+    col = base * (0.58 + 0.5 * l);
     col = mix(col * vec3(0.80, 0.84, 0.95), col, l);
     col = mix(col, vec3(1.0), rim * 0.16);
   }
@@ -316,6 +369,8 @@ export interface BodyDraw {
   radius: number
   color: Vec3
   hole: boolean
+  /** Its photographed surface, if it has one. Until the map is in, the colour. */
+  surface: Surface | null
 }
 
 /** A ring spreading from where something struck the body. */
@@ -398,6 +453,10 @@ export class Renderer {
   private hitBuf = new Float32Array(MAX_IMPACTS * 4)
   private hitInkBuf = new Float32Array(MAX_IMPACTS * 3)
   private canvas: HTMLCanvasElement
+  /** Surface maps by url, null while on their way. */
+  private maps = new Map<string, WebGLTexture | null>()
+  private blank: WebGLTexture
+  private aniso = 0
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -454,6 +513,63 @@ export class Renderer {
     this.attrib(this.beamProg, 'aShape', 4, bs, 36)
 
     gl.bindVertexArray(null)
+
+    // A map on unit 0 and cloud on unit 1, and a blank on each when there is
+    // none, or the browser complains.
+    const ext = gl.getExtension('EXT_texture_filter_anisotropic')
+    if (ext) this.aniso = Math.min(8, gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number)
+    this.blank = gl.createTexture() as WebGLTexture
+    gl.bindTexture(gl.TEXTURE_2D, this.blank)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]))
+    gl.useProgram(this.sphere)
+    gl.uniform1i(gl.getUniformLocation(this.sphere, 'uMap'), 0)
+    gl.uniform1i(gl.getUniformLocation(this.sphere, 'uClouds'), 1)
+  }
+
+  /** Fetches a body's maps, once each. */
+  load(s: Surface): void {
+    this.fetchMap(s.map, false)
+    if (s.clouds) this.fetchMap(s.clouds, true)
+  }
+
+  /** `linear` keeps the values as they are, for a mask. */
+  private fetchMap(url: string, linear: boolean): void {
+    if (this.maps.has(url)) return
+    this.maps.set(url, null)
+    const img = new Image()
+    img.src = url
+    img
+      .decode()
+      .then(() => {
+        const gl = this.gl
+        const t = gl.createTexture() as WebGLTexture
+        gl.bindTexture(gl.TEXTURE_2D, t)
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE)
+        gl.texImage2D(gl.TEXTURE_2D, 0, linear ? gl.RGBA8 : gl.SRGB8_ALPHA8, gl.RGBA, gl.UNSIGNED_BYTE, img)
+        gl.generateMipmap(gl.TEXTURE_2D)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+        if (this.aniso > 1) gl.texParameterf(gl.TEXTURE_2D, 0x84fe, this.aniso)
+        this.maps.set(url, t)
+      })
+      .catch(() => undefined)
+  }
+
+  /** Binds a ball's maps, or none, and says which it wears. */
+  private wear(s: Surface | null): void {
+    const gl = this.gl
+    const sp = this.sphere
+    const map = s ? this.maps.get(s.map) : null
+    const clouds = s?.clouds ? this.maps.get(s.clouds) : null
+    gl.uniform1i(gl.getUniformLocation(sp, 'uSurface'), s && map ? (s.glow ? 2 : 1) : 0)
+    gl.uniform1f(gl.getUniformLocation(sp, 'uFace'), s ? (s.face * Math.PI) / 180 : 0)
+    gl.uniform1f(gl.getUniformLocation(sp, 'uCloud'), clouds ? 1 : 0)
+    gl.activeTexture(gl.TEXTURE1)
+    gl.bindTexture(gl.TEXTURE_2D, clouds ?? this.blank)
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, map ?? this.blank)
   }
 
   private attrib(prog: WebGLProgram, name: string, size: number, stride: number, offset: number): void {
@@ -543,10 +659,12 @@ export class Renderer {
     gl.uniform4fv(gl.getUniformLocation(sp, 'uHit'), this.hitBuf)
     gl.uniform3fv(gl.getUniformLocation(sp, 'uHitInk'), this.hitInkBuf)
     gl.bindVertexArray(this.quadVao)
+    this.wear(f.body.surface)
     ball([0, 0, 0], f.body.radius, f.body.color, f.body.hole, false, 1, hits.length)
     if (f.seat && f.seat.alpha > 0) {
       // Fading, it stops hiding what is behind it.
       gl.depthMask(f.seat.alpha >= 1)
+      this.wear(null)
       ball(f.seat.center, f.seat.radius, f.seat.color, false, f.seat.glow, f.seat.alpha, 0)
     }
 

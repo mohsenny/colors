@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Instrument } from './app/instrument'
 import type { InstrumentSnapshot } from './app/instrument'
+import { savePhoto } from './photo/save'
 import { Dock } from './ui/Dock'
 import { Legend } from './ui/Legend'
 import { PaletteTray } from './ui/PaletteTray'
 import { Title } from './ui/Title'
+import { Toast } from './ui/Toast'
+import type { Note } from './ui/Toast'
 
 /**
  * React owns the chrome and nothing else. The stage below is an empty div that
@@ -16,6 +19,7 @@ export default function App() {
   // render is a value React has no way to re-render for.
   const [instrument, setInstrument] = useState<Instrument | null>(null)
   const [snapshot, setSnapshot] = useState<InstrumentSnapshot | null>(null)
+  const [note, setNote] = useState<Note | null>(null)
 
   useEffect(() => {
     const el = stageRef.current
@@ -103,7 +107,13 @@ export default function App() {
             onBlendChange={(mode) => instrument.setBlend(mode)}
             onSlideCountChange={(n) => instrument.setSlideCount(n)}
             onWarmthChange={(w) => instrument.setWarmth(w)}
+            onPhoto={() => {
+              void savePhoto('Lightbox', () => instrument.photo()).then(
+                (text) => text && setNote({ text, at: Date.now() }),
+              )
+            }}
           />
+          <Toast note={note} onDone={() => setNote(null)} />
           <p className="lb-sr" role="status" aria-live="polite">
             {snapshot.announcement}
           </p>

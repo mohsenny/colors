@@ -37,7 +37,10 @@ import { OrbitCamera, matricesOf, mixView, normalize, project, ray } from '../re
 import type { Matrices, View } from '../render/camera'
 import { BEAM_STRIDE, POINT_STRIDE, Renderer } from '../render/gl'
 import type { ImpactDraw, SeatDraw } from '../render/gl'
+import { SURFACES } from '../render/maps'
 import { DT, ESCAPE_R, HISTORY_FRAMES, World } from '../sim/world'
+import { png } from '../../../src/photo/save'
+import { grainOf, litSurface } from '../../../src/photo/surface'
 import type { Particle } from '../sim/world'
 
 /** Log10 bounds of the two body sliders, kg and m. M87* sits inside both. */
@@ -327,6 +330,8 @@ export class Instrument {
     this.map = radialMap(this.field.rs, this.field.radius)
     deform(this.net, this.field.rs, this.field.radius, this.shape, this.squeeze)
     this.renderer.setShape(this.shape, this.squeeze)
+    const surface = this.presetId ? SURFACES[this.presetId] : undefined
+    if (surface) this.renderer.load(surface)
     this.writeHash()
   }
 
@@ -705,6 +710,23 @@ export class Instrument {
 
   // ------------------------------------------------------------------ draw
 
+  /**
+   * The room on the lit surface it stands on, without the tab or the chrome.
+   * The grain is loaded first, then the surface is painted and the last frame
+   * drawn again and laid over it in one go: once a frame is shown, it is gone.
+   */
+  async photo(): Promise<Blob> {
+    const stage = this.canvas.parentElement ?? document.body
+    const { width, height } = this.canvas
+    const scale = width / this.width
+    const grain = await grainOf(stage, scale)
+    const ctx = litSurface(stage, width, height, scale, grain)
+    this.draw()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(this.canvas, 0, 0)
+    return png(ctx.canvas)
+  }
+
   private draw(): void {
     const m = this.mats
     const b = m.basis
@@ -791,7 +813,7 @@ export class Instrument {
       light,
       detail: this.view.detail,
       lens: this.view.lens,
-      body: { radius: this.field.radius, color, hole: this.field.hole },
+      body: { radius: this.field.radius, color, hole: this.field.hole, surface: (preset && SURFACES[preset.id]) ?? null },
       impacts: this.impacts(),
       seat: this.seat,
       points: this.points,

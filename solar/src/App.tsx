@@ -6,10 +6,14 @@ import { KEYED } from './sky/bodies'
 import { Dock } from './ui/Dock'
 import { Legend } from './ui/Legend'
 import { Readout } from './ui/Readout'
+import { savePhoto } from '../../src/photo/save'
 import { Title } from '../../src/ui/Title'
+import { Toast } from '../../src/ui/Toast'
+import type { Note } from '../../src/ui/Toast'
 
 function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
   const snap: Snapshot = useSyncExternalStore(instrument.subscribe, instrument.getSnapshot)
+  const [note, setNote] = useState<Note | null>(null)
   const attachClock = useCallback(
     (day: HTMLElement | null, time: HTMLElement | null) => instrument.attachClock(day, time),
     [instrument],
@@ -65,7 +69,13 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         onWatch={(e) => instrument.watch(e)}
         onStep={(type, way) => instrument.stepEclipse(type, way)}
         onNow={() => instrument.now()}
+        onPhoto={() => {
+          void savePhoto('Solar', () => instrument.photo()).then(
+            (text) => text && setNote({ text, at: Date.now() }),
+          )
+        }}
       />
+      <Toast note={note} onDone={() => setNote(null)} />
       <div className="lb-sr" aria-live="polite">
         {snap.announce}
       </div>
@@ -94,7 +104,7 @@ export default function App(): ReactElement {
 
   return (
     <main className="lb-stage">
-      <canvas ref={canvasRef} className="sl-canvas" aria-label="The Sun, the planets, the Moon and the moons of Jupiter and Saturn where they are now, at their true sizes and distances" />
+      <canvas ref={canvasRef} className="sl-canvas" aria-label="The Sun, the planets and Pluto, the Moon and the moons of Jupiter, Saturn and Pluto where they are now, at their true sizes and distances" />
       <div ref={labelsRef} className="sl-labels" aria-hidden="true" />
       <Title active="solar" />
       {failed && <p className="lt-fail">This needs WebGL2, which this browser does not offer.</p>}

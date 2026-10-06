@@ -183,6 +183,11 @@ export class Instrument {
     this.raf = requestAnimationFrame(this.frame)
   }
 
+  /** The room as it stands, without its tabs or chrome, as a PNG. */
+  photo(): Promise<Blob> {
+    return this.stage.photo()
+  }
+
   destroy(): void {
     this.running = false
     cancelAnimationFrame(this.raf)

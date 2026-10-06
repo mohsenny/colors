@@ -25,6 +25,14 @@
   letter-spacing: -0.028em;
   user-select: none;
   view-transition-name: lb-title;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
+}
+
+/* Idle (src/ui/idle.ts) takes the names away with the rest of the chrome. */
+.is-idle .lb-title {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: var(--lb-t-rest, 700ms);
 }
 
 .lb-title-name {

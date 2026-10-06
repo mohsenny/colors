@@ -6,10 +6,14 @@ import { PRESETS, presetById } from './physics/bodies'
 import { Dock } from './ui/Dock'
 import { Legend } from './ui/Legend'
 import { Readout } from './ui/Readout'
+import { savePhoto } from '../../src/photo/save'
 import { Title } from '../../src/ui/Title'
+import { Toast } from '../../src/ui/Toast'
+import type { Note } from '../../src/ui/Toast'
 
 function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
   const snap: Snapshot = useSyncExternalStore(instrument.subscribe, instrument.getSnapshot)
+  const [note, setNote] = useState<Note | null>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -60,7 +64,13 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         onMass={(v) => instrument.setMassLog(v)}
         onSize={(v) => instrument.setSizeLog(v)}
         onSettle={() => instrument.settleBody()}
+        onPhoto={() => {
+          void savePhoto('Lattice', () => instrument.photo()).then(
+            (text) => text && setNote({ text, at: Date.now() }),
+          )
+        }}
       />
+      <Toast note={note} onDone={() => setNote(null)} />
       <div className="lb-sr" aria-live="polite">
         {snap.announce}
       </div>

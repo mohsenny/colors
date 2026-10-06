@@ -39,6 +39,7 @@
   gap: 4px;
   user-select: none;
   pointer-events: none;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .lb-legend-row {
@@ -64,6 +65,14 @@
 
 .lb-legend-effect {
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+/* Under this, with the longest name in the chip, the dock comes within 15px of
+   the legend. */
+@media (max-width: 1003px) {
+  .lb-legend {
+    display: none;
+  }
 }
 
 /* -------------------------------------------------------------------- dock */
@@ -120,28 +129,23 @@
 
 /*
  * There has to be room on the right to absorb the shift. The expanded dock is
- * 566px wide, so its right edge lands at half the viewport plus 369px, which
- * runs off any window under about 738px, and the page cannot scroll to reach
- * it. The cutoff at 768 leaves 15px of that, which is all that is left of the
- * margin it was set with: anything else added to the dock moves the cutoff. Under it the dock keeps growing from
- * the centre and the play control does move: the better trade on a narrow
- * window, where the alternative is a control off the edge of the screen.
+ * 625px wide with the longest name in the chip, so its right edge lands at
+ * half the viewport plus 399px, which runs off any window under about 798px,
+ * and the page cannot scroll to reach it. The cutoff at 828 leaves 15px of
+ * that: anything else added to the dock moves the cutoff. Under it the dock
+ * keeps growing from the centre and the play control does move: the better
+ * trade on a narrow window, where the alternative is a control off the edge
+ * of the screen. Near the bottom of the range the tape opens only as far as
+ * there is room: 334px is the rest of the dock, and a margin either side.
  */
-@media (max-width: 767px) {
+@media (max-width: 827px) {
+  .lb-dock {
+    --lb-tl-open: min(304px, calc(100vw - 334px));
+  }
+
   .lb-dock.is-expanded {
     transform: translateX(-50%);
   }
-}
-
-/* 0.35 is the floor: still legible against the bright surface, still an obvious
-   target. The dock is never allowed to disappear. */
-.lb-dock.is-idle {
-  opacity: 0.35;
-}
-
-.lb-dock.is-idle:hover,
-.lb-dock.is-idle:focus-within {
-  opacity: 1;
 }
 
 .lb-btn {
@@ -478,6 +482,7 @@
   right: calc(16px + env(safe-area-inset-right, 0px));
   top: calc(16px + env(safe-area-inset-top, 0px));
   z-index: 200;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .lb-tray-list {
@@ -770,7 +775,9 @@
 
   .lb-dock {
     --lb-tl-w: 72px;
-    --lb-tl-open: min(304px, calc(100vw - 236px));
+    /* Never narrower than the playing tape: under 336px the dock keeps its
+       playing width and gives up some of its 15px margin instead. */
+    --lb-tl-open: max(var(--lb-tl-w), min(304px, calc(100vw - 264px)));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
   }
@@ -804,4 +811,27 @@
   .lt-slider {
     width: min(168px, calc(100vw - 140px));
   }
+}
+
+/* -------------------------------------------------------------------- idle */
+
+/*
+ * Idle (src/ui/idle.ts, shared): a few seconds without the mouse, a touch or a
+ * key, or the window left for another, and every word and control leaves the
+ * screen, the tab on a particle with it, which leaves the room as a saved
+ * picture shows it. The cursor goes too. They leave slowly and come back at
+ * the usual pace.
+ */
+.is-idle .lb-dock,
+.is-idle .lb-legend,
+.is-idle .lb-tray,
+.is-idle .lt-tab {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: var(--lb-t-rest, 700ms);
+}
+
+.is-idle,
+.is-idle * {
+  cursor: none !important;
 }

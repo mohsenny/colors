@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react'
+import type { EclipseType } from '../sky/eclipses'
 
 function Icon({ children, flip = false }: { children: ReactElement | ReactElement[]; flip?: boolean }): ReactElement {
   return (
@@ -63,6 +64,35 @@ export function PlusIcon({ open }: { open: boolean }): ReactElement {
       focusable="false"
     >
       <path d="M7 3.2v7.6M3.2 7h7.6" />
+    </svg>
+  )
+}
+
+/** A solar eclipse is the Sun, gold; a lunar one the Moon, copper as the Earth's shadow turns it. The marks on the tape are the same two, small. */
+export function EclipseIcon({ type }: { type: EclipseType }): ReactElement {
+  return (
+    <svg
+      className={`lb-icon sl-eclipse-icon is-${type}`}
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {type === 'solar' ? (
+        <>
+          <circle cx="7" cy="7" r="2.5" fill="currentColor" />
+          <path
+            d="M7 1.4v1.2M7 11.4v1.2M1.4 7h1.2M11.4 7h1.2M3 3l.85.85M10.15 10.15l.85.85M3 11l.85-.85M10.15 3.85 11 3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </>
+      ) : (
+        <path d="M5 2.4A5 5 0 1 0 11.6 9 5 5 0 0 1 5 2.4Z" fill="currentColor" />
+      )}
     </svg>
   )
 }

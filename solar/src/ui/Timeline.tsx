@@ -1,13 +1,16 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
+import type { Mark } from '../app/tape'
+import { dayLabel } from '../app/time'
+import { EclipseIcon } from './Icons'
 
 export interface TimelineProps {
   /** 0..1 where the clock is on the tape. 1 is its newest moment. */
   position: number
   /** 0..1 how much of the tape has been watched yet. */
   filled: number
-  /** Eclipse peaks on the tape, as places like `position`. */
-  marks: number[]
+  /** The eclipses on the tape, at places like `position`. */
+  marks: Mark[]
   /** Paused or scrubbed: the scrubber becomes prominent. */
   expanded: boolean
   /** The moment at the head, read out by assistive tech. */
@@ -31,14 +34,14 @@ const SCRUB_KEYS = new Set([
 
 /** More marks than this are a texture, not places to find. */
 const MARKS_MAX = 24
-/** A drag this close to a mark lands on it. */
+/** A drag this close to a mark lands on it, and a pointer this close says which eclipse it is. */
 const SNAP_PX = 6
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v
 }
 
-/** Copied from Lattice, with the marks added and the head kept under the pointer while the tape is still filling. */
+/** Copied from Lattice, with the marks added and the head kept under the pointer while the tape is still filling. Pointing at a mark says which eclipse it is. */
 export function Timeline(props: TimelineProps): ReactElement {
   const { expanded, moment, onScrub, onScrubStart, onScrubEnd } = props
   const position = clamp01(props.position)
@@ -50,6 +53,8 @@ export function Timeline(props: TimelineProps): ReactElement {
   const scrubbing = useRef(false)
   // Snapping helps a hand find a mark. For the arrow keys it would be a trap.
   const pointer = useRef(false)
+  // Where the pointer is over the tape, in pixels from its left and out of its width.
+  const [hand, setHand] = useState<[number, number] | null>(null)
 
   const begin = (): void => {
     if (scrubbing.current) return
@@ -85,6 +90,18 @@ export function Timeline(props: TimelineProps): ReactElement {
   // tape maps into that part of the track, for the native input as for the head.
   const place = (p: number): number => 1 - filled + p * filled
 
+  let pointed: Mark | null = null
+  if (hand) {
+    let near = SNAP_PX
+    for (const m of marks) {
+      const d = Math.abs(place(m.at) * hand[1] - hand[0])
+      if (d < near) {
+        near = d
+        pointed = m
+      }
+    }
+  }
+
   const style = {
     '--lb-tl-pos': `${place(position) * 100}%`,
     '--lb-tl-rec-left': `${(1 - filled) * 100}%`,
@@ -110,10 +127,10 @@ export function Timeline(props: TimelineProps): ReactElement {
           if (pointer.current) {
             let near = SNAP_PX / Math.max(1, input.getBoundingClientRect().width)
             for (const m of marks) {
-              const d = Math.abs(place(m) - v)
+              const d = Math.abs(place(m.at) - v)
               if (d < near) {
                 near = d
-                p = m
+                p = m.at
               }
             }
           }
@@ -125,6 +142,11 @@ export function Timeline(props: TimelineProps): ReactElement {
         }}
         onPointerUp={finish}
         onPointerCancel={finish}
+        onPointerMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setHand([e.clientX - r.left, r.width])
+        }}
+        onPointerLeave={() => setHand(null)}
         onKeyDown={(e) => {
           if (SCRUB_KEYS.has(e.key)) {
             pointer.current = false
@@ -140,9 +162,20 @@ export function Timeline(props: TimelineProps): ReactElement {
         <span className="lb-timeline-track" />
         <span className="lb-timeline-recorded" />
         {marks.map((m, i) => (
-          <span key={i} className="sl-mark" style={{ left: `${place(m) * 100}%` }} />
+          <span
+            key={`${i}-${m.e.peak}`}
+            className={`sl-mark is-${m.e.type}${m === pointed ? ' is-pointed' : ''}`}
+            style={{ left: `${place(m.at) * 100}%` }}
+          />
         ))}
         <span className="lb-timeline-head" />
+        {pointed && (
+          <span className="sl-mark-tip" style={{ left: `${place(pointed.at) * 100}%` }}>
+            <EclipseIcon type={pointed.e.type} />
+            <span className="sl-mark-tip-kind">{`${pointed.e.kind} ${pointed.e.type} eclipse`}</span>
+            <span className="sl-mark-tip-when">{dayLabel(pointed.e.peak)}</span>
+          </span>
+        )}
       </div>
     </div>
   )

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
+import { useIdle } from '../../../src/ui/idle'
+import { PhotoButton } from '../../../src/ui/PhotoButton'
 import type { Snapshot } from '../app/instrument'
 import type { BodyId } from '../sky/bodies'
 import type { Eclipse, EclipseType } from '../sky/eclipses'
@@ -22,17 +24,14 @@ export interface DockProps {
   onWatch(e: Eclipse): void
   onStep(type: EclipseType, way: 1 | -1): void
   onNow(): void
+  onPhoto(): void
 }
-
-/** Quiet time before the chrome recedes, as in Lightbox. */
-const IDLE_MS = 2400
 
 type Drawer = 'bodies' | 'options' | null
 
 export function Dock(props: DockProps): ReactElement {
-  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onStep, onNow } = props
+  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onStep, onNow, onPhoto } = props
   const { playing } = snap
-  const [idle, setIdle] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLButtonElement | null>(null)
@@ -45,30 +44,7 @@ export function Dock(props: DockProps): ReactElement {
     return () => attachClock(null, null)
   }, [attachClock])
 
-  useEffect(() => {
-    let timer = 0
-    const arm = (): void => {
-      window.clearTimeout(timer)
-      if (!playing || drawer) return
-      timer = window.setTimeout(() => {
-        const root = rootRef.current
-        if (root && root.contains(document.activeElement)) return
-        setIdle(true)
-      }, IDLE_MS)
-    }
-    const wake = (): void => {
-      setIdle(false)
-      arm()
-    }
-    arm()
-    const passive = { passive: true } as const
-    const events = ['pointermove', 'pointerdown', 'wheel', 'touchstart', 'keydown', 'focusin', 'focusout'] as const
-    for (const ev of events) window.addEventListener(ev, wake, passive)
-    return () => {
-      window.clearTimeout(timer)
-      for (const ev of events) window.removeEventListener(ev, wake)
-    }
-  }, [playing, drawer])
+  useIdle(drawer !== null)
 
   // A drawer is a transient layer: touching anything else, or Escape, puts it away.
   useEffect(() => {
@@ -97,7 +73,7 @@ export function Dock(props: DockProps): ReactElement {
   return (
     <div
       ref={rootRef}
-      className={`lb-dock${idle && playing ? ' is-idle' : ''}${timeline.expanded ? ' is-expanded' : ''}`}
+      className={`lb-dock${timeline.expanded ? ' is-expanded' : ''}`}
     >
       {/* First, as New is in Lightbox: where you are is what the instrument is about. */}
       <button
@@ -142,6 +118,13 @@ export function Dock(props: DockProps): ReactElement {
       <Timeline {...timeline} />
 
       <Knob dial={snap.dial} onDial={onDial} />
+
+      <PhotoButton
+        onPress={() => {
+          setDrawer(null)
+          onPhoto()
+        }}
+      />
 
       <button
         ref={moreRef}

@@ -16,7 +16,11 @@ import { crowdDragTo, crowdLanded, inPaperGrab, litEdgePx, litRect } from '../co
 import { filmHex } from '../core/oklab'
 import { clampSide, sideBand, stockSizeFrac } from '../core/size'
 import type { RenderOptions, SimState, SlideState, StageHandlers, Viewport } from '../core/types'
+import { png } from '../photo/save'
+import { grainOf, litSurface, patternOf, tile } from '../photo/surface'
 import { Painter } from './paint'
+import { drawMount, drawPaper } from './photo'
+import type { Shade, Stock } from './photo'
 
 /**
  * The stage is the only thing that touches the playground's DOM. React never
@@ -69,11 +73,15 @@ const SOFT_ALPHA_BASE = 0.155
 const SOFT_ALPHA_PER_MM = 0.0105
 const CONTACT_ALPHA_BASE = 0.1
 const CONTACT_ALPHA_PER_MM = 0.008
-const OUTER_LIP = '0 0 0 0.5px rgba(30,34,48,0.055)'
+const LIP = 'rgba(30,34,48,0.055)'
+const OUTER_LIP = `0 0 0 0.5px ${LIP}`
 
 /** z is eased continuously; quantising it stops the shadow string being rebuilt
  *  on every frame for a change nobody can see. */
 const Z_SHADOW_STEPS = 250
+
+/** The fibre tile, as background-size has it. */
+const FIBRE_PX = 64
 
 /** Tab width when selected: room for the hex plus the copy and lock buttons. */
 const TAB_W_SELECTED = 104
@@ -716,6 +724,51 @@ export class Stage {
     }
   }
 
+  /**
+   * The room as it stands, for a photograph: the lit surface, the paint, the
+   * paper and the mounts, without the tabs, the grips or what is held or
+   * hovered. The tiles load first, then all of it is read and laid down at
+   * once, so every layer is the same frame.
+   */
+  async photo(): Promise<Blob> {
+    const css = getComputedStyle(this.root)
+    const { canvas: paint, dpr } = this.painter.picture
+    const [grain, fibre] = await Promise.all([
+      grainOf(this.root, dpr),
+      tile(css.getPropertyValue('--lb-fibre'), FIBRE_PX, dpr),
+    ])
+    const ctx = litSurface(this.root, paint.width, paint.height, dpr, grain)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.globalCompositeOperation = 'multiply'
+    ctx.drawImage(paint, 0, 0)
+    ctx.restore()
+
+    const stock: Stock = {
+      mount: css.getPropertyValue('--lb-mount').trim(),
+      edge: css.getPropertyValue('--lb-card-edge').trim(),
+      lip: LIP,
+      fibre: fibre && patternOf(ctx, fibre, dpr),
+    }
+    if (this.paperPx > 0) drawPaper(ctx, this.paperPx, paint.height / dpr, shadowParts(0.5), stock, dpr)
+    const vh = this.viewport?.height ?? 0
+    const recs = [...this.recs.values()].sort((a, b) => a.prev.rank - b.prev.rank)
+    for (const { state, prev } of recs) {
+      const mount = {
+        x: state.x * vh,
+        y: state.y * vh,
+        rot: state.rot,
+        w: prev.frameW,
+        h: prev.frameH,
+        frame: this.framePx,
+        radius: CORNER_OUTER,
+        shades: shadowParts(prev.shadowKey / Z_SHADOW_STEPS),
+      }
+      drawMount(ctx, mount, stock, dpr)
+    }
+    return png(ctx.canvas)
+  }
+
   flashCopied(id: number): void {
     const rec = this.recs.get(id)
     if (!rec) return
@@ -1154,19 +1207,30 @@ function depthRank(slides: SlideState[], slide: SlideState): number {
  * and that line already goes round the tab.
  */
 function shadowStack(z: number): string {
+  const [contact, soft] = shadowParts(z)
+  const css = (s: Shade): string =>
+    `${s.ox.toFixed(2)}px ${s.oy.toFixed(2)}px ${s.blur.toFixed(2)}px rgba(46,52,72,${s.alpha.toFixed(4)})`
+  return `${OUTER_LIP}, ${css(soft)}, ${css(contact)}`
+}
+
+/** The two shadows of a card at height `z`, the contact under the soft, as numbers for the photograph. */
+function shadowParts(z: number): [Shade, Shade] {
   const hmm = H_MM_BASE + H_MM_RANGE * z
-  const softBlur = SOFT_BLUR_BASE + SOFT_BLUR_PER_MM * hmm
   const softOy = SOFT_OY_PER_MM * hmm
-  const softA = Math.max(0, SOFT_ALPHA_BASE - SOFT_ALPHA_PER_MM * hmm)
-  const contactBlur = CONTACT_BLUR_BASE + CONTACT_BLUR_PER_MM * hmm
   const contactOy = CONTACT_OY_PER_MM * hmm
-  const contactA = Math.max(0, CONTACT_ALPHA_BASE - CONTACT_ALPHA_PER_MM * hmm)
-  const soft =
-    `${(softOy * OX_OVER_OY).toFixed(2)}px ${softOy.toFixed(2)}px ${softBlur.toFixed(2)}px ` +
-    `rgba(46,52,72,${softA.toFixed(4)})`
-  const contact =
-    `${(contactOy * OX_OVER_OY).toFixed(2)}px ${contactOy.toFixed(2)}px ${contactBlur.toFixed(2)}px ` +
-    `rgba(46,52,72,${contactA.toFixed(4)})`
-  return `${OUTER_LIP}, ${soft}, ${contact}`
+  return [
+    {
+      ox: contactOy * OX_OVER_OY,
+      oy: contactOy,
+      blur: CONTACT_BLUR_BASE + CONTACT_BLUR_PER_MM * hmm,
+      alpha: Math.max(0, CONTACT_ALPHA_BASE - CONTACT_ALPHA_PER_MM * hmm),
+    },
+    {
+      ox: softOy * OX_OVER_OY,
+      oy: softOy,
+      blur: SOFT_BLUR_BASE + SOFT_BLUR_PER_MM * hmm,
+      alpha: Math.max(0, SOFT_ALPHA_BASE - SOFT_ALPHA_PER_MM * hmm),
+    },
+  ]
 }
 

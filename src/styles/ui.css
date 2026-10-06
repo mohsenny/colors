@@ -37,6 +37,7 @@
   gap: 4px;
   user-select: none;
   pointer-events: none;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .lb-legend-row {
@@ -62,6 +63,13 @@
 
 .lb-legend-effect {
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
+/* Under this the dock comes within 15px of the legend. */
+@media (max-width: 918px) {
+  .lb-legend {
+    display: none;
+  }
 }
 
 /* -------------------------------------------------------------------- dock */
@@ -118,28 +126,18 @@
 
 /*
  * There has to be room on the right to absorb the shift. The expanded dock is
- * 566px wide, so its right edge lands at half the viewport plus 369px, which
- * runs off any window under about 738px, and the page cannot scroll to reach
- * it. The cutoff at 768 leaves 15px of that, which is all that is left of the
- * margin it was set with: anything else added to the dock moves the cutoff. Under it the dock keeps growing from
- * the centre and the play control does move: the better trade on a narrow
- * window, where the alternative is a control off the edge of the screen.
+ * 596px wide, so its right edge lands at half the viewport plus 384px, which
+ * runs off any window under about 768px, and the page cannot scroll to reach
+ * it. The cutoff at 798 leaves 15px of that, which is all that is left of the
+ * margin it was set with: anything else added to the dock moves the cutoff.
+ * Under it the dock keeps growing from the centre and the play control does
+ * move: the better trade on a narrow window, where the alternative is a
+ * control off the edge of the screen.
  */
-@media (max-width: 767px) {
+@media (max-width: 797px) {
   .lb-dock.is-expanded {
     transform: translateX(-50%);
   }
-}
-
-/* 0.35 is the floor: still legible against the bright surface, still an obvious
-   target. The dock is never allowed to disappear. */
-.lb-dock.is-idle {
-  opacity: 0.35;
-}
-
-.lb-dock.is-idle:hover,
-.lb-dock.is-idle:focus-within {
-  opacity: 1;
 }
 
 .lb-btn {
@@ -668,6 +666,7 @@
   right: calc(16px + env(safe-area-inset-right, 0px));
   top: calc(16px + env(safe-area-inset-top, 0px));
   z-index: 200;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .lb-tray-list {
@@ -878,12 +877,12 @@
        inside a phone: it grows to fill what is left rather than to a fixed
        size. */
     --lb-tl-w: 88px;
-    /* 214px is what the rest of the dock occupies at this type size, plus a
+    /* 242px is what the rest of the dock occupies at this type size, plus a
        6px breathing margin each side. Measure it again if the chrome changes:
        the uppercase mode labels alone moved it by 18px, and the options
        button went in without it, which put the paused dock 6px off each side
-       of a 390px phone. */
-    --lb-tl-open: min(304px, calc(100vw - 214px));
+       of a 390px phone. Save added 28px. */
+    --lb-tl-open: min(304px, calc(100vw - 242px));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
   }
@@ -894,7 +893,7 @@
     letter-spacing: 0.09em;
   }
 
-  /* The fan alone, in the footprint of an icon button, so the 196px above
+  /* The fan alone, in the footprint of an icon button, so the 242px above
      still holds. The accessible name never depended on the word. */
   .lb-deal {
     justify-content: center;
@@ -915,6 +914,11 @@
     bottom: calc(56px + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 24px);
     transform: translateX(-50%);
+  }
+
+  /* A note goes over the strip, which stands 34px tall, rather than on it. */
+  :root:has(.lb-tray) .lb-toast-at {
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
 
   .lb-tray-list {
@@ -975,4 +979,28 @@
       transform: translateY(6px);
     }
   }
+}
+
+/* -------------------------------------------------------------------- idle */
+
+/*
+ * Idle (src/ui/idle.ts): a few seconds without the mouse, a touch or a key, or
+ * the window left for another, and every word and control leaves the screen,
+ * the tabs and grips on the mounts with it, which leaves the room as a saved
+ * picture shows it. The cursor goes too. They leave slowly and come back at
+ * the usual pace.
+ */
+.is-idle .lb-dock,
+.is-idle .lb-legend,
+.is-idle .lb-tray,
+.is-idle .lb-tab,
+.is-idle .lb-grip {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: var(--lb-t-rest, 700ms);
+}
+
+.is-idle,
+.is-idle * {
+  cursor: none !important;
 }

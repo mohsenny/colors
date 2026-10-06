@@ -5,6 +5,7 @@ import './styles/global.css'
 import './styles/stage.css'
 import './styles/ui.css'
 import './styles/title.css'
+import './styles/toast.css'
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>

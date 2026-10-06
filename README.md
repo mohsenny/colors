@@ -19,7 +19,8 @@ it, and pull colours out when something lands.
 
 ## How to use it
 
-**Watch first.** Everything moves on its own. Give it a few seconds.
+**Watch first.** Everything moves on its own. Give it a few seconds. Leave it alone for
+three seconds and the controls step aside until you move again.
 
 | You want to | Do this |
 | --- | --- |
@@ -34,6 +35,7 @@ it, and pull colours out when something lands.
 | Go back a few seconds | Drag the timeline in the dock. It holds the last 15 seconds and replays them exactly |
 | Start over | Press <kbd>R</kbd>, or the refresh icon in the dock. Pinned sheets keep their colour |
 | Change the mixing | <kbd>B</kbd>, or the Paint / Light switch |
+| Save a picture | The arrow in the dock. The film as it is, without the tabs and controls, as a PNG |
 
 **Paint vs Light.** Two answers to the same question, and only the crossings change.
 Paint mixes the sheets the way pigment mixes: blue over yellow gives green, and a
@@ -79,16 +81,17 @@ Its source is in [lattice/](lattice/) and what it does and why is in
 ## Solar
 
 **[Open Solar](https://mohsenny.github.io/whoami/solar/)**, the third: the Sun, the
-planets, the Moon and the moons of Jupiter and Saturn where they really are, at their
-true sizes and distances. Become any of them to see the others from there, run the clock
-up to a year a second either way, and step from eclipse to eclipse. Same chrome with the
-lights out. Its source is in [solar/](solar/) and the why is in
+planets and Pluto, the Moon and the moons of Jupiter, Saturn and Pluto where they really
+are, at their true sizes and distances. Become any of them to see the others from there,
+run the clock up to a year a second either way, and step from eclipse to eclipse. Same
+chrome with the lights out. Its source is in [solar/](solar/) and the why is in
 [solar/PRD.md](solar/PRD.md).
 
 Its planet and Moon maps are by
-[Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0), the
-moons of Jupiter and Saturn are NASA, JPL and USGS mosaics, and the stars are the Yale
-Bright Star Catalogue.
+[Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0), the round
+moons of Jupiter and Saturn are NASA, JPL and USGS mosaics, Pluto's is drawn in code and
+the stars are the Yale Bright Star Catalogue. The small moons and Charon show as plain
+colours.
 
 ## Running it locally
 

@@ -1,11 +1,13 @@
 /*
  * Where everything is, and which way it is turned, at any moment. Positions
  * come from Astronomy Engine (VSOP87 for the planets, ELP for the Moon, L1.2
- * for the moons of Jupiter) and from Meeus for the moons of Saturn, all
- * checked against JPL Horizons. The turn of each planet and of the Moon is
- * the IAU's, so the right face of the Earth is in daylight and the Moon shows
- * the side it really shows; the moons of the giants keep one face to their
- * planet, as they do.
+ * for the big moons of Jupiter, its own integration for Pluto), from Meeus for
+ * the round moons of Saturn and from JPL's mean elements for the rest, all
+ * checked against JPL Horizons. The turn of each planet, of Pluto and of the
+ * Moon is the IAU's, so the right face of the Earth is in daylight and the
+ * Moon shows the side it really shows; the other moons keep one face to their
+ * planet, as all but Hyperion, Himalia and Phoebe do (those three have no map
+ * to show which way they face).
  *
  * The frame is the ecliptic of J2000 with the Sun at the middle and km as the
  * unit: x toward the March equinox, z toward ecliptic north, so the plane the
@@ -16,6 +18,8 @@ import { Body as AE, GeoMoon, HelioVector, JupiterMoons, MakeTime, RotationAxis 
 import type { AstroTime } from 'astronomy-engine'
 import { AU_KM, BODIES, bodyById } from './bodies'
 import type { BodyId } from './bodies'
+import { isKepler, keplerMoon } from './kepler'
+import type { KeplerMoon } from './kepler'
 import { saturnMoon } from './saturn'
 import type { SaturnMoon } from './saturn'
 
@@ -31,7 +35,7 @@ export function toEcliptic(x: number, y: number, z: number): Vec3 {
   return [x, CE * y + SE * z, -SE * y + CE * z]
 }
 
-/** The Sun, the planets and the Moon, which Astronomy Engine knows the turn of too. */
+/** The Sun, the planets, Pluto and the Moon, which Astronomy Engine knows the turn of too. */
 const ENGINE: Partial<Record<BodyId, AE>> = {
   sun: AE.Sun,
   mercury: AE.Mercury,
@@ -43,6 +47,7 @@ const ENGINE: Partial<Record<BodyId, AE>> = {
   saturn: AE.Saturn,
   uranus: AE.Uranus,
   neptune: AE.Neptune,
+  pluto: AE.Pluto,
 }
 
 /** A body's centre and its own axes: to its prime meridian, 90 degrees east of that, and its north pole. */
@@ -113,19 +118,35 @@ function fromSaturn(id: SaturnMoon, jde: number): Vec3 {
   ]
 }
 
+/** A moon on its mean ellipse from its planet's centre, km, at a Julian ephemeris day. */
+function fromElements(id: KeplerMoon, jde: number): Vec3 {
+  const [x, y, z] = keplerMoon(id, jde)
+  return toEcliptic(x, y, z)
+}
+
 /** A moon from its planet's centre, km. */
 function fromPlanet(id: BodyId, time: AstroTime): Vec3 {
+  if (isKepler(id)) return fromElements(id, time.tt + J2000)
   const parent = bodyById(id)?.parent
   if (parent === 'jupiter') return km(JupiterMoons(time)[id as Galilean])
   if (parent === 'saturn') return fromSaturn(id as SaturnMoon, time.tt + J2000)
   return km(GeoMoon(time))
 }
 
+/** Charon's share of the mass of Pluto and Charon, as JPL Horizons has it. */
+const CHARON_SHARE = 0.10877
+
 /** Centre of a body, km from the Sun's. */
 export function centreOf(id: BodyId, time: AstroTime): Vec3 {
   if (id === 'sun') return [0, 0, 0]
   const parent = bodyById(id)?.parent
-  if (!parent) return km(HelioVector(ENGINE[id] as AE, time))
+  if (!parent) {
+    const c = km(HelioVector(ENGINE[id] as AE, time))
+    if (id !== 'pluto') return c
+    // Astronomy Engine follows the point Pluto and Charon both go round, so Pluto is off it, away from Charon.
+    const m = fromElements('charon', time.tt + J2000)
+    return [c[0] - CHARON_SHARE * m[0], c[1] - CHARON_SHARE * m[1], c[2] - CHARON_SHARE * m[2]]
+  }
   const p = centreOf(parent, time)
   const m = fromPlanet(id, time)
   return [p[0] + m[0], p[1] + m[1], p[2] + m[2]]
@@ -179,7 +200,11 @@ export function posesAt(ms: number): Poses {
     }
     let m: Vec3
     let axes: [Vec3, Vec3, Vec3]
-    if (b.parent === 'jupiter') {
+    if (isKepler(b.id)) {
+      m = fromElements(b.id, jde)
+      const next = fromElements(b.id, jde + 1e-3)
+      axes = locked(m, [next[0] - m[0], next[1] - m[1], next[2] - m[2]])
+    } else if (b.parent === 'jupiter') {
       const s = jupiter[b.id as Galilean]
       m = km(s)
       axes = locked(m, toEcliptic(s.vx, s.vy, s.vz))
@@ -208,17 +233,30 @@ export const PERIOD: Partial<Record<BodyId, number>> = {
   saturn: 10759.22,
   uranus: 30688.5,
   neptune: 60182,
+  pluto: 90560,
+  metis: 0.294779,
+  adrastea: 0.29826,
+  amalthea: 0.498179,
+  thebe: 0.674536,
   io: 1.769138,
   europa: 3.551181,
   ganymede: 7.154553,
   callisto: 16.689018,
+  himalia: 250.56,
+  prometheus: 0.612988,
+  pandora: 0.628506,
+  epimetheus: 0.694589,
+  janus: 0.694589,
   mimas: 0.942422,
   enceladus: 1.370218,
   tethys: 1.887802,
   dione: 2.736915,
   rhea: 4.518212,
   titan: 15.945421,
+  hyperion: 21.27666,
   iapetus: 79.3215,
+  phoebe: 550.304,
+  charon: 6.387222,
 }
 
 /**

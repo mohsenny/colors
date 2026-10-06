@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
 import type { BlendMode } from '../core/types'
+import { useIdle } from './idle'
 import { Options } from './Options'
+import { PhotoButton } from './PhotoButton'
 import { Timeline } from './Timeline'
 import type { TimelineProps } from './Timeline'
 
@@ -22,10 +24,8 @@ export interface DockProps {
   onBlendChange(mode: BlendMode): void
   onSlideCountChange(count: number): void
   onWarmthChange(warmth: number): void
+  onPhoto(): void
 }
-
-/** Quiet time before the chrome recedes. Long enough to not flicker mid-reach. */
-const IDLE_MS = 2400
 
 function Icon({ children }: { children: ReactElement | ReactElement[] }): ReactElement {
   return (
@@ -146,56 +146,14 @@ export function Dock(props: DockProps): ReactElement {
     onBlendChange,
     onSlideCountChange,
     onWarmthChange,
+    onPhoto,
   } = props
-  const [idle, setIdle] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const moreRef = useRef<HTMLButtonElement | null>(null)
 
-  useEffect(() => {
-    let timer = 0
-
-    const arm = (): void => {
-      window.clearTimeout(timer)
-      // Paused is a studying state: the controls stay fully present. Listeners
-      // stay attached while paused so the activity that resumes playback is
-      // itself what clears a stale idle flag. An open drawer is the same kind
-      // of state: you opened it to change something, so it waits.
-      if (!playing || optionsOpen) return
-      timer = window.setTimeout(() => {
-        const root = rootRef.current
-        // Keyboard users park focus on a control; fading it out would be a trap.
-        if (root && root.contains(document.activeElement)) return
-        setIdle(true)
-      }, IDLE_MS)
-    }
-
-    const wake = (): void => {
-      setIdle(false)
-      arm()
-    }
-
-    arm()
-    const passive = { passive: true } as const
-    window.addEventListener('pointermove', wake, passive)
-    window.addEventListener('pointerdown', wake, passive)
-    window.addEventListener('wheel', wake, passive)
-    window.addEventListener('touchstart', wake, passive)
-    window.addEventListener('keydown', wake)
-    window.addEventListener('focusin', wake)
-    window.addEventListener('focusout', wake)
-
-    return () => {
-      window.clearTimeout(timer)
-      window.removeEventListener('pointermove', wake)
-      window.removeEventListener('pointerdown', wake)
-      window.removeEventListener('wheel', wake)
-      window.removeEventListener('touchstart', wake)
-      window.removeEventListener('keydown', wake)
-      window.removeEventListener('focusin', wake)
-      window.removeEventListener('focusout', wake)
-    }
-  }, [playing, optionsOpen])
+  // An open drawer is a change being made, so the chrome waits for it.
+  useIdle(optionsOpen)
 
   /*
    * The drawer is a transient layer, so touching anything else puts it away.
@@ -246,7 +204,7 @@ export function Dock(props: DockProps): ReactElement {
   return (
     <div
       ref={rootRef}
-      className={`lb-dock${idle && playing ? ' is-idle' : ''}${
+      className={`lb-dock${
         // The dock has to know, not just the timeline: it shifts by half the
         // growth so the widening happens to the right of the play button.
         timeline.expanded ? ' is-expanded' : ''
@@ -294,6 +252,13 @@ export function Dock(props: DockProps): ReactElement {
           Light
         </button>
       </div>
+
+      <PhotoButton
+        onPress={() => {
+          setOptionsOpen(false)
+          onPhoto()
+        }}
+      />
 
       <button
         ref={moreRef}

@@ -27,9 +27,15 @@
   --sl-hover: rgba(255, 255, 255, 0.07);
   --sl-press: rgba(255, 255, 255, 0.11);
   --sl-on: rgba(255, 255, 255, 0.1);
-  /* The one colour the dock carries: the dot that says the clock is playing now. */
+  /* The dock's colours: the dot that says the clock is playing now, and the
+     eclipses, the Sun in gold for a solar one and the Moon turned copper for a
+     lunar one. */
   --sl-live: #ff5b4f;
   --sl-live-glow: rgba(255, 91, 79, 0.6);
+  --sl-solar: rgb(255, 214, 140);
+  --sl-solar-glow: rgba(255, 190, 90, 0.55);
+  --sl-lunar: rgb(226, 124, 82);
+  --sl-lunar-glow: rgba(226, 110, 70, 0.5);
 
   /* The names in the corner, white on this page. */
   --lb-title-ink: rgba(255, 255, 255, 0.3);
@@ -48,6 +54,7 @@
   --lb-t-enter: 240ms;
   --lb-t-fade: 320ms;
   --lb-t-mode: 420ms;
+  --lb-t-rest: 700ms;
 
   /* --- shadow language --------------------------------------------------- */
   /* On black a shadow cannot darken anything, so it only deepens the glass. */

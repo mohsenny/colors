@@ -13,7 +13,7 @@
  */
 
 import type { Eye } from './camera'
-import { across, cross, dot, len, norm, perspective, scale, viewRotation } from './camera'
+import { across, circleOf, cross, dot, frameOf, len, norm, scale, viewRotation } from './camera'
 import type { BodyId } from '../sky/bodies'
 import type { Vec3 } from '../sky/ephemeris'
 import type { Stars } from '../sky/stars'
@@ -69,27 +69,19 @@ export interface FrameDraw {
 }
 
 /*
- * One quad per body, laid in the plane one unit in front of the eye along the
- * line to the body's centre, so interpolation hands each pixel the exact
- * direction of its ray in the body's own frame. A body too close for that
- * plane to hold it is drawn over the whole screen instead.
+ * One quad per body, over the part of the screen it can reach: on the
+ * stereographic plane the sky round a body is always a circle (see
+ * camera.ts), so that is a box round the circle. Each pixel turns its place
+ * on the plane back into the direction of its ray, in the body's own frame.
  */
 const BODY_VS = `#version 300 es
 layout(location = 0) in vec2 aCorner;
-uniform mat4 uProj;
-uniform mat3 uLocal;
-uniform float uExt;
-uniform float uFull;
-uniform vec2 uTan;
-out vec3 vRay;
+uniform vec4 uBox;
+uniform vec2 uScale;
+out vec2 vPlane;
 void main() {
-  if (uFull > 0.5) {
-    vRay = transpose(uLocal) * vec3(aCorner.x * uTan.x, aCorner.y * uTan.y, -1.0);
-    gl_Position = vec4(aCorner, 0.0, 1.0);
-  } else {
-    vRay = vec3(aCorner * uExt, 1.0);
-    gl_Position = uProj * vec4(uLocal * vRay, 1.0);
-  }
+  vPlane = uBox.xy + aCorner * uBox.zw;
+  gl_Position = vec4(vPlane / uScale, 0.0, 1.0);
 }`
 
 const COMMON = `
@@ -127,8 +119,9 @@ vec3 encode(vec3 c) {
 
 const BODY_FS = `#version 300 es
 precision highp float;
-in vec3 vRay;
+in vec2 vPlane;
 out vec4 o;
+uniform mat3 uToLocal;
 uniform float uD;
 uniform vec3 uPole;
 uniform vec3 uAxX;
@@ -196,7 +189,7 @@ float cells(vec3 x, float t) {
 }
 
 void main() {
-  vec3 dl = normalize(vRay);
+  vec3 dl = normalize(uToLocal * vec3(2.0 * vPlane, dot(vPlane, vPlane) - 1.0));
 
   // The ray against the body, with the centre at (0, 0, uD). Worked through
   // cross products throughout, so nothing is the small difference of two
@@ -365,8 +358,9 @@ void main() {
  */
 const GLOW_FS = `#version 300 es
 precision highp float;
-in vec3 vRay;
+in vec2 vPlane;
 out vec4 o;
+uniform mat3 uToLocal;
 uniform float uAng;
 uniform float uPx;
 uniform float uSeen;
@@ -374,7 +368,7 @@ uniform float uCorona;
 uniform vec3 uCover;
 uniform float uCoverAng;
 void main() {
-  vec3 dl = normalize(vRay);
+  vec3 dl = normalize(uToLocal * vec3(2.0 * vPlane, dot(vPlane, vPlane) - 1.0));
   float th = atan(length(dl.xy), dl.z);
   float x = th / uAng;
   float px = uAng / uPx;
@@ -398,15 +392,22 @@ void main() {
   o = vec4(c, 0.0);
 }`
 
+/*
+ * Stars and orbit lines are projected a point at a time: x and y over one
+ * plus how far ahead the point is, the view looking down -z. A star right
+ * behind the eye would land at infinity, so it is left out.
+ */
 const STARS_VS = `#version 300 es
 layout(location = 1) in vec3 aDir;
 layout(location = 2) in vec4 aLook;
-uniform mat4 uVP;
+uniform mat3 uView;
+uniform vec2 uScale;
 uniform float uDpr;
 uniform float uDim;
 out vec4 vLook;
 void main() {
-  gl_Position = uVP * vec4(aDir, 1.0);
+  vec3 v = uView * aDir;
+  gl_Position = v.z < 0.999 ? vec4(v.xy / uScale, 0.0, 1.0 - v.z) : vec4(0.0, 0.0, 2.0, 1.0);
   gl_PointSize = aLook.w * uDpr;
   vLook = vec4(aLook.rgb * uDim, 1.0);
 }`
@@ -424,10 +425,12 @@ void main() {
 const ORBIT_VS = `#version 300 es
 layout(location = 3) in vec3 aPos;
 layout(location = 4) in float aAlpha;
-uniform mat4 uVP;
+uniform mat3 uView;
+uniform vec2 uScale;
 out float vAlpha;
 void main() {
-  gl_Position = uVP * vec4(aPos, 1.0);
+  vec3 v = uView * aPos;
+  gl_Position = vec4(v.xy / uScale, 0.0, length(v) - v.z);
   vAlpha = aAlpha;
 }`
 
@@ -469,8 +472,6 @@ function uniforms(gl: WebGL2RenderingContext, p: WebGLProgram): Uniforms {
   return out
 }
 
-/** Past this, a body's quad would have to reach behind the eye. */
-const QUAD_MAX = 1.15
 /** The blur of a point, device px. */
 const DOT_R = 1.25
 /** Thousands of km: the unit orbit lines are handed over in. */
@@ -488,7 +489,6 @@ export class Renderer {
   private su: Uniforms
   private ou: Uniforms
   private quadVao: WebGLVertexArrayObject
-  private fullVao: WebGLVertexArrayObject
   private starsVao: WebGLVertexArrayObject
   private starCount = 0
   private orbitVao: WebGLVertexArrayObject
@@ -518,13 +518,6 @@ export class Renderer {
     gl.bindVertexArray(this.quadVao)
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW)
-    gl.enableVertexAttribArray(0)
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
-
-    this.fullVao = gl.createVertexArray() as WebGLVertexArrayObject
-    gl.bindVertexArray(this.fullVao)
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
     gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
 
@@ -625,18 +618,17 @@ export class Renderer {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
     const { eye } = frame
-    const aspect = w / h
+    const fr = frameOf(eye, w / h)
     const rot = viewRotation(eye)
-    const ty = Math.tan(eye.fov / 2)
-    const tx = ty * aspect
-    const px = (2 * ty) / h
+    const view = new Float32Array([rot[0], rot[1], rot[2], rot[4], rot[5], rot[6], rot[8], rot[9], rot[10]])
+    // A device pixel on the plane, and the sky it covers in a direction.
+    const unit = (2 * fr.sy) / h
+    const pxAt = (d: Vec3): number => unit * (1 + dot(d, fr.forward))
 
-    // Stars and orbit lines, through one matrix with the eye at the origin.
-    const proj = perspective(eye.fov, aspect, 1e-3, 1e12)
-    const vp = mulRot(proj, rot)
     if (this.starCount) {
       gl.useProgram(this.starsProg)
-      gl.uniformMatrix4fv(this.su.uVP, false, vp)
+      gl.uniformMatrix3fv(this.su.uView, false, view)
+      gl.uniform2f(this.su.uScale, fr.sx, fr.sy)
       gl.uniform1f(this.su.uDpr, this.dpr)
       gl.uniform1f(this.su.uDim, 1)
       gl.bindVertexArray(this.starsVao)
@@ -645,7 +637,8 @@ export class Renderer {
 
     if (frame.orbits.length) {
       gl.useProgram(this.orbitProg)
-      gl.uniformMatrix4fv(this.ou.uVP, false, vp)
+      gl.uniformMatrix3fv(this.ou.uView, false, view)
+      gl.uniform2f(this.ou.uScale, fr.sx, fr.sy)
       gl.bindVertexArray(this.orbitVao)
       let total = 0
       for (const o of frame.orbits) total += o.count
@@ -669,53 +662,52 @@ export class Renderer {
       }
     }
 
-    const bodyProj = perspective(eye.fov, aspect, 1e-3, 100)
-    const frameOf = (rel: Vec3): { D: number; local: Float32Array; u: Vec3; v: Vec3; w: Vec3 } => {
+    const localOf = (rel: Vec3): { D: number; toLocal: Float32Array; u: Vec3; v: Vec3; w: Vec3 } => {
       const D = len(rel)
       const wv = scale(rel, 1 / D)
       const v = across(eye.up, wv, eye.forward)
       const u = cross(v, wv)
-      // Local to view: the view rotation applied to each axis.
-      const local = new Float32Array(9)
-      const put = (col: number, a: Vec3): void => {
-        local[col * 3] = rot[0] * a[0] + rot[4] * a[1] + rot[8] * a[2]
-        local[col * 3 + 1] = rot[1] * a[0] + rot[5] * a[1] + rot[9] * a[2]
-        local[col * 3 + 2] = rot[2] * a[0] + rot[6] * a[1] + rot[10] * a[2]
+      // View to local: a row for each local axis, in the view's terms.
+      const toLocal = new Float32Array(9)
+      const put = (row: number, a: Vec3): void => {
+        for (let i = 0; i < 3; i++) toLocal[i * 3 + row] = rot[i] * a[0] + rot[4 + i] * a[1] + rot[8 + i] * a[2]
       }
       put(0, u)
       put(1, v)
       put(2, wv)
-      return { D, local, u, v, w: wv }
+      return { D, toLocal, u, v, w: wv }
     }
     const inLocal = (a: Vec3, f: { u: Vec3; v: Vec3; w: Vec3 }, s = 1): [number, number, number] => [
       dot(a, f.u) * s,
       dot(a, f.v) * s,
       dot(a, f.w) * s,
     ]
-    const place = (u: Uniforms, f: { D: number; local: Float32Array }, reach: number): void => {
-      gl.uniformMatrix3fv(u.uLocal, false, f.local)
-      gl.uniformMatrix4fv(u.uProj, false, bodyProj)
-      gl.uniform2f(u.uTan, tx, ty)
-      const bound = f.D > reach * 1.0001 ? Math.asin(reach / f.D) : Math.PI
-      const wide = bound + 8 * px > QUAD_MAX
-      gl.uniform1f(u.uFull, wide ? 1 : 0)
-      gl.uniform1f(u.uExt, Math.tan(Math.min(bound, QUAD_MAX)) * 1.04 + 8 * px)
-      gl.bindVertexArray(wide ? this.fullVao : this.quadVao)
-    }
-    const drawShape = (full: boolean): void => {
-      if (full) gl.drawArrays(gl.TRIANGLES, 0, 3)
-      else gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+    // The quad over the screen where the sky within `bound` of a body's
+    // centre lands, with a few pixels to spare. False when none of it is on screen.
+    const place = (u: Uniforms, f: { toLocal: Float32Array; w: Vec3 }, bound: number): boolean => {
+      const c = circleOf(fr, f.w, bound)
+      const m = c ? c.r + 8 * unit : 0
+      const x0 = c ? Math.max(-fr.sx, c.x - m) : -fr.sx
+      const x1 = c ? Math.min(fr.sx, c.x + m) : fr.sx
+      const y0 = c ? Math.max(-fr.sy, c.y - m) : -fr.sy
+      const y1 = c ? Math.min(fr.sy, c.y + m) : fr.sy
+      if (x0 >= x1 || y0 >= y1) return false
+      gl.uniformMatrix3fv(u.uToLocal, false, f.toLocal)
+      gl.uniform2f(u.uScale, fr.sx, fr.sy)
+      gl.uniform4f(u.uBox, (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2)
+      return true
     }
 
     const sunBody = frame.bodies.find((b) => b.id === 'sun')
     const drawGlow = (b: BodyDraw, seen: number, corona: number): void => {
-      const f = frameOf(b.rel)
+      const f = localOf(b.rel)
       if (f.D <= b.radius) return
       const ang = Math.asin(b.radius / f.D)
+      const px = pxAt(f.w)
       const reachAng = Math.min(Math.PI / 2, 16 * Math.max(ang * 2.2, 12 * px))
       gl.useProgram(this.glow)
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
-      place(this.gu, f, f.D * Math.sin(reachAng))
+      if (!place(this.gu, f, reachAng)) return
       gl.uniform1f(this.gu.uAng, ang)
       gl.uniform1f(this.gu.uPx, px)
       gl.uniform1f(this.gu.uSeen, seen)
@@ -728,28 +720,22 @@ export class Renderer {
         gl.uniform3f(this.gu.uCover, 0, 0, -1)
         gl.uniform1f(this.gu.uCoverAng, 0)
       }
-      drawShape(full(f.D, f.D * Math.sin(reachAng), px))
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
 
-    gl.useProgram(this.body)
-    gl.uniform1i(this.bu.uMap, 0)
-    gl.uniform1i(this.bu.uNight, 1)
-    gl.uniform1i(this.bu.uClouds, 2)
-    gl.uniform1i(this.bu.uRings, 3)
-
-    for (const b of frame.bodies) {
-      const f = frameOf(b.rel)
+    const drawBody = (b: BodyDraw): void => {
+      const f = localOf(b.rel)
       const R = b.radius
-      if (f.D <= R * 1.001) continue
+      if (f.D <= R * 1.001) return
       const u = this.bu
       gl.useProgram(this.body)
       const reach = Math.max(1 + (b.air ? b.air.depth * 1.2 : 0), b.rings ? b.rings.outer / R : 1) * R
-      const angR = Math.asin(R / f.D)
-      const rpx = angR / px
+      const px = pxAt(f.w)
+      const rpx = Math.asin(R / f.D) / px
       // Small bodies are drawn as points, which need room around them.
       const dotMix = 1 - smoothstep(0.7, 2.2, rpx)
-      const room = Math.max(reach, f.D * Math.sin(Math.min(QUAD_MAX, 6 * DOT_R * this.dpr * px)))
-      place(u, f, room)
+      const room = Math.max(f.D > reach * 1.0001 ? Math.asin(reach / f.D) : Math.PI, 6 * DOT_R * this.dpr * px)
+      if (!place(u, f, room)) return
       gl.uniform1f(u.uD, f.D / R)
       gl.uniform3fv(u.uPole, inLocal(b.axes[2], f))
       gl.uniform3fv(u.uAxX, inLocal(b.axes[0], f))
@@ -784,8 +770,18 @@ export class Renderer {
       this.bind(1, b.id === 'earth' ? 'night' : 'dark')
       this.bind(2, b.id === 'earth' ? 'clouds' : 'dark')
       this.bind(3, b.rings ? 'rings' : 'dark')
-      drawShape(full(f.D, room, px))
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+    }
 
+    gl.useProgram(this.body)
+    gl.uniform1i(this.bu.uMap, 0)
+    gl.uniform1i(this.bu.uNight, 1)
+    gl.uniform1i(this.bu.uClouds, 2)
+    gl.uniform1i(this.bu.uRings, 3)
+    gl.bindVertexArray(this.quadVao)
+
+    for (const b of frame.bodies) {
+      drawBody(b)
       // The Sun's light spills round whatever is behind it, and is covered by
       // whatever is in front.
       if (b === sunBody) drawGlow(b, frame.sunSeen, 0)
@@ -803,27 +799,9 @@ export class Renderer {
   }
 }
 
-function full(D: number, reach: number, px: number): boolean {
-  const bound = D > reach * 1.0001 ? Math.asin(reach / D) : Math.PI
-  return bound + 8 * px > QUAD_MAX
-}
-
 function smoothstep(a: number, b: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
   return t * t * (3 - 2 * t)
-}
-
-/** Projection after a pure rotation, column-major. */
-function mulRot(p: Float32Array, r: Float32Array): Float32Array {
-  const out = new Float32Array(16)
-  for (let c = 0; c < 4; c++) {
-    for (let row = 0; row < 4; row++) {
-      let s = 0
-      for (let k = 0; k < 4; k++) s += p[k * 4 + row] * r[c * 4 + k]
-      out[c * 4 + row] = s
-    }
-  }
-  return out
 }
 
 /** A star's colour from its B-V index, kept pale: stars look nearly white to the eye. */

@@ -332,6 +332,11 @@ export class Painter {
     this.cache.clear()
   }
 
+  /** The canvas as last drawn and its device pixels to the CSS pixel, for a photograph. */
+  get picture(): { canvas: HTMLCanvasElement; dpr: number } {
+    return { canvas: this.canvas, dpr: this.dpr }
+  }
+
   resize(vp: Viewport): void {
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5)
     if (vp.width === this.cssW && vp.height === this.cssH && dpr === this.dpr) return

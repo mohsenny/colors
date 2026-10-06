@@ -20,6 +20,7 @@
   gap: 4px;
   user-select: none;
   pointer-events: none;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .lb-legend-row {
@@ -34,7 +35,7 @@
 
 .lb-legend-gesture {
   flex: 0 0 auto;
-  width: 98px;
+  width: 122px;
   white-space: nowrap;
   color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
 }
@@ -43,8 +44,9 @@
   color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
 }
 
-/* Solar's dock is the widest of the three, and under this it reaches the legend. */
-@media (max-width: 1079px) {
+/* Solar's dock is the widest of the three. Under this, with the longest name in
+   the chip, it comes within 15px of the legend. */
+@media (max-width: 1170px) {
   .lb-legend {
     display: none;
   }
@@ -87,27 +89,20 @@
   transform: translateX(calc(-50% + (var(--lb-tl-open) - var(--lb-tl-w)) / 2));
 }
 
-/* There has to be room on the right to absorb the shift. Under this the dock
-   grows from the centre, rather than off the edge of the screen, and the tape
-   opens only as far as there is room: 540px is the rest of the dock, with the
-   longest name in the chip, and a margin either side. */
-@media (max-width: 959px) {
+/* There has to be room on the right to absorb the shift. With the longest name
+   in the chip the cutoff at 999 leaves 15px of it, and anything added to the
+   dock moves it. Under it the dock grows from the centre, rather than off the
+   edge of the screen, and the tape opens only as far as there is room: 580px
+   is the rest of the dock, with the longest name in the chip, and a margin
+   either side. */
+@media (max-width: 998px) {
   .lb-dock {
-    --lb-tl-open: min(260px, calc(100vw - 540px));
+    --lb-tl-open: min(260px, calc(100vw - 580px));
   }
 
   .lb-dock.is-expanded {
     transform: translateX(-50%);
   }
-}
-
-.lb-dock.is-idle {
-  opacity: 0.35;
-}
-
-.lb-dock.is-idle:hover,
-.lb-dock.is-idle:focus-within {
-  opacity: 1;
 }
 
 .lb-btn {
@@ -361,6 +356,9 @@
 
 .lb-opt-label {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   min-width: 44px;
   font-size: 9.5px;
   font-weight: 500;
@@ -376,6 +374,7 @@
   right: calc(16px + env(safe-area-inset-right, 0px));
   top: calc(16px + env(safe-area-inset-top, 0px));
   z-index: 200;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
 .lb-tray-list {
@@ -456,7 +455,8 @@
   gap: 1px;
   padding: 5px;
   width: 240px;
-  max-height: calc(100dvh - 80px);
+  /* Clear of the title above it and the dock below; past that it scrolls. */
+  max-height: calc(100dvh - 110px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -466,6 +466,11 @@
 
 .lt-bodies.is-open {
   transform: translate(0, 0) scale(1);
+}
+
+/* Short of room, the drawer scrolls rather than squeeze its rows. */
+.lt-bodies > * {
+  flex-shrink: 0;
 }
 
 .lt-body-row {
@@ -695,24 +700,99 @@
 
 /* ------------------------------------------------------------------ marks */
 
-/* An eclipse peak the clock ran through: the Sun's gold, so it reads as one. */
+/* An eclipse peak the clock ran through, drawn as its icon is, small: a solar
+   one the Sun, a gold disc in its glow; a lunar one the Moon, a copper
+   crescent. */
 .sl-mark {
   position: absolute;
   top: 50%;
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: rgba(255, 214, 140, 0.92);
-  box-shadow: 0 0 4px rgba(255, 190, 90, 0.55);
   transform: translate(-50%, -50%);
   transition:
     width var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
-    height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+    height var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-quick, 120ms) ease;
+}
+
+.sl-mark.is-solar {
+  background: var(--sl-solar, rgb(255, 214, 140));
+  box-shadow: 0 0 4px var(--sl-solar-glow, rgba(255, 190, 90, 0.55));
+}
+
+/* The dark of the Moon is a disc cut from the top right, scaling with the mark
+   as the tape opens out. */
+.sl-mark.is-lunar {
+  background: radial-gradient(
+    circle at 80% 20%,
+    var(--lb-surface, #030407) 44%,
+    var(--sl-lunar, rgb(226, 124, 82)) 48%
+  );
+  box-shadow: 0 0 4px var(--sl-lunar-glow, rgba(226, 110, 70, 0.5));
 }
 
 .lb-timeline.is-expanded .sl-mark {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
+}
+
+.sl-mark.is-pointed {
+  transform: translate(-50%, -50%) scale(1.35);
+}
+
+/* Which eclipse a mark is, while the pointer is on it. Above the drawer, which
+   comes later in the dock and would otherwise blur it. */
+.sl-mark-tip {
+  position: absolute;
+  bottom: calc(100% + 13px);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 11px 0 8px;
+  border: 1px solid var(--lb-hairline, rgba(255, 255, 255, 0.1));
+  border-radius: var(--lb-r-pill, 999px);
+  background: var(--lb-panel-strong, rgba(30, 33, 42, 0.92));
+  box-shadow: var(--lb-shadow-soft, 0 6px 18px rgba(0, 0, 0, 0.42));
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: sl-tip-in var(--lb-t-quick, 120ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+@keyframes sl-tip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 3px);
+  }
+}
+
+.sl-mark-tip-kind {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+}
+
+.sl-mark-tip-when {
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: slashed-zero tabular-nums;
+  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
+}
+
+.sl-eclipse-icon {
+  flex: none;
+}
+
+.sl-eclipse-icon.is-solar {
+  color: var(--sl-solar, rgb(255, 214, 140));
+  filter: drop-shadow(0 0 2px var(--sl-solar-glow, rgba(255, 190, 90, 0.55)));
+}
+
+.sl-eclipse-icon.is-lunar {
+  color: var(--sl-lunar, rgb(226, 124, 82));
+  filter: drop-shadow(0 0 2px var(--sl-lunar-glow, rgba(226, 110, 70, 0.5)));
 }
 
 /* ----------------------------------------------------------------- speed */
@@ -874,10 +954,13 @@
 
 /* ------------------------------------------------ narrow viewports (760px) */
 
-/* Now keeps its dot and the clock drops UTC, to leave the tape room to open. */
+/* Now keeps its dot and the clock drops UTC, to leave the tape room to open.
+   520px is the rest of the dock here, counted the same way. Near the bottom of
+   the range the tape gives way while playing too. */
 @media (max-width: 759px) {
   .lb-dock {
-    --lb-tl-open: min(260px, calc(100vw - 480px));
+    --lb-tl-w: min(112px, calc(100vw - 520px));
+    --lb-tl-open: min(260px, calc(100vw - 520px));
   }
 
   .sl-now {
@@ -897,7 +980,8 @@
 @media (max-width: 619px) {
   .lb-dock {
     --lb-tl-w: 48px;
-    --lb-tl-open: min(260px, calc(100vw - 311px));
+    /* 339px is the rest of the dock, and 7px either side. */
+    --lb-tl-open: min(260px, calc(100vw - 339px));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
   }
@@ -937,4 +1021,54 @@
   .lt-readout .lb-tray-list {
     min-width: 0;
   }
+
+  /* The readout is up by the title here, so the drawer stops below it too. */
+  .lt-bodies {
+    max-height: calc(100dvh - 190px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Under 390px the dock and its margins are wider than the phone. The spacing
+   closes up first, all but the tape's, then the tape gives way while playing,
+   never under 20px, and opens to what is left when paused. 307px is the rest
+   of the dock closed up, and 7px either side. */
+@media (max-width: 389px) {
+  .lb-dock {
+    --lb-tl-w: max(20px, min(48px, calc(100vw - 307px)));
+    --lb-tl-open: max(var(--lb-tl-w), calc(100vw - 307px));
+    gap: 0;
+    padding: 5px 4px;
+  }
+
+  .sl-clock {
+    margin: 0;
+  }
+
+  .sl-knob {
+    gap: 0;
+    padding-right: 3px;
+  }
+}
+
+/* -------------------------------------------------------------------- idle */
+
+/*
+ * Idle (src/ui/idle.ts, shared): a few seconds without the mouse, a touch or a
+ * key, or the window left for another, and every word and control leaves the
+ * screen, the names in the sky with it and the paths too (the instrument fades
+ * those), which leaves the sky as a saved picture shows it. The cursor goes
+ * too. They leave slowly and come back at the usual pace.
+ */
+.is-idle .lb-dock,
+.is-idle .lb-legend,
+.is-idle .lb-tray,
+.is-idle .sl-labels {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: var(--lb-t-rest, 700ms);
+}
+
+.is-idle,
+.is-idle * {
+  cursor: none !important;
 }

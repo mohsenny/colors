@@ -1,13 +1,15 @@
 /*
  * The surface of every body, as photographed and stitched by Solar System
- * Scope (CC BY 4.0), the moons of Jupiter and Saturn from the Voyager,
+ * Scope (CC BY 4.0), the round moons of Jupiter and Saturn from the Voyager,
  * Galileo and Cassini mosaics of NASA, JPL and the USGS, and the catalogue
  * the stars are drawn from. Each map is an equirectangular picture:
  * longitude across, the prime meridian in the middle, north at the top.
- * Titan's ground is hidden under its haze, so it has none.
+ * Titan's ground is hidden under its haze, so it has none, and nor do the
+ * small moons or Charon, which show as their colour. Pluto's is drawn.
  */
 
 import type { BodyId } from '../sky/bodies'
+import { plutoMap } from './pluto'
 import callisto from '../assets/callisto.jpg'
 import dione from '../assets/dione.jpg'
 import earthClouds from '../assets/earth_clouds.jpg'
@@ -55,6 +57,9 @@ export const SURFACE: Partial<Record<BodyId, string>> = {
   uranus,
   neptune,
 }
+
+/** Maps drawn on the page rather than fetched, when first wanted. */
+export const DRAWN: Partial<Record<BodyId, () => string>> = { pluto: plutoMap }
 
 export const EARTH_NIGHT = earthNight
 export const EARTH_CLOUDS = earthClouds

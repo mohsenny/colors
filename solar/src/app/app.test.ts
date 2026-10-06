@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AU_KM, LIGHT_KM_S } from '../sky/bodies'
-import { covered, distanceLabel, lightLabel, sizeLabel } from './instrument'
+import { covered, crossesDisc, distanceLabel, lightLabel, sizeLabel } from './instrument'
 import { TAPE_S, Tape } from './tape'
 import { DEAD, clockLabel, dayLabel, dialOf, minuteLabel, notch, rateOf, speedLabel, speedSaid } from './time'
 
@@ -116,14 +116,15 @@ describe('the tape', () => {
   it('marks the eclipse peaks it runs through, either way', () => {
     const tape = new Tape()
     const peak = 5.5 * HOUR
-    tape.know(peak)
+    tape.know({ type: 'lunar', kind: 'Total', peak })
     tape.jump(0)
     const end = play(tape, 0, 10, HOUR)
     expect(tape.markings).toHaveLength(1)
-    expect(tape.at(tape.markings[0])).toBeCloseTo(peak, 3)
+    expect(tape.at(tape.markings[0].at)).toBeCloseTo(peak, 3)
+    expect(tape.markings[0].e.type).toBe('lunar')
     play(tape, end, 10, -HOUR)
     expect(tape.markings).toHaveLength(2)
-    for (const m of tape.markings) expect(tape.at(m)).toBeCloseTo(peak, 3)
+    for (const m of tape.markings) expect(tape.at(m.at)).toBeCloseTo(peak, 3)
     // Cut before the peak, the marks after it go too.
     tape.cut(0.2)
     expect(tape.markings).toHaveLength(0)
@@ -152,6 +153,28 @@ describe('the readout', () => {
     expect(sizeLabel(2 * deg)).toBe('2.00°')
     expect(sizeLabel(0.52 * deg)).toBe('31.2′')
     expect(sizeLabel((33.6 / 3600) * deg)).toBe('33.6″')
+    expect(sizeLabel((0.1 / 3600) * deg)).toBe('0.1″')
+    // Metis from the Earth, and Adrastea from Pluto.
+    expect(sizeLabel((0.0104 / 3600) * deg)).toBe('0.010″')
+    expect(sizeLabel((0.00055 / 3600) * deg)).toBe('0.00055″')
+  })
+})
+
+describe('names in the sky', () => {
+  // Jupiter's disc, 23 px in radius, at 0, 0, and a moon's name set 9 px right of its dot, 60 px long.
+  const jupiter = { x: 0, y: 0, r: 23 }
+  const name = (x: number, y: number) => [x + 5, y - 9, x + 69, y + 9]
+
+  it("keeps a moon's name off its planet from the planet's left", () => {
+    expect(crossesDisc(name(-60, 0), -60, 0, jupiter)).toBe(true)
+    expect(crossesDisc(name(-60, 25), -60, 25, jupiter)).toBe(true)
+  })
+
+  it('lets it be from the right, from well above, from far off, and over the planet', () => {
+    expect(crossesDisc(name(40, 0), 40, 0, jupiter)).toBe(false)
+    expect(crossesDisc(name(-60, 40), -60, 40, jupiter)).toBe(false)
+    expect(crossesDisc(name(-100, 0), -100, 0, jupiter)).toBe(false)
+    expect(crossesDisc(name(-10, 5), -10, 5, jupiter)).toBe(false)
   })
 })
 

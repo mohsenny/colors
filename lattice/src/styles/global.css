@@ -39,6 +39,7 @@
   --lb-t-enter: 240ms;
   --lb-t-fade: 320ms;
   --lb-t-mode: 420ms;
+  --lb-t-rest: 700ms;
 
   /* --- shadow language --------------------------------------------------- */
   /* Both lobes come from the slide formula in the spec: hmm = 1.6 + 5.2z,

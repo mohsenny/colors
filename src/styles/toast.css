@@ -1,0 +1,69 @@
+/*
+ * The note over the dock, shared by Lightbox, Lattice and Solar: the dock's
+ * glass and the legend's small capitals. Each note is a new element, so a
+ * second one starts its fade from the top rather than joining the first.
+ */
+.lb-toast-at {
+  position: fixed;
+  left: 50%;
+  bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+  z-index: 210;
+  transform: translateX(-50%);
+  pointer-events: none;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.is-idle .lb-toast-at {
+  opacity: 0;
+  transition-duration: var(--lb-t-rest, 700ms);
+}
+
+.lb-toast {
+  display: block;
+  padding: 6px 12px;
+  border: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  border-radius: var(--lb-r-pill, 999px);
+  background-color: var(--lb-panel, rgba(255, 255, 255, 0.82));
+  background-image: var(--lb-fibre);
+  background-size: 64px 64px;
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
+  box-shadow: var(
+    --lb-shadow-float,
+    3.4px 9.6px 27.1px rgba(46, 52, 72, 0.092),
+    0.8px 2.4px 5.1px rgba(46, 52, 72, 0.052)
+  );
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 12px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--lb-ink, rgba(26, 26, 30, 0.86));
+  opacity: 0;
+  animation: lb-toast 2400ms var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/*
+ * A fade and nothing else, so there is no movement to take away for reduced
+ * motion. Each app's global.css cuts every animation to 1ms there, which would
+ * end the note before it shows, so the note keeps its own time.
+ */
+@keyframes lb-toast {
+  10%,
+  80% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lb-toast {
+    animation-duration: 2400ms !important;
+  }
+}
+
+@media (max-width: 619px) {
+  .lb-toast-at {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+}

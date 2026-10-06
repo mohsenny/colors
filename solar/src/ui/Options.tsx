@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import { dayLabel, minuteLabel } from '../app/time'
 import type { Eclipse, EclipseSteps, EclipseType } from '../sky/eclipses'
-import { StepIcon } from './Icons'
+import { EclipseIcon, StepIcon } from './Icons'
 
 export interface OptionsProps {
   open: boolean
@@ -28,6 +28,7 @@ function Row({ type, steps, open, onWatch, onStep }: RowProps): ReactElement {
   return (
     <div className="lb-opt-row">
       <span className="lb-opt-label" aria-hidden="true">
+        <EclipseIcon type={type} />
         {type === 'solar' ? 'Solar' : 'Lunar'}
       </span>
       <div className="lb-stepper" role="group" aria-label={`${type === 'solar' ? 'Solar' : 'Lunar'} eclipses`}>

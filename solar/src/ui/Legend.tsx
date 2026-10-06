@@ -3,7 +3,8 @@ import type { ReactElement } from 'react'
 type Row = { key: string; gesture: string; effect: string }
 
 const ROWS: ReadonlyArray<Row> = [
-  { key: 'drag', gesture: 'Drag', effect: 'look around' },
+  { key: 'drag', gesture: 'Drag the sky', effect: 'look around' },
+  { key: 'ground', gesture: 'Drag the ground', effect: 'go round it' },
   { key: 'scroll', gesture: 'Scroll', effect: 'zoom' },
   { key: 'click', gesture: 'Click', effect: 'look at it' },
   { key: 'double', gesture: 'Double-click', effect: 'go there' },

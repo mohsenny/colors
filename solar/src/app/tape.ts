@@ -7,12 +7,20 @@
  * eclipse peaks the clock runs through are marked on it.
  */
 
+import type { Eclipse } from '../sky/eclipses'
+
 /** Seconds of watching the tape holds. */
 export const TAPE_S = 120
 const STEP_S = 1 / 30
 const SIZE = Math.round(TAPE_S / STEP_S)
 /** Eclipse peaks remembered, to mark when the clock runs through one. */
 const KNOWN = 12
+
+/** An eclipse the clock ran through, and where its peak falls on the tape, 0 the oldest moment and 1 the newest. */
+export interface Mark {
+  at: number
+  e: Eclipse
+}
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v
@@ -27,8 +35,8 @@ export class Tape {
   private count = 0
   private acc = 0
   /** Where eclipse peaks fall, in samples ever taken, oldest first. */
-  private marks: number[] = []
-  private known: number[] = []
+  private marks: Array<{ sample: number; e: Eclipse }> = []
+  private known: Eclipse[] = []
 
   /** How much of the tape has been watched, 0 to 1. */
   get filled(): number {
@@ -36,10 +44,10 @@ export class Tape {
   }
 
   /** Where the eclipse peaks it ran through fall on it, 0 the oldest moment and 1 the newest. */
-  get markings(): number[] {
+  get markings(): Mark[] {
     const first = this.taken - this.count
     const n = this.count - 1
-    return n > 0 ? this.marks.map((m) => (m - first) / n) : []
+    return n > 0 ? this.marks.map((m) => ({ at: (m.sample - first) / n, e: m.e })) : []
   }
 
   private slot(i: number): number {
@@ -50,18 +58,19 @@ export class Tape {
     if (this.count > 0 && !jump) {
       const a = this.ring[this.slot(this.count - 1)]
       const k = this.taken - 1
-      const found: number[] = []
-      for (const p of this.known) {
-        if ((a < p && p <= ms) || (ms <= p && p < a)) found.push(k + (p - a) / (ms - a))
+      const found: Array<{ sample: number; e: Eclipse }> = []
+      for (const e of this.known) {
+        const p = e.peak
+        if ((a < p && p <= ms) || (ms <= p && p < a)) found.push({ sample: k + (p - a) / (ms - a), e })
       }
-      this.marks.push(...found.sort((x, y) => x - y))
+      this.marks.push(...found.sort((x, y) => x.sample - y.sample))
     }
     this.ring[this.taken % SIZE] = ms
     this.jumps[this.taken % SIZE] = jump ? 1 : 0
     this.taken++
     if (this.count < SIZE) this.count++
     const first = this.taken - this.count
-    while (this.marks.length > 0 && this.marks[0] < first) this.marks.shift()
+    while (this.marks.length > 0 && this.marks[0].sample < first) this.marks.shift()
   }
 
   /** The clock jumped to `ms`, or starts there. */
@@ -70,10 +79,10 @@ export class Tape {
     this.acc = 0
   }
 
-  /** An eclipse peak worth marking if the clock runs through it. */
-  know(peak: number): void {
-    if (this.known.some((p) => Math.abs(p - peak) < 60_000)) return
-    this.known.push(peak)
+  /** An eclipse worth marking if the clock runs through its peak. */
+  know(e: Eclipse): void {
+    if (this.known.some((k) => Math.abs(k.peak - e.peak) < 60_000)) return
+    this.known.push(e)
     if (this.known.length > KNOWN) this.known.shift()
   }
 
@@ -113,7 +122,7 @@ export class Tape {
     this.taken -= this.count - (i + 1)
     this.count = i + 1
     const last = this.taken - 1
-    while (this.marks.length > 0 && this.marks[this.marks.length - 1] > last) this.marks.pop()
+    while (this.marks.length > 0 && this.marks[this.marks.length - 1].sample > last) this.marks.pop()
     this.seal(ms)
   }
 }
