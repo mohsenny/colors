@@ -125,6 +125,10 @@ const SNAP_MS = 125
 const CLICK_PX = 5
 /** How near a dot a click still counts as on it. */
 const PICK_PX = 14
+/** A second click this soon after the first, ms, near where it was, takes the body the first one picked: by then the view is already turning to it. */
+const DOUBLE_MS = 500
+/** The nearest a flight between bodies comes to any of them or their planets, radii: under the nearest a globe is seen from. */
+const CLEAR = 1.05
 /** A star of 6.5, the faintest drawn, on a dark sky: what you are looking at never shows fainter. */
 const FINDABLE = excess(6.5, DARK, 0)
 /** The nearest the haze round a light is reckoned, radians as the eye sees the widest lens. */
@@ -302,6 +306,8 @@ export class Instrument {
   private drag: { x: number; y: number; id: number; moved: boolean; ground: Vec3 | null } | null = null
   /** Where the pointer was when scrolling over the seat took the eye down to its globe. */
   private dived: [number, number] | null = null
+  /** The body the last click picked, where and when. */
+  private clicked: { id: BodyId; x: number; y: number; at: number } | null = null
   private tape = new Tape()
   /** Where on the tape the clock is, 1 its newest moment. Below 1 only while paused or scrubbing. */
   private back = 1
@@ -533,12 +539,26 @@ export class Instrument {
       const way = sub(to.at, from)
       const lift = across(NORTH, norm(way), [1, 0, 0])
       const arc = Math.sin(Math.PI * p)
-      at = add(add(from, scale(way, p)), scale(lift, 0.3 * len(way) * arc))
+      at = this.clear(add(add(from, scale(way, p)), scale(lift, 0.3 * len(way) * arc)), [f.fromSeat, this.seat])
       fov = Math.exp(Math.log(fov) + (Math.log(FOV) - Math.log(fov)) * arc * 0.85)
       turn = smoother((t - 0.3) / 0.7)
     }
     const [forward, up] = turnTo(f.from, to, turn)
     return { at, forward, up, fov }
+  }
+
+  /** A point on a flight lifted to just over any of these bodies, or the planets they go round, that it would be inside. */
+  private clear(at: Vec3, ids: BodyId[]): Vec3 {
+    for (const id of ids) {
+      for (const b of [id, bodyById(id)?.parent]) {
+        if (!b) continue
+        const c = this.at(b)
+        const off = sub(at, c)
+        const keep = CLEAR * this.radius(b)
+        if (len(off) < keep) at = add(c, scale(norm(off), keep))
+      }
+    }
+    return at
   }
 
   private fly(ms: number): void {
@@ -594,23 +614,27 @@ export class Instrument {
     this.emit(true)
   }
 
-  /** Become a body: sit on it, keep looking at what you were looking at if you can. */
+  /**
+   * Become a body: fly there and look at its globe, the whole of it in the
+   * frame. Picking the body you are on brings its globe back to that view.
+   */
   become(id: BodyId): void {
     if (id === this.seat) {
       if (this.look !== id) this.lookAt(id)
+      else {
+        this.fly(700)
+        this.enterGlobe()
+        this.touch(`Back over ${(bodyById(id) as Body).name}`)
+        this.emit(true)
+      }
       return
     }
-    const old = this.seat
-    const dist = len(sub(this.at(id), this.at(old)))
+    const dist = len(sub(this.at(id), this.at(this.seat)))
     this.fly(1300 + 260 * Math.max(0, Math.log10(dist / 1e5)))
     this.seat = id
-    if (this.look === id) this.look = old
-    if (this.look === this.seat) this.enterGlobe()
-    else {
-      this.z = this.zoomFor(id, this.look)
-      this.settle()
-    }
-    this.touch(`On ${(bodyById(id) as Body).name}, looking at ${(bodyById(this.look) as Body).name}`)
+    this.look = id
+    this.enterGlobe()
+    this.touch(`On ${(bodyById(id) as Body).name}`)
     this.emit(true)
   }
 
@@ -631,7 +655,21 @@ export class Instrument {
     const sun = norm(sub(this.at('sun'), this.at(this.seat)))
     this.yaw = Math.atan2(sun[1], sun[0]) + 0.75
     this.pitch = 0.32
-    this.zg = this.seat === 'sun' ? 0.6 : 0
+    this.zg = this.globeFit(this.seat)
+  }
+
+  /**
+   * How far back on a globe all of the body fits across the narrower side of
+   * the frame, Saturn's rings too, with a tenth to spare. Never nearer than
+   * the globe is first seen from, so a wide screen keeps that view.
+   */
+  private globeFit(id: BodyId): number {
+    const r = this.radius(id)
+    const reach = id === 'saturn' ? RINGS.outer : r
+    // On the plane, half a body seen a across is tan(a / 4), half the frame tan(fov / 4).
+    const half = 0.9 * Math.tan(FOV / 4) * Math.min(1, this.width / this.height)
+    const back = reach / Math.sin(2 * Math.atan(half))
+    return Math.max(id === 'sun' ? 0.6 : 0, Math.min(zgMax(r), Math.log(back / (GLOBE * r))))
   }
 
   // ------------------------------------------------------------ time
@@ -695,8 +733,9 @@ export class Instrument {
     this.tape.know(e)
     this.dial = dialOf(10 * 60)
     this.playing = true
-    this.poses = posesAt(this.ms)
+    // From the eye as it stands, taken at the old moment, before the bodies move.
     this.fly(1600)
+    this.poses = posesAt(this.ms)
     this.seat = solar ? 'moon' : 'earth'
     this.look = solar ? 'earth' : 'moon'
     this.settle()
@@ -802,14 +841,20 @@ export class Instrument {
     this.drag = null
     this.canvas.classList.remove('is-dragging')
     if (!d.moved) {
-      const hit = this.pick(e.clientX, e.clientY)
-      if (hit) this.lookAt(hit)
+      const c = this.clicked
+      const again = c && e.timeStamp - c.at < DOUBLE_MS && Math.hypot(e.clientX - c.x, e.clientY - c.y) < PICK_PX
+      const hit = again ? c.id : this.pick(e.clientX, e.clientY)
+      if (!hit) return
+      if (!again) this.clicked = { id: hit, x: e.clientX, y: e.clientY, at: e.timeStamp }
+      this.lookAt(hit)
     }
   }
 
   private onDouble = (e: MouseEvent): void => {
-    const hit = this.pick(e.clientX, e.clientY)
-    if (hit) this.become(hit)
+    const c = this.clicked
+    const hit = c && e.timeStamp - c.at < DOUBLE_MS ? c.id : this.pick(e.clientX, e.clientY)
+    // On the globe you are circling, a double-click on it keeps the view you have.
+    if (hit && !(hit === this.seat && this.look === this.seat)) this.become(hit)
   }
 
   private onWheel = (e: WheelEvent): void => {

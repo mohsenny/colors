@@ -82,10 +82,10 @@ Its source is in [lattice/](lattice/) and what it does and why is in
 
 **[Open Solar](https://mohsenny.github.io/whoami/solar/)**, the third: the Sun, the
 planets and Pluto, the Moon and the moons of the four giants and Pluto where they really
-are, at their true sizes and distances. Become any of them to see the others from there,
-run the clock up to a year a second either way, and step from eclipse to eclipse. Same
-chrome with the lights out. Its source is in [solar/](solar/) and the why is in
-[solar/PRD.md](solar/PRD.md).
+are, at their true sizes and distances. Become any of them and click the others to see
+them from there, run the clock up to a year a second either way, and step from eclipse to
+eclipse. Same chrome with the lights out. Its source is in [solar/](solar/) and the why
+is in [solar/PRD.md](solar/PRD.md).
 
 Its planet and Moon maps are by
 [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0), the round
