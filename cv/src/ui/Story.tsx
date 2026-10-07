@@ -244,11 +244,14 @@ interface Faces {
  */
 export function Story({
   snap,
+  high,
   actions,
   storyRef,
   probeRef,
 }: {
   snap: Snapshot
+  /** Starting right under the title (App.tsx). */
+  high: boolean
   actions: StoryActions
   storyRef: (el: HTMLElement | null) => void
   probeRef: Ref<HTMLDivElement>
@@ -316,7 +319,7 @@ export function Story({
   return (
     <section
       ref={setSection}
-      className={`cv-story${snap.paper ? ' is-reading' : ''}`}
+      className={`cv-story${snap.paper ? ' is-reading' : ''}${high ? ' is-high' : ''}`}
       aria-label="About Mohsen"
       tabIndex={-1}
       onPointerEnter={() => actions.hold(true)}

@@ -33,6 +33,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
   const snap: Snapshot = useSyncExternalStore(instrument.subscribe, instrument.getSnapshot)
   const [note, setNote] = useState<Note | null>(null)
   const probe = useRef<HTMLDivElement | null>(null)
+  const [high, setHigh] = useState(false)
   const attachClock = useCallback((el: HTMLElement | null) => instrument.attachClock(el), [instrument])
   const attachTape = useCallback(
     (el: HTMLElement | null, input: HTMLInputElement | null) => instrument.attachTape(el, input),
@@ -56,6 +57,12 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
   const measure = useCallback(() => {
     const rect = probe.current?.getBoundingClientRect()
     if (rect && rect.height > 0) instrument.setStory(rect.bottom)
+    // Pressed to the top of its half, or within 8px of it, the story starts
+    // right where the title says what a page is (src/styles/title.css).
+    const story = probe.current?.parentElement
+    if (rect && story) {
+      setHigh(rect.top - story.getBoundingClientRect().top < parseFloat(getComputedStyle(story).paddingTop) + 8)
+    }
   }, [instrument])
   useLayoutEffect(measure, [measure, storySlot])
   useEffect(() => {
@@ -129,7 +136,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
         createPortal(
           <>
             <Reach away={snap.paper} copyEmail={actions.copyEmail} />
-            <Story snap={snap} actions={actions} storyRef={attachStory} probeRef={probe} />
+            <Story snap={snap} high={high} actions={actions} storyRef={attachStory} probeRef={probe} />
           </>,
           storySlot,
         )}

@@ -19,3 +19,14 @@ describe('hrefOf', () => {
     expect(APPS.map((app) => app.name)).toEqual(['Mohsen', 'Solar', 'Gravity', 'Lightbox'])
   })
 })
+
+describe('the lines under the title', () => {
+  for (const app of APPS) {
+    it(`say what ${app.id} is, short and without a dash`, () => {
+      expect(app.line.trim()).not.toBe('')
+      expect(app.line.length).toBeLessThanOrEqual(60)
+      // The en and the em dash, and a hyphen spaced out to stand in for one.
+      expect(app.line).not.toMatch(/[\u2013\u2014]| - /)
+    })
+  }
+})

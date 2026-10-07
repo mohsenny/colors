@@ -1114,6 +1114,18 @@ body > .cv-paper .cv-text {
   color: var(--lb-ink-strong, #101014);
 }
 
+/* Where the story starts right under the title (App.tsx), the title saying
+   what a page is (src/styles/title.css) comes over the heading, so the
+   heading steps out while it does. */
+.cv-kicker,
+.cv-headline {
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
+}
+
+.cv-stage:has(.lb-title.is-telling) .cv-story.is-high :is(.cv-kicker, .cv-headline) {
+  opacity: 0;
+}
+
 /* 18px at 1440x900 and over, down to 15px at 1280x720. */
 .cv-copy {
   margin-top: 14px;

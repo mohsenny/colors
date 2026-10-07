@@ -1037,6 +1037,12 @@
     min-width: 0;
   }
 
+  /* The title says what a page is right where the readout sits
+     (src/styles/title.css), so the readout steps out while it does. */
+  :root:has(.lb-title.is-telling) .lt-readout {
+    opacity: 0;
+  }
+
   /* The readout is under the title here, so the drawer stops below it too:
      30px lower than when the two shared the top line. */
   .lt-bodies {

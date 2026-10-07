@@ -49,10 +49,45 @@ a.lb-title-name:hover {
   color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
 }
 
+/*
+ * The line under the row saying what a page is, while its name is pointed at
+ * or tabbed to (Title.tsx). At the title's left edge, in its face at reading
+ * size and its faint shade, so the dark room turns it white with the names.
+ * Out of the flow, so nothing moves when it comes, and out of the pointer's
+ * way, so leaving the row is leaving the names. One line where there is room,
+ * and inside the margins where there is not.
+ */
+.lb-title-lines {
+  position: absolute;
+  left: 0;
+  /* Close enough to be the names', and clear of the CV's story 20px under them. */
+  top: calc(100% + 6px);
+  width: max-content;
+  max-width: calc(100vw - 36px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-wrap: balance;
+  color: var(--lb-title-ink, rgba(26, 26, 30, 0.26));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
+}
+
+.lb-title.is-telling .lb-title-lines {
+  opacity: 1;
+}
+
 @media (max-width: 619px) {
   .lb-title {
     left: calc(14px + env(safe-area-inset-left, 0px));
     top: calc(12px + env(safe-area-inset-top, 0px));
     font-size: 18px;
+  }
+
+  .lb-title-lines {
+    top: calc(100% + 5px);
+    max-width: calc(100vw - 28px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
   }
 }
