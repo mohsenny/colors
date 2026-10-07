@@ -38,10 +38,12 @@ export interface Chapter {
   /** Also its hash, so lowercase words: never Lightbox's `s=`. */
   id: string
   name: string
-  /** Growing up has no year to start at, so its tab and the clock say where instead. */
+  /** Growing up has no year to start at, so the clock, the tape and the list say where instead. Its tab says the year he was born. */
   from: Year | 'Iran'
   to: Year | 'now'
   where?: string
+  /** The country it starts in, on its tab after the year: only the chapters that open in a new one. */
+  country?: string
   /** The story's big line. */
   headline: string
   /** Five sentences and 500 characters at most, which the story holds on the smallest phone (life.test.ts). */
@@ -60,6 +62,8 @@ export interface Chapter {
 
 export interface Life {
   name: string
+  /** The year he was born, which Growing up's tab starts at. */
+  born: number
   intro: string
   based: string
   reach: { email: string; linkedin: string; github: string; medium: string }
@@ -80,6 +84,7 @@ export interface Life {
  */
 export const LIFE: Life = {
   name: 'Mohsen Nasiri',
+  born: 1989,
   intro: "I'm Mohsen, a QA lead in Germany. If it takes creativity, tech or AI, it's for me.",
   based: 'Germany',
   reach: {
@@ -95,6 +100,7 @@ export const LIFE: Life = {
       from: 'Iran',
       to: 2008,
       where: 'Tehran',
+      country: 'Iran',
       headline: 'Tehran, and a lot of games',
       copy: 'Growing up in Tehran, I played a lot of video games. StarCraft, Warcraft and Dota were the ones I kept coming back to.',
       orgs: [],
@@ -133,6 +139,7 @@ export const LIFE: Life = {
       from: 2012,
       to: 2015,
       where: 'Joensuu',
+      country: 'Finland',
       headline: 'A new life in Finland',
       copy: 'In 2012 I moved to Joensuu for an M.Sc. in Computer Science at the University of Eastern Finland. Long winters, deep snow, saunas, and my first job alongside the studies: full-stack developer at Arbonaut.',
       orgs: ['uef', 'arbonaut'],
@@ -171,6 +178,7 @@ export const LIFE: Life = {
       from: 2016,
       to: 2018,
       where: 'Berlin',
+      country: 'Germany',
       headline: 'Berlin, and testing as a craft',
       copy: 'In 2016 I moved to Berlin and its start-up scene, as a Senior QA Engineer at Hubrick. Automation became my thing: WebdriverIO and CI/CD, load tests in JMeter and Python, and quality metrics in Grafana.',
       orgs: ['hubrick'],
@@ -321,6 +329,21 @@ export const LIFE: Life = {
  */
 export function yearsOf(chapter: Chapter): string {
   return typeof chapter.from === 'number' ? `${chapter.from} to ${chapter.to}` : `until ${chapter.to}`
+}
+
+/** What a chapter's tab says. */
+export interface Tab {
+  year: number
+  country?: string
+}
+
+/**
+ * A chapter's tab: the year it starts, or the year he was born where there
+ * is none, and the country where it opens in a new one. `1989 Iran`,
+ * `2008`, `2012 Finland`.
+ */
+export function tabOf(chapter: Chapter, life: Life = LIFE): Tab {
+  return { year: typeof chapter.from === 'number' ? chapter.from : life.born, country: chapter.country }
 }
 
 /** Every role, oldest first, in the order the chapters hold them. */

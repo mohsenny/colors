@@ -14,7 +14,7 @@ import { shadowStack } from '../../../src/render/shadow'
 import { ART, inkOf } from '../art'
 import { inside, toStage } from '../layout'
 import type { Fit, Laid, Placed } from '../layout'
-import { yearsOf } from '../life'
+import { tabOf, yearsOf } from '../life'
 import type { Life } from '../life'
 
 /*
@@ -35,6 +35,9 @@ const Z_BASE = 10
 
 /** Heights as stage.ts quantises them, so the shadow string is built once per visible step. */
 const Z_SHADOW_STEPS = 250
+
+/** Card left clear between the widest tab and where a sheet's top right corner turns, px. Where there is less, every tab says its year alone. */
+const TAB_CLEAR = 8
 
 /** The picture to draw. */
 export interface View {
@@ -113,6 +116,10 @@ export class Film {
   private laid: Laid[] = []
   private viewport: Viewport
   private key = ''
+  /** The widest tab with its country, px. */
+  private widest = 0
+  /** The sheets are too small for it, so the countries are left off. */
+  private tight = false
 
   constructor(root: HTMLElement, life: Life, placed: readonly Placed[], onTab: (index: number) => void) {
     this.root = root
@@ -151,17 +158,29 @@ export class Film {
       const tab = document.createElement('button')
       tab.type = 'button'
       tab.className = 'lb-tab'
-      tab.style.width = `${TAB_W}px`
-      tab.style.left = `${TAB_W / 2 + TAB_INSET}px`
-      // As the live message and the tape say it, so all three agree.
-      tab.setAttribute('aria-label', `${c.name}, ${yearsOf(c)}`)
+      // As wide as its words and never narrower than Lightbox's, from the
+      // same left edge (ui.css), so a tab with a country grows to the right.
+      tab.style.minWidth = `${TAB_W}px`
+      tab.style.left = `${TAB_INSET}px`
+      const { year, country } = tabOf(c, life)
+      // Its own words first, which voice control listens for, then the
+      // chapter as the live message and the tape say it.
+      tab.setAttribute('aria-label', `${country ? `${year} ${country}` : year}, ${c.name}, ${yearsOf(c)}`)
       // So the pointer over a tab lifts its own sheet, as over the film.
       tab.dataset.chapter = String(i)
-      const year = document.createElement('span')
-      year.className = 'lb-hex'
-      // The start year, or for Growing up the place, as life.ts has it.
-      year.textContent = String(c.from)
-      tab.append(year)
+      const words = document.createElement('span')
+      words.className = 'lb-hex'
+      // The start year, or for Growing up the year he was born.
+      words.textContent = String(year)
+      if (country) {
+        // A word space between, as a reader writes it, and the space goes
+        // with the country where the room leaves it off.
+        const where = document.createElement('span')
+        where.className = 'cv-tab-country'
+        where.textContent = ` ${country}`
+        words.append(where)
+      }
+      tab.append(words)
       tab.addEventListener('click', () => onTab(i))
       // The picture, first, so the edge and the tab are drawn over it.
       const art = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
@@ -184,6 +203,8 @@ export class Film {
         hovered: false,
       })
     }
+    // A font arriving changes the words' width.
+    void document.fonts.ready.then(() => this.measure())
   }
 
   destroy(): void {
@@ -197,8 +218,19 @@ export class Film {
     this.viewport = measureViewport(this.root)
     this.state.aspect = this.viewport.aspect
     this.root.style.setProperty('--lb-frame', `${this.viewport.frame}px`)
-    this.key = ''
+    this.measure()
     return this.viewport
+  }
+
+  /**
+   * The tabs' widest, read with every country showing. On a resize and once
+   * the fonts are in, never per frame: a draw only holds it against the sheet.
+   */
+  private measure(): void {
+    this.layer.classList.remove('is-tight')
+    this.widest = Math.max(0, ...this.mounts.map((m) => m.tab.offsetWidth))
+    this.layer.classList.toggle('is-tight', this.tight)
+    this.key = ''
   }
 
   draw(view: View): void {
@@ -217,6 +249,15 @@ export class Film {
     const vp = this.viewport
     const vh = vp.height
     this.laid = this.placed.map((p, i) => toStage(view.fit, p, view.camera, view.lift[i] ?? 0))
+
+    // Every tab says its country or none does. A sheet at rest decides, so
+    // the current one, drawn larger, says what the rest say. A tab starts a
+    // frame in from the sheet's left edge.
+    const tight = vp.frame + this.widest + TAB_CLEAR + CORNER_OUTER > view.fit.u
+    if (tight !== this.tight) {
+      this.tight = tight
+      this.layer.classList.toggle('is-tight', tight)
+    }
 
     for (let i = 0; i < this.laid.length; i++) {
       const s = this.laid[i] as Laid

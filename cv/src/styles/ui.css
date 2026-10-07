@@ -213,6 +213,14 @@ body > .cv-paper .cv-text {
 .cv-film .lb-tab {
   pointer-events: auto;
   cursor: pointer;
+  /* Held by its left edge rather than its middle, so the words it grows by
+     go to the right and a year alone sits where Lightbox's does. */
+  transform: none;
+}
+
+/* Sheets too small for the widest tab: every tab says its year alone. */
+.cv-mounts.is-tight .cv-tab-country {
+  display: none;
 }
 
 /* ------------------------------------------------------------------ legend */

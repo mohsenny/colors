@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LIFE, MOVED, degrees, facts, jobs } from './life'
+import { LIFE, MOVED, degrees, facts, jobs, tabOf } from './life'
 import { LOGOS } from './logos'
 
 /** Every string in the life, wherever it sits. */
@@ -82,6 +82,26 @@ describe('the life', () => {
     expect(jobs().map((r) => r.org)).toContain('Arbonaut')
     expect(jobs().every((r) => r.kind === 'job')).toBe(true)
     expect(degrees().map((r) => r.kind)).toEqual(['degree', 'degree'])
+  })
+})
+
+describe('the tabs', () => {
+  // The year each chapter starts, and the country where it opens in a new
+  // one, so the moves read along the row.
+  it('say the year and, for a move, the country', () => {
+    expect(LIFE.chapters.map((c) => tabOf(c))).toEqual([
+      { year: 1989, country: 'Iran' },
+      { year: 2008 },
+      { year: 2012, country: 'Finland' },
+      { year: 2016, country: 'Germany' },
+      { year: 2018 },
+      { year: 2024 },
+    ])
+  })
+
+  it('start Growing up at the year he was born, as the life has it', () => {
+    const life = { ...LIFE, born: 1990 }
+    expect(life.chapters.map((c) => tabOf(c, life).year)).toEqual([1990, 2008, 2012, 2016, 2018, 2024])
   })
 })
 
