@@ -58,11 +58,11 @@
   transition: transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
-/* The scroll. 52px clears the title (14px down, 22px tall) by 16px, 72px the
-   dock (18px up, 38px tall) by the same. */
+/* The scroll. The title is away while the paper is in, so the reading starts
+   at the paper's own inset; 72px clears the dock (18px up, 38px tall) by 16px. */
 .cv-text {
   position: absolute;
-  inset: calc(52px + env(safe-area-inset-top, 0px)) 0 calc(72px + env(safe-area-inset-bottom, 0px));
+  inset: calc(18px + env(safe-area-inset-top, 0px)) 0 calc(72px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 28px 0 calc(18px + env(safe-area-inset-left, 0px));
@@ -70,8 +70,10 @@
 }
 
 /* Without script the paper is never taken into the app, and there is no dock
-   to clear: the reading runs to the foot of the page. */
+   to clear: the reading runs to the foot of the page. The title stays, the
+   only way across, so 52px clears it (14px down, 22px tall) by 16px. */
 body > .cv-paper .cv-text {
+  top: calc(52px + env(safe-area-inset-top, 0px));
   bottom: 0;
   padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
 }
@@ -993,6 +995,29 @@ body > .cv-paper .cv-text {
   }
 }
 
+/* The title is not the paper's: it goes over with the story, the paper's
+   width along, and where the story goes, it goes too. */
+.cv-stage .lb-title {
+  transition:
+    opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease),
+    transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.cv-stage:has(.cv-paper.is-in) .lb-title {
+  transform: translateX(560px);
+}
+
+@media (max-width: 1287px) {
+  .cv-stage:has(.cv-paper.is-in) .lb-title {
+    visibility: hidden;
+    opacity: 0;
+    transform: none;
+    transition:
+      opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+      visibility 0s linear var(--lb-t-enter, 240ms);
+  }
+}
+
 /* When and where, in the legend's small capitals, a size up to sit over the headline. */
 .cv-kicker {
   margin-bottom: 10px;
@@ -1331,12 +1356,16 @@ body > .cv-paper .cv-text {
 
 /* ------------------------------------------------- small viewports (620px) */
 
-/* The title is 18px here and 12px down, so 40px clears it by 10px, and the
-   dock 12px up, so 60px clears that by the same. */
+/* The dock is 12px up here, so 60px clears it by 10px; the title, without
+   script, is 18px and 12px down, so 40px clears that by the same. */
 @media (max-width: 619px) {
   .cv-text {
-    inset: calc(40px + env(safe-area-inset-top, 0px)) 0 calc(60px + env(safe-area-inset-bottom, 0px));
+    inset: calc(14px + env(safe-area-inset-top, 0px)) 0 calc(60px + env(safe-area-inset-bottom, 0px));
     padding: 0 18px 0 calc(14px + env(safe-area-inset-left, 0px));
+  }
+
+  body > .cv-paper .cv-text {
+    top: calc(40px + env(safe-area-inset-top, 0px));
   }
 
   /* Under the title by 14px and at its inset, from the top down. */
