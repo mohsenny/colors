@@ -896,6 +896,65 @@ body > .cv-paper .cv-text {
   color: var(--lb-ink-strong, #101014);
 }
 
+/* ------------------------------------------------------------------- reach */
+
+/*
+ * The ways to him, in the corner across from the title, so they are there on
+ * every face and not only at Now. Marks in the title's faint ink, centred on
+ * its line and as far in from the right as it is from the left, and full ink
+ * under the pointer. Each mark has a 32px target around it.
+ */
+.cv-ways {
+  /* The square marks come to 17px, GitHub's round one to 19px. */
+  --cv-mark: 20px;
+  position: fixed;
+  /* 32px tall and 9px down, centred on the title's 22px line 14px down. */
+  top: calc(9px + env(safe-area-inset-top, 0px));
+  /* Medium's 17px leaves 7.5px of its target, so it ends 18px in. */
+  right: calc(10.5px + env(safe-area-inset-right, 0px));
+  z-index: 200;
+  display: flex;
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
+}
+
+.cv-way {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--lb-title-ink, rgba(26, 26, 30, 0.26));
+  transition: color var(--lb-t-fade, 320ms) var(--lb-ease, ease);
+}
+
+.cv-way:hover,
+.cv-way:focus-visible {
+  color: var(--lb-ink, #1a1a1e);
+}
+
+/* The ring inside the target, so on a phone it clears the title and the headline. */
+.cv-way:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Where the title leaves the open paper, they go with it: the paper gives
+   all four in full. */
+@media (max-width: 1287px) {
+  .cv-ways.is-away {
+    visibility: hidden;
+    opacity: 0;
+    transition:
+      opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+      visibility 0s linear var(--lb-t-enter, 240ms);
+  }
+}
+
+/* A way's mark, at the line's `--cv-mark` times its own scale. */
+.cv-mark {
+  flex: none;
+  height: calc(var(--cv-mark) * var(--cv-scale, 1));
+}
+
 /* ------------------------------------------------------------------ swatch */
 
 /* A chapter's film at chip size, as Lightbox's tray shows a colour: the chip,
@@ -944,8 +1003,8 @@ body > .cv-paper .cv-text {
     visibility 0s linear;
 }
 
-/* The story's place in the page, which is no box of its own: the story is
-   laid against the stage as if it were the stage's child. */
+/* The story's place in the page, and the ways to him with it, which is no box
+   of its own: what is in it is laid against the stage as if the stage's child. */
 .cv-story-slot {
   display: contents;
 }
@@ -1259,10 +1318,10 @@ body > .cv-paper .cv-text {
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
 }
 
-/* Labelled as a fact is, the four ways under it in one line that wraps. */
+/* Labelled as a fact is, but beside the four ways rather than over them, a
+   line saved for the intro's second: they wrap under the first of them. */
 .cv-contact {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
   gap: 0 18px;
   margin-top: 16px;
@@ -1271,7 +1330,24 @@ body > .cv-paper .cv-text {
 }
 
 .cv-contact .cv-label {
-  flex-basis: 100%;
+  flex: none;
+  margin-bottom: 0;
+}
+
+.cv-contact-ways {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 18px;
+}
+
+/* Each way's mark before its name, centred on its capitals (0.36em up), and
+   in the line's height, so the row is no taller for it. */
+.cv-contact .cv-mark {
+  --cv-mark: 1em;
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: calc(0.36em - var(--cv-mark) * var(--cv-scale, 1) / 2);
 }
 
 .cv-aside {
@@ -1382,6 +1458,13 @@ body > .cv-paper .cv-text {
     top: calc(40px + env(safe-area-inset-top, 0px));
   }
 
+  /* In the title's row, now 18px and 12px down, and at its 14px inset. */
+  .cv-ways {
+    --cv-mark: 18px;
+    top: calc(5px + env(safe-area-inset-top, 0px));
+    right: calc(6px + env(safe-area-inset-right, 0px));
+  }
+
   /* Under the title by 14px and at its inset, from the top down. */
   .cv-story {
     --cv-top: 44px;
@@ -1468,7 +1551,7 @@ body > .cv-paper .cv-text {
  * under 760px the closing line goes, under 600px the aside too, the copy
  * comes down two sizes and closes up, and the facts and the ways to him are
  * set as the paper sets them, a label beside each. At 375x667 that leaves a
- * 140px sheet, and at 320x568, where With AI is the tallest face, a 111px
+ * 148px sheet, and at 320x568, where With AI is the tallest face, a 107px
  * one: at 14px its copy left 100px and the tabs against its logos. All of it
  * is on the paper.
  */
@@ -1515,9 +1598,8 @@ body > .cv-paper .cv-text {
     margin-bottom: 0;
   }
 
-  .cv-contact > :not(.cv-label) {
-    grid-column: 2;
-    justify-self: start;
+  .cv-contact-ways {
+    gap: 2px 14px;
   }
 }
 
@@ -1591,9 +1673,24 @@ body > .cv-paper .cv-text {
   }
 
   .cv-contact {
-    gap: 0 14px;
     margin-top: 8px;
     font-size: 13px;
+  }
+
+  .cv-contact,
+  .cv-contact-ways {
+    gap: 0 14px;
+  }
+}
+
+/*
+ * Under 412px the four do not fit beside the title (265px wide) with 12px
+ * between, so they take the row under it, centred on the kicker's capitals
+ * and right of them: no face's first line reaches past 165px.
+ */
+@media (max-width: 411px) {
+  .cv-ways {
+    top: calc(34px + env(safe-area-inset-top, 0px));
   }
 }
 
@@ -1622,7 +1719,8 @@ body > .cv-paper .cv-text {
  */
 .is-idle .lb-dock,
 .is-idle .lb-legend,
-.is-idle .lb-tab {
+.is-idle .lb-tab,
+.is-idle .cv-ways {
   opacity: 0;
   pointer-events: none;
   transition-duration: var(--lb-t-rest, 700ms);

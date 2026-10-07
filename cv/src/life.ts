@@ -85,7 +85,7 @@ export interface Life {
 export const LIFE: Life = {
   name: 'Mohsen Nasiri',
   born: 1989,
-  intro: "I'm Mohsen, a QA lead in Germany. If it takes creativity, tech or AI, it's for me.",
+  intro: "I'm Mohsen, a tech lead in Germany with a focus on quality. If it takes creativity, tech or AI, it's for me.",
   based: 'Germany',
   reach: {
     email: 'mohsen.n89@gmail.com',
@@ -373,6 +373,9 @@ export const MOVED: Record<string, string> = {
   messagebird: 'leading-qa',
   'leading-qa-with-ai': 'with-ai',
 }
+
+/** The ways to him on the web, in the order the page gives them, after email. */
+export const WEB = ['linkedin', 'github', 'medium'] as const
 
 /** The address as it is shown: no scheme, no www, no closing slash. */
 export function bare(url: string): string {

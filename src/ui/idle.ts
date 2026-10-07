@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 const IDLE_MS = 3000
 
 /** Chrome a resting mouse, or the keys working in it, holds up. */
-const HELD = ':is(.lb-dock, .lb-tray, .lb-title, .lb-tab, .lb-grip)'
+const HELD = ':is(.lb-dock, .lb-tray, .lb-title, .lb-tab, .lb-grip, .cv-ways)'
 
 /** The mark on the root while the page is idle. */
 const IDLE = 'is-idle'

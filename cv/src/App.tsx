@@ -9,6 +9,7 @@ import { Dock } from './ui/Dock'
 import { chapterHex } from './ui/hex'
 import { Legend } from './ui/Legend'
 import { Paper } from './ui/Paper'
+import { Reach } from './ui/Reach'
 import { Story } from './ui/Story'
 import type { StoryActions } from './ui/Story'
 import type { Mark } from './ui/Timeline'
@@ -125,7 +126,13 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
   return (
     <>
       {storySlot &&
-        createPortal(<Story snap={snap} actions={actions} storyRef={attachStory} probeRef={probe} />, storySlot)}
+        createPortal(
+          <>
+            <Reach away={snap.paper} copyEmail={actions.copyEmail} />
+            <Story snap={snap} actions={actions} storyRef={attachStory} probeRef={probe} />
+          </>,
+          storySlot,
+        )}
       <Paper open={snap.paper} />
       <Legend away={snap.paper} />
       <Dock
@@ -201,8 +208,9 @@ export default function App(): ReactElement {
         Read the CV as text
       </a>
       {/* The rest in the order a reader takes it, which is the order Tab
-          does: the title, the story, the sheets, then the paper, the legend
-          and the dock. The story is the chrome's, set in here. */}
+          does: the title, the ways to reach him, the story, the sheets, then
+          the paper, the legend and the dock. The ways and the story are the
+          chrome's, set in here. */}
       <Title active="mohsen" />
       <div ref={setStorySlot} className="cv-story-slot" />
       <div ref={filmRef} className="cv-film" />

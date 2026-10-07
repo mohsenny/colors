@@ -1,11 +1,12 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement, Ref, SyntheticEvent } from 'react'
 import type { Snapshot } from '../app/instrument'
-import { LIFE, bare, facts, yearsOf } from '../life'
+import { LIFE, WEB, facts, yearsOf } from '../life'
 import type { Chapter } from '../life'
 import { LOGOS } from '../logos'
 import type { Logo as LogoData, LogoId } from '../logos'
 import { closingParts } from '../text'
+import { Mark } from './Reach'
 
 /** The old face fading out, as `--lb-t-grow`. */
 const LEAVE_MS = 180
@@ -157,14 +158,18 @@ function NowFace({ copyEmail }: Pick<StoryActions, 'copyEmail'>): ReactElement {
       </dl>
       <p className="cv-contact">
         <span className="cv-label">Reach</span>
-        <button type="button" className="cv-link" onClick={copyEmail}>
-          {reach.email}
-        </button>
-        {[reach.linkedin, reach.github, reach.medium].map((url) => (
-          <a key={url} className="cv-link" href={url} target="_blank" rel="noreferrer">
-            {bare(url)}
-          </a>
-        ))}
+        <span className="cv-contact-ways">
+          <button type="button" className="cv-link" onClick={copyEmail}>
+            <Mark way="email" />
+            {reach.email}
+          </button>
+          {WEB.map((id) => (
+            <a key={id} className="cv-link" href={reach[id]} target="_blank" rel="noreferrer">
+              <Mark way={id} />
+              {LOGOS[id].name}
+            </a>
+          ))}
+        </span>
       </p>
       <p className="cv-aside">Off screen: {LIFE.outside}</p>
       <p className="cv-aside cv-signoff">

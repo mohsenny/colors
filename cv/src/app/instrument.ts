@@ -60,7 +60,7 @@ export const SETTLE_MS = 160
 /**
  * Play holds a face long enough to read it: a beat to arrive, then 220ms for
  * every word and every logo, a glance each. That is 270 words a minute, a
- * brisk read: Growing up comes to 9.5s, Leading QA to 13.7s, Now to 17s and
+ * brisk read: Growing up comes to 9.5s, Leading QA to 13.7s, Now to 17.2s and
  * With AI, the longest, to 24.7s.
  */
 export const HOLD_MS = 2500
