@@ -43,11 +43,13 @@ export const PHONE_U_MIN = 100
 
 /**
  * The current sheet stands up off the row by this much of a sheet, and grows
- * by this share: 12px and 8px at 1440, enough to read as picked up, and its
- * neighbours still a tenth of a sheet clear less the leans.
+ * by this share: 7px and 25px at 1440. Grown 8px it read as no bigger than the
+ * rest. More lift and a 390x844 phone's band no longer holds its sheet at its
+ * share; more growth and the neighbours come too close, 12px clear less the
+ * leans.
  */
-export const LIFT = 0.06
-export const GROW = 0.04
+export const LIFT = 0.035
+export const GROW = 0.12
 
 /** One sheet as laid: its centre in u along the row, and its lean in degrees. */
 export interface Placed {
