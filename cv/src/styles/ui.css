@@ -35,7 +35,7 @@
   right: 0;
   left: auto;
   display: block;
-  width: min(560px, 100vw);
+  width: min(680px, 100vw);
   border-right: 0;
   border-left: 1px solid var(--lb-card-edge);
   /* Lightbox's paper lies under its sheets; this one lies over them, so the
@@ -178,7 +178,7 @@
    one. The title stays, the only way across, so 52px clears it (14px down,
    22px tall) by 16px. */
 body > .cv-paper {
-  right: max(0px, calc(50vw - 280px));
+  right: max(0px, calc(50vw - 340px));
   border-right: 1px solid var(--lb-card-edge);
 }
 
@@ -1367,15 +1367,15 @@ body > .cv-paper .cv-text {
 
 /*
  * The paper comes in over the right of the stage. Where the story still fits
- * to the left of it, 560px and the column's 680 and 24px either side, it
+ * to the left of it, 680px and the column's 680 and 24px either side, it
  * moves over into the rest; where it does not, it goes, the paper being the
  * whole of it.
  */
 .cv-story.is-reading {
-  transform: translateX(-280px);
+  transform: translateX(-340px);
 }
 
-@media (max-width: 1287px) {
+@media (max-width: 1407px) {
   .cv-story.is-reading {
     visibility: hidden;
     opacity: 0;
@@ -1391,14 +1391,43 @@ body > .cv-paper .cv-text {
   transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
 }
 
-/* 560px of paper and the title's 326px, with 16px between. */
-@media (max-width: 901px) {
+/* 680px of paper and the title's 326px, with 16px between. */
+@media (max-width: 1021px) {
   .cv-stage:has(.cv-paper.is-in) .lb-title {
     visibility: hidden;
     opacity: 0;
     transition:
       opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
       visibility 0s linear var(--lb-t-enter, 240ms);
+  }
+}
+
+/*
+ * The dock never sits across the paper's edge, and slides as the paper does.
+ * Where the surface beside the paper holds it, it moves over into it with the
+ * story, centred there as it is on the page. It starts half its playing
+ * width, 133px, left of that centre, so 382px keeps it 16px clear of the
+ * legend's 232px. From 1360px: 680 of paper, 382, the other 282 of the open
+ * dock, and 16px. Short of that it sits on the paper, centred under the
+ * reading, 340px in less the open dock's 74px shift, from 795px, where that
+ * clears the legend too.
+ */
+.cv-stage .lb-dock {
+  transition:
+    opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    left var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+@media (min-width: 795px) {
+  .cv-stage:has(.cv-paper.is-in) .lb-dock {
+    left: calc(100% - 414px);
+  }
+}
+
+@media (min-width: 1360px) {
+  .cv-stage:has(.cv-paper.is-in) .lb-dock {
+    left: max(382px, calc((100% - 680px) / 2));
   }
 }
 
