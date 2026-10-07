@@ -35,8 +35,8 @@ export function Mark({ way }: { way: Way }): ReactElement {
 
 /**
  * The four ways to reach him, in the corner across from the title on every
- * face, so nobody has to wait for Now to come round. Email is copied, as on
- * Now; the rest open in a new tab, so the page keeps its place.
+ * face. Email is copied; the rest open in a new tab, so the page keeps its
+ * place.
  */
 export function Reach({ away, copyEmail }: { away: boolean; copyEmail: () => void }): ReactElement {
   const { reach } = LIFE

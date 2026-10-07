@@ -684,9 +684,8 @@ body > .cv-paper .cv-text {
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
 }
 
-/* Under this, with the longest name in the chip, the dock comes within 15px
-   of the legend. */
-@media (max-width: 930px) {
+/* Under this the open dock comes within 15px of the legend. */
+@media (max-width: 761px) {
   .lb-legend {
     display: none;
   }
@@ -735,18 +734,16 @@ body > .cv-paper .cv-text {
   transform: translateX(calc(-50% + (var(--lb-tl-open) - var(--lb-tl-w)) / 2));
 }
 
-/* Four groups: which chapter, when, how the years move, then the text. Each
-   ends with a wider gap than the ones inside it. */
-.lt-chip,
-.sl-now,
+/* Three groups: when, how the years move, then the text. Each ends with a
+   wider gap than the ones inside it. */
 .lb-timeline {
   margin-right: var(--sl-group);
 }
 
-/* There has to be room on the right to absorb the shift. With the longest
-   name in the chip 762px leaves 15px of it. Under it the dock
-   grows from the centre, rather than off the edge of the screen. */
-@media (max-width: 761px) {
+/* There has to be room on the right to absorb the shift: 620px leaves 30px
+   of it, and under it the playing tape is 48px, so the shift is wider. There
+   the dock grows from the centre, rather than off the edge of the screen. */
+@media (max-width: 619px) {
   .lb-dock.is-expanded {
     transform: translateX(-50%);
   }
@@ -952,133 +949,6 @@ body > .cv-paper .cv-text {
     0 0 0 0.5px rgba(30, 34, 48, 0.24);
 }
 
-/* ------------------------------------------------------------- chapter chip */
-
-/* Where Solar's body chip sits: the one place the dock carries colour. */
-.lt-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 9px 0 6px;
-  border-radius: var(--lb-r-pill, 999px);
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-  transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
-}
-
-.lt-chip:hover {
-  color: var(--lb-ink, #1a1a1e);
-  background: rgba(30, 34, 48, 0.055);
-}
-
-.lt-chip.is-on {
-  color: var(--lb-ink-strong, #101014);
-  background: rgba(30, 34, 48, 0.075);
-}
-
-/* Wide enough for the longest name, "Automation" at 76.2px, so the dock
-   holds still from Now through every chapter. */
-.lt-chip-label {
-  min-width: 77px;
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  text-align: left;
-  white-space: nowrap;
-}
-
-/* --------------------------------------------------------- chapters drawer */
-
-/* Opens over the chip rather than the middle of the dock. */
-.lt-bodies {
-  left: 0;
-  gap: 1px;
-  padding: 5px;
-  width: 240px;
-  /* Clear of the title above it and the dock below; past that it scrolls. */
-  max-height: calc(100dvh - 110px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  transform: translate(0, 6px) scale(0.97);
-  transform-origin: bottom left;
-}
-
-.lt-bodies.is-open {
-  transform: translate(0, 0) scale(1);
-}
-
-/* Inside the dock's glass a second blur finds nothing to blur, and the sheets
-   under the drawer read through its names at the panel's 0.82. */
-.lt-bodies {
-  background-color: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
-}
-
-/* Short of room, the drawer scrolls rather than squeeze its rows. */
-.lt-bodies > * {
-  flex-shrink: 0;
-}
-
-.lt-body-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 26px;
-  padding: 0 7px;
-  border-radius: 5px;
-  text-align: left;
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-  transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
-}
-
-.lt-body-row:hover {
-  color: var(--lb-ink, #1a1a1e);
-  background: rgba(30, 34, 48, 0.045);
-}
-
-.lt-body-row[aria-pressed='true'] {
-  color: var(--lb-ink-strong, #101014);
-  background: rgba(30, 34, 48, 0.065);
-}
-
-.lt-body-name {
-  flex: 1 1 auto;
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.lt-body-kind,
-.lt-body-key {
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-}
-
-.lt-body-key {
-  width: 10px;
-  font-family: var(--lb-font-mono, ui-monospace, monospace);
-  letter-spacing: 0;
-  text-align: right;
-}
-
-/* The start year, set as the tabs set it. */
-.cv-body-from {
-  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10.5px;
-  font-weight: 400;
-  letter-spacing: 0;
-  font-variant-numeric: slashed-zero tabular-nums;
-}
-
 /* ------------------------------------------------------------------- clock */
 
 /* The year under the head of the tape, or Iran before there were years. */
@@ -1098,56 +968,6 @@ body > .cv-paper .cv-text {
   min-width: 4ch;
   text-align: right;
   text-transform: uppercase;
-}
-
-/* Back to the present, as a live stream has it: the dot is lit at Now, and a
-   ring to press once the clock has left. */
-.sl-now {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 9px 0 8px;
-  border-radius: var(--lb-r-pill, 999px);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-  transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
-}
-
-.sl-now:hover:not([aria-disabled='true']) {
-  color: var(--lb-ink, #1a1a1e);
-  background: rgba(30, 34, 48, 0.055);
-}
-
-.sl-now:active:not([aria-disabled='true']) {
-  background: rgba(30, 34, 48, 0.09);
-}
-
-.sl-now[aria-disabled='true'] {
-  color: var(--lb-ink, #1a1a1e);
-  cursor: default;
-}
-
-.sl-now-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px currentColor;
-  transition:
-    background-color var(--lb-t-grow, 180ms) ease,
-    box-shadow var(--lb-t-grow, 180ms) ease;
-}
-
-.sl-now[aria-disabled='true'] .sl-now-dot {
-  background: var(--sl-live, #ff5b4f);
-  box-shadow: 0 0 5px var(--sl-live-glow, rgba(255, 91, 79, 0.45));
 }
 
 /* ------------------------------------------------------------------ marks */
@@ -1230,53 +1050,50 @@ body > .cv-paper .cv-text {
   color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
 }
 
-/* Growing up is squeezed into the tenth of the tape before true scale begins.
-   Two short strokes across a gap cut in the track, as a chart breaks an axis,
-   halfway into that tenth: at its end the first year's mark would cover it. */
-.cv-break {
-  position: absolute;
-  top: 50%;
-  left: calc(var(--cv-break, 10%) / 2);
-  width: 4px;
-  height: 10px;
-  border-inline: 1px solid var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-  background: var(--lb-panel-strong, rgba(255, 255, 255, 0.955));
-  transform: translate(-50%, -50%) skewX(-18deg);
-  transition: opacity var(--lb-t-grow, 180ms) ease;
-}
-
-/* Playing, the tape is too short for it to clear the marks either side. */
-.lb-timeline:not(.is-expanded) .cv-break {
-  opacity: 0;
-}
-
 /* ---------------------------------------------------------------- CV button */
 
-/* The way to the text, in the legend's small capitals, the dock's last word. */
+/* The way to the text, and what a recruiter came for: the one solid control
+   in the dock, a page and the word on ink. */
 .cv-paper-btn {
-  height: 26px;
-  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin: -2px -1px -2px 0;
+  padding: 0 13px 0 10px;
   border-radius: var(--lb-r-pill, 999px);
-  font-size: 9.5px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.11em;
+  letter-spacing: 0.08em;
   white-space: nowrap;
-  color: var(--lb-ink-strong, #101014);
+  color: #fff;
+  background: var(--lb-ink-strong, #101014);
+  box-shadow: 0 1px 2px rgba(16, 16, 20, 0.18);
   transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
+    background-color var(--lb-t-quick, 120ms) ease,
+    transform var(--lb-t-quick, 120ms) ease;
+}
+
+.cv-paper-btn .lb-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .cv-paper-btn:hover {
-  background: rgba(30, 34, 48, 0.055);
+  background: #2a2a31;
 }
 
 .cv-paper-btn:active {
-  background: rgba(30, 34, 48, 0.09);
+  transform: scale(0.97);
+}
+
+.cv-paper-btn:focus-visible {
+  outline: 2px solid var(--lb-ink-strong, #101014);
+  outline-offset: 2px;
 }
 
 .cv-paper-btn[aria-pressed='true'] {
-  background: rgba(30, 34, 48, 0.075);
+  background: #3a3a42;
 }
 
 /* --------------------------------------------------------------- skip link */
@@ -1313,7 +1130,7 @@ body > .cv-paper .cv-text {
 
 /*
  * The ways to him, in the corner across from the title, so they are there on
- * every face and not only at Now. Marks in the title's faint ink, centred on
+ * every face. Marks in the title's faint ink, centred on
  * its line and as far in from the right as it is from the left, and full ink
  * under the pointer. Each mark has a 32px target around it.
  */
@@ -1363,7 +1180,7 @@ body > .cv-paper .cv-text {
 }
 
 /* A way's mark, at the line's `--cv-mark` times its own scale. */
-:is(.cv-ways, .cv-contact) .cv-mark {
+.cv-ways .cv-mark {
   flex: none;
   height: calc(var(--cv-mark) * var(--cv-scale, 1));
 }
@@ -1713,82 +1530,18 @@ body > .cv-paper .cv-text {
   top: calc(100% + 9px);
 }
 
-/* -------------------------------------------------------------------- now */
-
-/* At Now: the facts in four columns, the ways to him, and two asides. */
-.cv-facts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, auto));
-  justify-content: start;
-  gap: 10px 36px;
-  margin-top: 22px;
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.cv-label {
-  display: block;
-  margin-bottom: 3px;
-  font-size: 9.5px;
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-}
-
-/* Labelled as a fact is, but beside the four ways rather than over them, a
-   line saved for the intro's second: they wrap under the first of them. */
-.cv-contact {
-  display: flex;
-  align-items: baseline;
-  gap: 0 18px;
-  margin-top: 16px;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.cv-contact .cv-label {
-  flex: none;
-  margin-bottom: 0;
-}
-
-.cv-contact-ways {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 18px;
-}
-
-/* Each way's mark before its name, centred on its capitals (0.36em up), and
-   in the line's height, so the row is no taller for it. */
-.cv-contact .cv-mark {
-  --cv-mark: 1em;
-  display: inline-block;
-  margin-right: 6px;
-  vertical-align: calc(0.36em - var(--cv-mark) * var(--cv-scale, 1) / 2);
-}
-
-.cv-aside {
-  margin-top: 14px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-}
-
-.cv-signoff {
-  margin-top: 6px;
-}
-
+/* A company named in a chapter's copy, a link to it. */
 .cv-link {
-  color: var(--lb-ink, #1a1a1e);
+  color: inherit;
   text-decoration: underline;
   text-decoration-color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition: text-decoration-color var(--lb-t-grow, 180ms) var(--lb-ease, ease);
 }
 
-.cv-link:hover {
+.cv-link:hover,
+.cv-link:focus-visible {
   text-decoration-color: currentColor;
 }
 
@@ -1843,23 +1596,9 @@ body > .cv-paper .cv-text {
 
 /* ------------------------------------------------- narrow viewports (760px) */
 
-/* The Now dot alone, as in Solar. 302px is the rest of the dock with the
-   longest name in the chip, and 7px either side. */
 @media (max-width: 759px) {
   .lb-dock {
-    --lb-tl-w: min(112px, calc(100vw - 302px));
-    --lb-tl-open: min(260px, calc(100vw - 302px));
     --sl-group: 8px;
-  }
-
-  .sl-now {
-    justify-content: center;
-    width: 26px;
-    padding: 0;
-  }
-
-  .sl-now-label {
-    display: none;
   }
 }
 
@@ -1982,36 +1721,13 @@ body > .cv-paper .cv-text {
     --cv-row: 30px;
   }
 
-  .cv-facts {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 20px;
-    margin-top: 16px;
-    font-size: 13px;
-  }
-
-  .cv-contact,
-  .cv-aside {
-    font-size: 13px;
-  }
-
   .lb-dock {
-    /* 175px is the rest of the dock with the chip a swatch, and 7px either side. */
+    /* 122px is the rest of the dock, and 14px either side. */
     --lb-tl-w: 48px;
-    --lb-tl-open: min(260px, calc(100vw - 189px));
+    --lb-tl-open: min(260px, calc(100vw - 150px));
     --sl-group: 4px;
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
-  }
-
-  /* The chip is its swatch alone: the chapter is in the story above. */
-  .lt-chip {
-    justify-content: center;
-    width: 26px;
-    padding: 0;
-  }
-
-  .lt-chip-label {
-    display: none;
   }
 
   .sl-clock {
@@ -2021,25 +1737,11 @@ body > .cv-paper .cv-text {
 }
 
 /*
- * A short phone gives the sheets the height Now's last lines would take:
- * under 760px the closing line goes, under 600px the aside too, the copy
- * comes down two sizes and closes up, and the facts and the ways to him are
- * set as the paper sets them, a label beside each. At 375x667 that leaves a
- * 148px sheet, and at 320x568, where With AI is the tallest face, a 107px
- * one: at 14px its copy left 100px and the tabs against its logos. All of it
- * is on the paper.
+ * A short phone: under 600px the copy comes down two sizes and closes up.
+ * At 320x568, where With AI is the tallest face, at 14px its copy left 100px
+ * and the tabs against its logos.
  */
-@media (max-width: 619px) and (max-height: 759px) {
-  .cv-signoff {
-    display: none;
-  }
-}
-
 @media (max-width: 619px) and (max-height: 599px) {
-  .cv-aside {
-    display: none;
-  }
-
   .cv-kicker {
     margin-bottom: 6px;
   }
@@ -2053,41 +1755,16 @@ body > .cv-paper .cv-text {
   .cv-logos {
     margin-top: 12px;
   }
-
-  /* 56px is "Studied", the widest label, at 50px, and some air. */
-  .cv-facts,
-  .cv-contact {
-    display: grid;
-    grid-template-columns: 56px minmax(0, 1fr);
-    align-items: baseline;
-    gap: 2px 10px;
-    margin-top: 12px;
-  }
-
-  .cv-facts > div {
-    display: contents;
-  }
-
-  .cv-facts .cv-label {
-    margin-bottom: 0;
-  }
-
-  .cv-contact-ways {
-    gap: 2px 14px;
-  }
 }
 
 /*
  * A desktop stage too short for the story and a row under it, a phone on
  * its side. The story comes down from the top in the phone's sizes and
- * smaller, the facts and the ways to him set as on a short phone, and the
- * asides go to the paper: that ends the story at 192px at 844x390, With AI
- * the tallest face, which leaves a 77px sheet between it and the dock, and
- * 111px at 932x430. The copy is the facts' 13px: at 14px With AI ran a line
- * longer and the sheets came to 61px.
+ * smaller. The copy is 13px: at 14px With AI ran a line longer and the
+ * sheets came to 61px.
  */
 @media (min-width: 620px) and (max-height: 519px) {
-  /* As wide as the stage allows, so the facts and the ways to him are a line each. */
+  /* As wide as the stage allows, so the copy takes fewer lines. */
   .cv-story {
     --cv-top: 46px;
     grid-template-columns: min(800px, 100%);
@@ -2134,26 +1811,6 @@ body > .cv-paper .cv-text {
 
   .is-stickers .cv-logo {
     padding: 6px 9px;
-  }
-
-  .cv-aside {
-    display: none;
-  }
-
-  .cv-facts {
-    gap: 6px 28px;
-    margin-top: 10px;
-    font-size: 13px;
-  }
-
-  .cv-contact {
-    margin-top: 8px;
-    font-size: 13px;
-  }
-
-  .cv-contact,
-  .cv-contact-ways {
-    gap: 0 14px;
   }
 }
 

@@ -25,7 +25,7 @@ export type Year = number | Unknown
 export interface Role {
   kind: 'job' | 'degree'
   org: string
-  /** The org where the facts at Now have no room for all of it. */
+  /** The org where the facts have no room for all of it. */
   short?: string
   title: string
   /** Left out where it is not known. */
@@ -487,14 +487,14 @@ export function bare(url: string): string {
   return url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 }
 
-/** One line of the facts at Now. */
+/** One line of the facts. */
 export interface Fact {
   label: string
   value: string
 }
 
 /**
- * The facts at Now, derived rather than written, so it cannot fall behind the
+ * The facts, derived rather than written, so it cannot fall behind the
  * chapters: the current job, the three before it, the newest degree, where he
  * lives and how to reach him.
  */

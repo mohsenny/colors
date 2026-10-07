@@ -36,3 +36,15 @@ export function PauseIcon(): ReactElement {
     </Icon>
   )
 }
+
+/** A page with its corner turned and two lines on it: the CV as text. */
+export function PageIcon(): ReactElement {
+  return (
+    <Icon>
+      <path d="M3.2 1.6h5l2.6 2.6v8.2H3.2Z" />
+      <path d="M8.2 1.6v2.6h2.6" />
+      <path d="M5.2 7h3.6" />
+      <path d="M5.2 9.6h3.6" />
+    </Icon>
+  )
+}

@@ -4,47 +4,35 @@
  * when one of those has changed. React only draws the chrome around it, from
  * snapshots; the clock in the dock is written straight into the page.
  *
- * Time is a position on the tape, 0 to 1, as the tape draws it: Growing up
- * squeezed into the first tenth, true scale from 2008 to today. Every chapter
- * has a stop on it where it starts, and Now is the end. The story, the lifted
- * sheet and the camera all follow the position, so a scrub moves through the
- * life the way the tape does, and letting go settles on the nearest stop.
+ * Time is a position on the tape, 0 to 1. Every chapter has a stop on it,
+ * an equal step apart: Growing up at the start, With AI, the present, at the
+ * end. The story, the lifted sheet and the camera all follow the position,
+ * so a scrub moves through the life the way the tape does, and letting go
+ * settles on the nearest stop.
  */
 
-import { LIFE, MOVED, facts, yearsOf } from '../life'
+import { LIFE, MOVED, yearsOf } from '../life'
 import type { Chapter, Life } from '../life'
 import { NARROW, PHONE_U_MIN, STEP, aim, fit, length, place } from '../layout'
 import type { Fit, Placed, Room } from '../layout'
 import { Film } from '../render/life'
 
 export interface Snapshot {
-  /** The chapter the clock is in, by index, or null at Now. */
-  chapter: number | null
-  /** What the clock says: a year, or for Growing up the place it began. */
+  /** The chapter the clock is in, by index. */
+  chapter: number
+  /** What the clock says: a year. */
   year: string
   playing: boolean
   /** The text CV is out. */
   paper: boolean
-  /** The chapter list is open. */
-  list: boolean
   announce: string
 }
-
-/** How much of the tape Growing up is squeezed into, before the break tick. */
-export const SQUEEZE = 0.1
-
-/**
- * Two chapters that start in the same year get stops this far apart, in
- * years, so each has its own place to settle. None do in this life; the
- * clock floors the year, so both would still read the same.
- */
-export const TIE = 0.5
 
 /** The glide to a stop, as `--lb-t-mode`. */
 export const GLIDE_MS = 420
 
 /**
- * Play's way back from Now to the start: the whole strip in one glide, the
+ * Play's way back from the latest chapter to the start: the whole strip in one glide, the
  * lift and the story passing back through every chapter on the way. Three
  * glides long, about 210ms a chapter, which reads as going back along the
  * row rather than a jump, and is still under a breath.
@@ -60,8 +48,8 @@ export const SETTLE_MS = 160
 /**
  * Play holds a face long enough to read it: a beat to arrive, then 220ms for
  * every word and every logo, a glance each. That is 270 words a minute, a
- * brisk read: Growing up comes to 9.5s, Leading QA to 13.7s, Now to 17.2s and
- * With AI, the longest, to 24.7s.
+ * brisk read: Growing up comes to 9.5s, Leading QA to 13.7s and With AI, the
+ * longest, to 24.7s.
  */
 export const HOLD_MS = 2500
 export const HOLD_PER_WORD_MS = 220
@@ -93,52 +81,29 @@ const STORY_PX = 440
 /** Below this the positions on the tape are the same place. */
 const EPS = 1e-6
 
-/** The year now, with the fraction of it gone. */
-export function yearNow(date: Date = new Date()): number {
-  const y = date.getUTCFullYear()
-  const start = Date.UTC(y, 0, 1)
-  return y + (date.getTime() - start) / (Date.UTC(y + 1, 0, 1) - start)
+/** Each chapter's stop on the tape, an equal step apart: the first at the start, the latest at the end. */
+export function stopsOf(life: Life): number[] {
+  const n = life.chapters.length
+  return life.chapters.map((_, i) => (n > 1 ? i / (n - 1) : 0))
 }
 
-/** Where the true-scale tape begins: the first year a chapter starts at, 2008. */
-export function scaleFrom(life: Life): number {
-  for (const c of life.chapters) if (typeof c.from === 'number') return c.from
-  return 0
+/** The year a chapter starts in. Growing up's is the year he was born, as its tab says. */
+function startOf(life: Life, i: number): number {
+  const from = life.chapters[i]?.from
+  return typeof from === 'number' ? from : life.born
 }
 
-/** A year's place on the tape. */
-export function tapeOf(year: number, from: number, now: number): number {
-  return SQUEEZE + ((1 - SQUEEZE) * (year - from)) / (now - from)
-}
-
-/** The year at a place on the tape, from 2008 on. */
-export function yearOf(position: number, from: number, now: number): number {
-  return from + ((position - SQUEEZE) * (now - from)) / (1 - SQUEEZE)
-}
-
-/** Each chapter's stop on the tape, where it starts. Growing up's is the start of the tape. */
-export function stopsOf(life: Life, now: number): number[] {
-  const from = scaleFrom(life)
-  return life.chapters.map((c, i) => {
-    if (typeof c.from !== 'number') return 0
-    const start = c.from
-    const ties = life.chapters.slice(0, i).filter((d) => d.from === start).length
-    return tapeOf(start + TIE * ties, from, now)
-  })
-}
-
-/** The chapter the clock is in: the last one started by that point, or null at Now. */
-export function chapterAt(position: number, stops: readonly number[]): number | null {
-  if (position >= 1 - EPS) return null
+/** The chapter the clock is in: the last one started by that point. */
+export function chapterAt(position: number, stops: readonly number[]): number {
   let at = 0
   for (let i = 0; i < stops.length; i++) if ((stops[i] as number) <= position + EPS) at = i
   return at
 }
 
-/** The stop nearest a point on the tape: a chapter's index, or null for Now. */
-export function nearest(position: number, stops: readonly number[]): number | null {
-  let best: number | null = null
-  let gap = Math.abs(1 - position)
+/** The stop nearest a point on the tape, by chapter. */
+export function nearest(position: number, stops: readonly number[]): number {
+  let best = 0
+  let gap = Infinity
   for (let i = 0; i < stops.length; i++) {
     const d = Math.abs((stops[i] as number) - position)
     if (d < gap) {
@@ -149,11 +114,14 @@ export function nearest(position: number, stops: readonly number[]): number | nu
   return best
 }
 
-/** What the clock says at a point on the tape. */
-export function yearLabel(position: number, life: Life, now: number): string {
-  if (position < SQUEEZE - EPS) return String(life.chapters[0]?.from ?? '')
+/** What the clock says at a point on the tape: the years run straight from one chapter's start to the next. */
+export function yearLabel(position: number, life: Life, stops: readonly number[]): string {
+  const k = indexAt(position, stops)
+  const i = Math.floor(k)
+  const from = startOf(life, i)
+  const to = startOf(life, Math.min(i + 1, life.chapters.length - 1))
   // Nudged up first, so a stop that lands on 2024 does not read 2023.99999.
-  return String(Math.floor(yearOf(Math.min(1, position), scaleFrom(life), now) + EPS))
+  return String(Math.floor(from + (to - from) * (k - i) + EPS))
 }
 
 /** Words as a reader counts them: B.Sc. and .NET are one each. */
@@ -167,53 +135,40 @@ export function holdOf(chapter: Chapter): number {
   return HOLD_MS + HOLD_PER_WORD_MS * (words(`${chapter.headline} ${chapter.copy}`) + glances)
 }
 
-/** How long Play stays on Now: all the story says there but the ways to reach him, which are not read but used. */
-export function holdOfNow(life: Life): number {
-  const said = [life.name, life.intro, ...facts(life).filter((f) => f.label !== 'Reach').map((f) => f.value)]
-  return HOLD_MS + HOLD_PER_WORD_MS * words([...said, life.outside, life.closing].join(' '))
-}
-
 /**
  * A point on the tape counted in chapters: 0 at the first stop, 1 at the
- * next, and the number of chapters at Now, straight between. A finger moves
- * the clock in these, so a sheet's step of it is one chapter whether the
- * years between are four or six, and Play's way back passes each chapter in
- * the same time.
+ * next, straight between. A finger moves the clock in these, so a sheet's
+ * step of it is one chapter, and Play's way back passes each chapter in the
+ * same time.
  */
 export function indexAt(position: number, stops: readonly number[]): number {
   const i = chapterAt(position, stops)
-  if (i === null) return stops.length
   const from = stops[i] as number
-  const to = stops[i + 1] ?? 1
-  if (to - from < EPS) return i
+  const to = stops[i + 1]
+  if (to === undefined || to - from < EPS) return i
   return i + Math.min(1, Math.max(0, (position - from) / (to - from)))
 }
 
 /** The point on the tape a count of chapters comes to, the other way. */
 export function positionAt(index: number, stops: readonly number[]): number {
-  const k = Math.min(stops.length, Math.max(0, index))
-  const i = Math.min(stops.length - 1, Math.floor(k))
+  const k = Math.min(stops.length - 1, Math.max(0, index))
+  const i = Math.floor(k)
   const from = stops[i] ?? 0
-  const to = stops[i + 1] ?? 1
+  const to = stops[i + 1] ?? from
   return from + (to - from) * (k - i)
 }
 
 /**
  * The camera's place along the life, u, for a point on the tape: each stop
- * is its chapter's sheet, Now the far end, and between them it runs straight,
- * so a scrub carries the camera with it.
+ * is its chapter's sheet, and between them it runs straight, so a scrub
+ * carries the camera with it.
  */
-export function alongAt(position: number, stops: readonly number[], placed: readonly Placed[], len: number): number {
-  let p0 = 0
-  let a0 = placed[0]?.along ?? 0
-  for (let i = 0; i <= stops.length; i++) {
-    const p1 = i < stops.length ? (stops[i] as number) : 1
-    const a1 = i < stops.length ? (placed[i]?.along ?? 0) : len
-    if (position <= p1) return p1 - p0 < EPS ? a1 : a0 + ((a1 - a0) * (position - p0)) / (p1 - p0)
-    p0 = p1
-    a0 = a1
-  }
-  return len
+export function alongAt(position: number, stops: readonly number[], placed: readonly Placed[]): number {
+  const k = indexAt(position, stops)
+  const i = Math.floor(k)
+  const a0 = placed[i]?.along ?? 0
+  const a1 = placed[i + 1]?.along ?? a0
+  return a0 + (a1 - a0) * (k - i)
 }
 
 /**
@@ -266,15 +221,12 @@ interface Drag {
 
 export interface InstrumentOptions {
   life?: Life
-  /** The year now, fraction and all. Today unless a test says otherwise. */
-  now?: number
   /** Cuts instead of glides. */
   reduced?: boolean
 }
 
 export class Instrument {
   private readonly life: Life
-  private readonly year: number
   private readonly stops: number[]
   private readonly placed: Placed[]
   private readonly len: number
@@ -282,7 +234,8 @@ export class Instrument {
   private snap: Snapshot
   private dirty = false
 
-  private chapter: number | null = null
+  /** The latest chapter until something moves the clock, at the end of the tape. */
+  private chapter: number
   private position = 1
   /** Where the camera looks, u along, before it is kept to the life's ends. */
   private camera: number
@@ -294,12 +247,10 @@ export class Instrument {
   /** The pointer is on the story, and Play waits for it. */
   private held = false
   private paper = false
-  private list = false
   private announce = ''
   private reduced: boolean
   private hovered: number | null = null
   private readonly z: number[]
-  private readonly holdNow: number
 
   private root: HTMLElement | null = null
   private story: HTMLElement | null = null
@@ -321,14 +272,13 @@ export class Instrument {
 
   constructor(options: InstrumentOptions = {}) {
     this.life = options.life ?? LIFE
-    this.year = options.now ?? yearNow()
     this.reduced = options.reduced ?? false
-    this.stops = stopsOf(this.life, this.year)
+    this.stops = stopsOf(this.life)
     this.placed = place(this.life.chapters)
     this.len = length(this.placed)
-    this.camera = this.len
+    this.chapter = this.life.chapters.length - 1
+    this.camera = alongAt(this.position, this.stops, this.placed)
     this.z = this.life.chapters.map(() => Z_REST)
-    this.holdNow = holdOfNow(this.life)
     this.snap = this.makeSnapshot()
   }
 
@@ -358,10 +308,9 @@ export class Instrument {
   private makeSnapshot(): Snapshot {
     return {
       chapter: this.chapter,
-      year: yearLabel(this.position, this.life, this.year),
+      year: yearLabel(this.position, this.life, this.stops),
       playing: this.playing,
       paper: this.paper,
-      list: this.list,
       announce: this.announce,
     }
   }
@@ -373,7 +322,7 @@ export class Instrument {
 
   private writeClock(): void {
     if (!this.clockEl) return
-    const year = yearLabel(this.position, this.life, this.year)
+    const year = yearLabel(this.position, this.life, this.stops)
     if (this.clockEl.textContent !== year) this.clockEl.textContent = year
   }
 
@@ -498,7 +447,7 @@ export class Instrument {
 
   /**
    * `#text` puts the paper out, and a chapter's id goes to it, or the id of
-   * one the eight-sheet page had, to where it went. Anything else is Now.
+   * one the eight-sheet page had, to where it went. Anything else is the latest.
    */
   private readHash(): void {
     const said = decodeURIComponent(window.location.hash.slice(1))
@@ -520,7 +469,7 @@ export class Instrument {
   /** The address says what is open, so Back and a shared link come back to it. Replaced, never pushed. */
   private writeHash(): void {
     if (!this.root) return
-    const c = this.chapter === null ? null : this.life.chapters[this.chapter]
+    const c = this.life.chapters[this.chapter]
     const hash = this.paper ? '#text' : c ? `#${c.id}` : ''
     if (window.location.hash === hash) return
     history.replaceState(history.state, '', hash || window.location.pathname + window.location.search)
@@ -538,7 +487,7 @@ export class Instrument {
       if (g.through) {
         const from = indexAt(g.from, this.stops)
         this.position = positionAt(from + (indexAt(g.to, this.stops) - from) * e, this.stops)
-        this.camera = alongAt(this.position, this.stops, this.placed, this.len)
+        this.camera = alongAt(this.position, this.stops, this.placed)
         this.chapter = chapterAt(this.position, this.stops)
       } else {
         this.position = g.from + (g.to - g.from) * e
@@ -614,8 +563,8 @@ export class Instrument {
   }
 
   private said(): string {
-    const c = this.chapter === null ? null : this.life.chapters[this.chapter]
-    return c ? `${c.name}, ${yearsOf(c)}` : 'Now'
+    const c = this.life.chapters[this.chapter]
+    return c ? `${c.name}, ${yearsOf(c)}` : ''
   }
 
   /** To a chapter. */
@@ -626,26 +575,21 @@ export class Instrument {
     this.moveTo(this.stops[index] as number, this.placed[index]?.along ?? 0)
   }
 
-  /** To the end of the tape, where the story is who he is now. */
-  now(fromPlay = false): void {
-    if (!fromPlay) this.stopPlay()
-    this.chapter = null
-    this.moveTo(1, this.len)
+  /** The index of the latest chapter, at the end of the tape. */
+  private get latest(): number {
+    return this.life.chapters.length - 1
   }
 
-  /** The next chapter on, or back. On past the last is Now, and back from Now is the last. */
+  /** To the latest chapter, at the end of the tape. */
+  toLatest(): void {
+    this.go(this.latest)
+  }
+
+  /** The next chapter on, or back, and no further than either end. */
   stepBy(way: 1 | -1): void {
     this.stopPlay()
     const from = this.scrubbing ? nearest(this.position, this.stops) : this.chapter
-    const n = this.life.chapters.length
-    if (from === null) {
-      if (way < 0) this.go(n - 1)
-      else this.now()
-      return
-    }
-    const next = from + way
-    if (next >= n) this.now()
-    else this.go(Math.max(0, next))
+    this.go(Math.min(this.latest, Math.max(0, from + way)))
   }
 
   /** The wheel moving the clock by `dy` px of film, through the years as the tape runs. */
@@ -666,7 +610,7 @@ export class Instrument {
     this.scrubbing = true
     this.position = Math.min(1, Math.max(0, position))
     this.chapter = chapterAt(this.position, this.stops)
-    this.camera = alongAt(this.position, this.stops, this.placed, this.len)
+    this.camera = alongAt(this.position, this.stops, this.placed)
     clearTimeout(this.settleTimer)
     this.writeTape()
     this.emit()
@@ -690,9 +634,7 @@ export class Instrument {
 
   /** Lets go of a scrub, carried on to `to`: the nearest stop to there. */
   private settle(to: number): void {
-    const at = nearest(Math.min(1, Math.max(0, to)), this.stops)
-    if (at === null) this.now()
-    else this.go(at)
+    this.go(nearest(Math.min(1, Math.max(0, to)), this.stops))
   }
 
   // ------------------------------------------------------------ play
@@ -705,35 +647,33 @@ export class Instrument {
     }
     this.playing = true
     this.paper = false
-    this.list = false
-    // From the chapter being read, or from Now back to the start.
-    if (this.chapter === null) this.back()
+    // From the chapter being read, or from the latest back to the start.
+    if (this.chapter === this.latest) this.back()
     else this.walk(this.chapter)
   }
 
-  /** On to a chapter, or past the last one to Now, and held there. */
+  /** On to a chapter, and held there. */
   private walk(index: number): void {
-    if (this.life.chapters[index]) this.go(index, true)
-    else this.now(true)
+    this.go(index, true)
     this.hold(GLIDE_MS)
   }
 
-  /** From Now back to the first chapter, the long way along the row, and held there. */
+  /** From the latest back to the first chapter, the long way along the row, and held there. */
   private back(): void {
     this.moveTo(this.stops[0] as number, this.placed[0]?.along ?? 0, GLIDE_BACK_MS, true)
     this.hold(GLIDE_BACK_MS)
   }
 
-  /** Waits out the glide there, then the chapter's hold or Now's, and moves on: after Now, back to the start. */
+  /** Waits out the glide there, then the chapter's hold, and moves on: after the latest, back to the start. */
   private hold(glide: number): void {
     clearTimeout(this.playTimer)
     if (!this.playing || this.held) return
     // On the way back the chapter is still passing; Play is bound for the start.
     const g = this.glide
     const at = g?.through ? chapterAt(g.to, this.stops) : this.chapter
-    const c = at === null ? null : this.life.chapters[at]
-    const wait = (this.reduced ? 0 : glide) + (c ? holdOf(c) : this.holdNow)
-    this.playTimer = setTimeout(() => (at === null ? this.back() : this.walk(at + 1)), wait)
+    const c = this.life.chapters[at]
+    const wait = (this.reduced ? 0 : glide) + (c ? holdOf(c) : 0)
+    this.playTimer = setTimeout(() => (at >= this.latest ? this.back() : this.walk(at + 1)), wait)
   }
 
   /** The pointer on the story holds Play where it is; leaving it starts the hold again, without the glide. */
@@ -758,7 +698,7 @@ export class Instrument {
     this.emit()
   }
 
-  // ------------------------------------------------------------ paper and list
+  // ------------------------------------------------------------ paper
 
   openPaper(): void {
     this.stopPlay()
@@ -779,28 +719,10 @@ export class Instrument {
     else this.openPaper()
   }
 
-  openList(): void {
-    this.stopPlay()
-    this.list = true
-    this.emit()
-  }
-
-  closeList(): void {
-    if (!this.list) return
-    this.list = false
-    this.emit()
-  }
-
-  toggleList(): void {
-    if (this.list) this.closeList()
-    else this.openList()
-  }
-
-  /** Escape: the paper first, then the list, then back to Now. */
+  /** Escape: the paper first, then back to the latest. */
   escape(): void {
     if (this.paper) this.closePaper()
-    else if (this.list) this.closeList()
-    else if (this.chapter !== null || this.playing) this.now()
+    else if (this.chapter !== this.latest || this.playing) this.toLatest()
   }
 
   // ------------------------------------------------------------ hand
@@ -874,9 +796,7 @@ export class Instrument {
     const k = indexAt(this.position, this.stops)
     const still = performance.now() - d.at > 80
     const carried = Math.min(Math.ceil(k), Math.max(Math.floor(k), k + (still ? 0 : d.speed * FLICK_MS)))
-    const to = Math.round(carried)
-    if (to >= this.life.chapters.length) this.now()
-    else this.go(to)
+    this.go(Math.min(this.latest, Math.round(carried)))
   }
 
   private onClick = (e: MouseEvent): void => {

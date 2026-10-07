@@ -23,10 +23,10 @@ const REDUCED = '(prefers-reduced-motion: reduce)'
 /** Keys that are only half of one, and stop nothing on their own. */
 const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'])
 
-/** What the tape's input says where the clock is: the chapter and its years, or Now. */
+/** What the tape's input says where the clock is: the chapter and its years. */
 function momentOf(snap: Snapshot): string {
-  const c = snap.chapter === null ? undefined : LIFE.chapters[snap.chapter]
-  return c ? `${c.name}, ${yearsOf(c)}` : 'Now'
+  const c = LIFE.chapters[snap.chapter]
+  return c ? `${c.name}, ${yearsOf(c)}` : ''
 }
 
 function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: HTMLElement | null }): ReactElement {
@@ -39,7 +39,6 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
     (el: HTMLElement | null, input: HTMLInputElement | null) => instrument.attachTape(el, input),
     [instrument],
   )
-  const closeList = useCallback(() => instrument.closeList(), [instrument])
   const [marks] = useState<Mark[]>(() =>
     instrument.stopsOnTape().map((at, i) => {
       const c = LIFE.chapters[i]
@@ -47,12 +46,12 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
     }),
   )
 
-  // An open paper or list holds the chrome up, as an open drawer does.
-  useIdle(snap.paper || snap.list)
+  // An open paper holds the chrome up, as an open drawer does.
+  useIdle(snap.paper)
 
   // The life is laid under the story at its tallest, whichever face is up,
   // so the sheets keep their place as faces come and go, and a page opened
-  // on a chapter lays them where Now will. Every face lies unseen in the
+  // on a chapter lays them where the latest will. Every face lies unseen in the
   // probe, so a font arriving or the width changing measures again.
   const measure = useCallback(() => {
     const rect = probe.current?.getBoundingClientRect()
@@ -76,23 +75,21 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
   }, [measure, storySlot])
   const attachStory = useCallback((el: HTMLElement | null) => instrument.attachStory(el), [instrument])
 
-  const actions: StoryActions = {
-    copyEmail: () => {
-      // Where the page may not write the clipboard, the address opens in the
-      // mail app instead, so a press is never for nothing.
-      const mail = (): void => {
-        window.location.href = `mailto:${LIFE.reach.email}`
-      }
-      if (!navigator.clipboard) {
-        mail()
-        return
-      }
-      void navigator.clipboard
-        .writeText(LIFE.reach.email)
-        .then(() => setNote({ text: 'Email copied', at: Date.now() }), mail)
-    },
-    hold: (on) => instrument.holdPlay(on),
+  const copyEmail = (): void => {
+    // Where the page may not write the clipboard, the address opens in the
+    // mail app instead, so a press is never for nothing.
+    const mail = (): void => {
+      window.location.href = `mailto:${LIFE.reach.email}`
+    }
+    if (!navigator.clipboard) {
+      mail()
+      return
+    }
+    void navigator.clipboard
+      .writeText(LIFE.reach.email)
+      .then(() => setNote({ text: 'Email copied', at: Date.now() }), mail)
   }
+  const actions: StoryActions = { hold: (on) => instrument.holdPlay(on) }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -117,7 +114,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
       } else if (e.key === '.' || e.key === '>') {
         instrument.stepBy(1)
       } else if (e.key === 'n' || e.key === 'N') {
-        instrument.now()
+        instrument.toLatest()
       } else if (e.key === 't' || e.key === 'T') {
         instrument.togglePaper()
       } else if (e.key === 'Escape') {
@@ -135,7 +132,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
       {storySlot &&
         createPortal(
           <>
-            <Reach away={snap.paper} copyEmail={actions.copyEmail} />
+            <Reach away={snap.paper} copyEmail={copyEmail} />
             <Story snap={snap} high={high} actions={actions} storyRef={attachStory} probeRef={probe} />
           </>,
           storySlot,
@@ -154,13 +151,9 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
           onScrubEnd: () => instrument.scrubEnd(),
           onStep: (way) => instrument.stepBy(way),
           onFirst: () => instrument.go(0),
-          onNow: () => instrument.now(),
+          onLast: () => instrument.toLatest(),
         }}
         onTogglePlay={() => instrument.togglePlay()}
-        onToggleList={() => instrument.toggleList()}
-        onCloseList={closeList}
-        onGo={(i) => instrument.go(i)}
-        onNow={() => instrument.now()}
         onPaper={() => instrument.togglePaper()}
       />
       <Toast note={note} onDone={() => setNote(null)} />

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
-import { SQUEEZE } from '../app/instrument'
 
 /** A chapter's place on the tape, and what its tip says. */
 export interface Mark {
@@ -23,7 +22,7 @@ export interface TimelineProps {
   onScrubEnd(): void
   onStep(way: 1 | -1): void
   onFirst(): void
-  onNow(): void
+  onLast(): void
 }
 
 /** A drag this close to a mark lands on it, and a pointer this close says which chapter it is. */
@@ -45,14 +44,14 @@ function clamp01(v: number): number {
 
 /**
  * Copied from Solar's, with the tape always full: it is the whole life rather
- * than the last two minutes watched. Growing up is squeezed behind the break
- * tick, every chapter has a mark in its own colour where it starts, and
- * pointing at a mark says which chapter it is. A drag snaps to a mark it
+ * than the last two minutes watched. Every chapter has a mark in its own
+ * colour, an equal step apart, the latest at the end, and pointing at a mark
+ * says which chapter it is. A drag snaps to a mark it
  * comes within 6px of and settles on the nearest when it is let go; the
  * arrow keys go a chapter at a time.
  */
 export function Timeline(props: TimelineProps): ReactElement {
-  const { expanded, marks, moment, attachTape, onScrub, onScrubEnd, onStep, onFirst, onNow } = props
+  const { expanded, marks, moment, attachTape, onScrub, onScrubEnd, onStep, onFirst, onLast } = props
   const rootRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
@@ -100,7 +99,6 @@ export function Timeline(props: TimelineProps): ReactElement {
   const style = {
     '--lb-tl-rec-left': '0%',
     '--lb-tl-rec-width': '100%',
-    '--cv-break': `${SQUEEZE * 100}%`,
   } as CSSProperties
 
   return (
@@ -119,9 +117,8 @@ export function Timeline(props: TimelineProps): ReactElement {
           scrubbing.current = true
           const input = e.currentTarget
           let p = clamp01(input.valueAsNumber)
-          // Now is a place to land on too, at the end of the tape.
           let near = SNAP_PX / Math.max(1, input.getBoundingClientRect().width)
-          for (const at of [...marks.map((m) => m.at), 1]) {
+          for (const { at } of marks) {
             const d = Math.abs(at - p)
             if (d < near) {
               near = d
@@ -141,7 +138,7 @@ export function Timeline(props: TimelineProps): ReactElement {
           const way = STEP_KEYS[e.key]
           if (way) onStep(way)
           else if (e.key === 'Home') onFirst()
-          else if (e.key === 'End') onNow()
+          else if (e.key === 'End') onLast()
           else return
           e.preventDefault()
         }}
@@ -150,7 +147,6 @@ export function Timeline(props: TimelineProps): ReactElement {
       <div className="lb-timeline-visual" aria-hidden="true">
         <span className="lb-timeline-track" />
         <span className="lb-timeline-recorded" />
-        <span className="cv-break" />
         {marks.map((m) => (
           <span
             key={m.name}

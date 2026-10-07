@@ -1,12 +1,10 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement, Ref, SyntheticEvent } from 'react'
 import type { Snapshot } from '../app/instrument'
-import { LIFE, WEB, facts, yearsOf } from '../life'
+import { LIFE, yearsOf } from '../life'
 import type { Chapter } from '../life'
 import { LOGOS } from '../logos'
 import type { Logo as LogoData, LogoId } from '../logos'
-import { closingParts } from '../text'
-import { Mark } from './Reach'
 
 /** The old face fading out, as `--lb-t-grow`. */
 const LEAVE_MS = 180
@@ -15,7 +13,6 @@ const LEAVE_MS = 180
 const ENTER_MS = 450
 
 export interface StoryActions {
-  copyEmail: () => void
   /** The pointer is on the story, so Play waits. */
   hold: (on: boolean) => void
 }
@@ -139,63 +136,10 @@ function ChapterFace({ chapter }: { chapter: Chapter }): ReactElement {
   )
 }
 
-/** At Now: who, the facts, how to reach him, what else, and the instruments. */
-function NowFace({ copyEmail }: Pick<StoryActions, 'copyEmail'>): ReactElement {
-  const { reach } = LIFE
-  return (
-    <>
-      <h1 className="cv-headline">{LIFE.name}</h1>
-      <p className="cv-copy">{LIFE.intro}</p>
-      <dl className="cv-facts">
-        {facts()
-          .filter((f) => f.label !== 'Reach')
-          .map((f) => (
-            <div key={f.label}>
-              <dt className="cv-label">{f.label}</dt>
-              <dd>{f.value}</dd>
-            </div>
-          ))}
-      </dl>
-      <p className="cv-contact">
-        <span className="cv-label">Reach</span>
-        <span className="cv-contact-ways">
-          <button type="button" className="cv-link" onClick={copyEmail}>
-            <Mark way="email" />
-            {reach.email}
-          </button>
-          {WEB.map((id) => (
-            <a key={id} className="cv-link" href={reach[id]} target="_blank" rel="noreferrer">
-              <Mark way={id} />
-              {LOGOS[id].name}
-            </a>
-          ))}
-        </span>
-      </p>
-      <p className="cv-aside">Off screen: {LIFE.outside}</p>
-      <p className="cv-aside cv-signoff">
-        {closingParts(LIFE.closing).map((p, i) =>
-          p.href ? (
-            <a key={i} className="cv-link" href={p.href}>
-              {p.text}
-            </a>
-          ) : (
-            <span key={i}>{p.text}</span>
-          ),
-        )}
-      </p>
-    </>
-  )
+function Face({ chapter }: { chapter: number }): ReactElement | null {
+  const c = LIFE.chapters[chapter]
+  return c ? <ChapterFace chapter={c} /> : null
 }
-
-function Face({ chapter, actions }: { chapter: number | null; actions: StoryActions }): ReactElement {
-  const c = chapter === null ? undefined : LIFE.chapters[chapter]
-  return c ? <ChapterFace chapter={c} /> : <NowFace copyEmail={actions.copyEmail} />
-}
-
-const keyOf = (chapter: number | null): string => (chapter === null ? 'now' : `chapter-${chapter}`)
-
-/** The probe takes no presses. */
-const NONE: StoryActions = { copyEmail: () => undefined, hold: () => undefined }
 
 /**
  * Every face, unseen, in the same cell, for App.tsx to lay the sheets under
@@ -204,9 +148,9 @@ const NONE: StoryActions = { copyEmail: () => undefined, hold: () => undefined }
 const Probe = memo(function Probe({ probeRef }: { probeRef: Ref<HTMLDivElement> }): ReactElement {
   return (
     <div ref={probeRef} className="cv-faces cv-probe" aria-hidden="true" inert>
-      {[null, ...LIFE.chapters.map((_, i) => i)].map((i) => (
-        <div key={keyOf(i)} className="cv-face">
-          <Face chapter={i} actions={NONE} />
+      {LIFE.chapters.map((_, i) => (
+        <div key={i} className="cv-face">
+          <Face chapter={i} />
         </div>
       ))}
     </div>
@@ -215,7 +159,7 @@ const Probe = memo(function Probe({ probeRef }: { probeRef: Ref<HTMLDivElement> 
 
 /** A face as it is up: which, and the how-manyth, so a chapter come back to is a new face. */
 interface Up {
-  chapter: number | null
+  chapter: number
   n: number
 }
 
@@ -232,9 +176,8 @@ interface Faces {
 
 /**
  * The story, open type on the lit surface over the sheets: the chapter being
- * read, or at Now who he is. It stays when the rest of the chrome rests, and
- * a press on it is never only a wake, so a recruiter's first tap on the email
- * copies it.
+ * read. It stays when the rest of the chrome rests, and a press on it is
+ * never only a wake, so a recruiter's first tap on a link follows it.
  *
  * A new face rises in line by line as the old one fades up and away, laid
  * over it so the story keeps its place. Every move sends the face that is up
@@ -335,7 +278,7 @@ export function Story({
             aria-hidden={f.out || undefined}
             inert={f.out}
           >
-            <Face chapter={f.chapter} actions={actions} />
+            <Face chapter={f.chapter} />
           </div>
         ))}
       </div>
