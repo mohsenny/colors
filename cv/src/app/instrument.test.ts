@@ -217,15 +217,15 @@ describe('Play', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  // Every face is held past 9s and under half a minute: With AI, at the 500
-  // characters life.test.ts allows a copy, comes to 24.7s.
+  // Every face is held past 6s and under half a minute: With AI, the longest
+  // at 462 of the 500 characters life.test.ts allows a copy, comes to 23.4s.
   it('holds a beat and a glance for every word and every logo, and never past half a minute', () => {
     expect(words('B.Sc. in  Software Engineering, and .NET apps.')).toBe(7)
     const growing = LIFE.chapters[index('growing-up')] as (typeof LIFE.chapters)[number]
     const said = words(`${growing.headline} ${growing.copy}`)
     expect(holdOf(growing)).toBe(HOLD_MS + HOLD_PER_WORD_MS * (said + growing.tools.length))
     for (const hold of LIFE.chapters.map(holdOf)) {
-      expect(hold).toBeGreaterThan(9000)
+      expect(hold).toBeGreaterThan(6000)
       expect(hold).toBeLessThan(30000)
     }
   })

@@ -5,7 +5,7 @@ export type App = 'mohsen' | 'solar' | 'gravity' | 'lightbox'
 export const APPS: ReadonlyArray<{ id: App; name: string; line: string }> = [
   { id: 'mohsen', name: 'Mohsen', line: 'My CV, told in six chapters' },
   { id: 'solar', name: 'Solar', line: 'The solar system at true scale, seen from any planet or moon' },
-  { id: 'gravity', name: 'Gravity', line: 'Gravity in 3D: a mass pulling in a net of rubber ropes' },
+  { id: 'gravity', name: 'Gravity', line: 'A simulation of gravity: a mass bending space in 3D' },
   { id: 'lightbox', name: 'Lightbox', line: 'Coloured film on a light table, mixing colours nobody chose' },
 ]
 

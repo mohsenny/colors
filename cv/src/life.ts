@@ -107,7 +107,7 @@ export interface Life {
 export const LIFE: Life = {
   name: 'Mohsen Nasiri',
   born: 1989,
-  intro: "I'm Mohsen, a tech lead in Germany with a focus on quality. If it takes creativity, tech or AI, it's for me.",
+  intro: "Based in Germany. If it takes creativity, tech or AI, it's for me.",
   role: 'Tech lead with a focus on quality',
   based: 'Germany',
   reach: {
@@ -124,8 +124,8 @@ export const LIFE: Life = {
       to: 2008,
       where: 'Tehran',
       country: 'Iran',
-      headline: 'Tehran, and a lot of games',
-      copy: 'Growing up in Tehran, I played a lot of video games. StarCraft, Warcraft and Dota were the ones I kept coming back to.',
+      headline: 'Growing up on video games',
+      copy: 'StarCraft, Warcraft and Dota were the ones I kept coming back to.',
       orgs: [],
       tools: ['starcraft', 'warcraft', 'dota'],
       stickers: true,
@@ -139,7 +139,7 @@ export const LIFE: Life = {
       to: 2012,
       where: 'Tehran',
       headline: 'Physics, maths, then software',
-      copy: 'At school I was good at physics and maths, so engineering was the natural next step. I did a B.Sc. in Software Engineering at Iran University of Science and Technology.',
+      copy: 'Those were my best subjects at school, so engineering was the natural next step. I did a B.Sc. in Software Engineering at Iran University of Science and Technology.',
       orgs: ['iust'],
       tools: [],
       roles: [
@@ -165,7 +165,7 @@ export const LIFE: Life = {
       where: 'Joensuu',
       country: 'Finland',
       headline: 'A new life in Finland',
-      copy: 'In 2012 I moved to Joensuu for an M.Sc. in Computer Science at the University of Eastern Finland. Long winters, deep snow, saunas, and my first job alongside the studies: full-stack developer at Arbonaut.',
+      copy: 'I moved to Joensuu for an M.Sc. in Computer Science at the University of Eastern Finland. Long winters, deep snow, saunas, and my first job alongside the studies: full-stack developer at Arbonaut.',
       orgs: ['uef', 'arbonaut'],
       tools: ['php', 'javascript', 'openlayers', 'postgresql', 'dotnet'],
       roles: [
@@ -207,8 +207,8 @@ export const LIFE: Life = {
       to: 2018,
       where: 'Berlin',
       country: 'Germany',
-      headline: 'Berlin, and testing as a craft',
-      copy: 'In 2016 I moved to Berlin and its start-up scene, as a Senior QA Engineer at Hubrick. Automation became my thing: WebdriverIO and CI/CD, load tests in JMeter and Python, and quality metrics in Grafana.',
+      headline: 'Testing as a craft',
+      copy: 'I moved to Berlin and its start-up scene, as a Senior QA Engineer at Hubrick. Automation became my thing: WebdriverIO and CI/CD, load tests in JMeter and Python, and quality metrics in Grafana.',
       orgs: ['hubrick'],
       tools: ['selenium', 'webdriverio', 'cypress', 'k6', 'jmeter', 'python', 'grafana', 'prometheus', 'datadog', 'testrail'],
       roles: [
@@ -237,7 +237,7 @@ export const LIFE: Life = {
       from: 2018,
       to: 'now',
       headline: 'Leading QA, from start-ups to big companies',
-      copy: 'In 2018 I stepped up to QA lead, and built and grew teams at OSRAM, HeyJobs and Talentspace. Then came the big companies: MessageBird in Amsterdam, LucaNet, and now CompuGroup Medical, where I lead manual and automation QAs.',
+      copy: 'I stepped up to QA lead and built and grew teams at OSRAM, HeyJobs and Talentspace. Then came MessageBird in Amsterdam, LucaNet, and now CompuGroup Medical, where I lead manual and automation QAs.',
       orgs: ['osram', 'heyjobs', 'talentspace', 'messagebird', 'lucanet', 'cgm'],
       tools: [],
       roles: [
@@ -341,7 +341,7 @@ export const LIFE: Life = {
       from: 2024,
       to: 'now',
       headline: 'Building with AI',
-      copy: 'Since 2024 AI has been part of how I work, and since 2025 I build real things with it. At CGM I built an AI workflow hub that chains agents, tools and human review into QA workflows. Its agents take a Jira ticket through test cases, automated tests and a merge request to a code review. I also built a test reporting dashboard for nightly runs: trends, flaky tests, coverage by team and results synced to Zephyr. Outside work I built this site with Claude Code: the CV, Solar, Gravity and Lightbox.',
+      copy: 'AI has been part of how I work since 2024, and since 2025 I ship real things with it. At CGM I built an AI workflow hub where agents, tools and human review take a Jira ticket through test cases, automated tests and a merge request to a code review. There is also my test reporting dashboard for nightly runs: trends, flaky tests, coverage by team and results synced to Zephyr. Outside work I made this site with Claude Code: the CV, Solar, Gravity and Lightbox.',
       orgs: [],
       tools: ['claude', 'openai', 'deepseek', 'jira', 'figma', 'react'],
       dye: { L: 0.75, C: 0.14, h: 190, d: 0.55 },
@@ -430,11 +430,11 @@ export const LIFE: Life = {
   outside: 'Space and physics, quantum field theory especially, and my golden retriever.',
   interests: [
     { glyph: 'orbit', text: 'Space and physics' },
-    { glyph: 'wave', text: 'Quantum field theory' },
-    { glyph: 'paw', text: 'My golden retriever' },
+    { glyph: 'atom', text: 'Quantum field theory' },
+    { glyph: 'dog', text: 'My golden retriever' },
   ],
   closing:
-    'Then see what I make for fun: Solar keeps the planets at true scale, Gravity bends space with a mass, Lightbox mixes colour.',
+    'Then see what I make for fun: Solar keeps the planets at true scale, Gravity simulates a mass bending space, Lightbox mixes colour.',
 }
 
 /**

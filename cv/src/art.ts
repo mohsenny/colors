@@ -42,7 +42,7 @@ function dot(x: number, y: number, r: number): string {
   return `M${n(x - r)},${n(y)}a${r},${r} 0 1 0 ${n(2 * r)},0a${r},${r} 0 1 0 ${n(-2 * r)},0Z`
 }
 
-// --- growing up: Tehran, and a lot of games ----------------------------------
+// --- growing up: on video games ----------------------------------------------
 
 /*
  * Azadi Tower with the square at its feet, in front of the Alborz, Damavand
