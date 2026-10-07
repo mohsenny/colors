@@ -10,7 +10,7 @@
  * resuming from a scrubbed frame continues exactly as it would have.
  */
 
-import { dot, len, radiusOf, step } from '../physics/motion'
+import { landing, radiusOf, step } from '../physics/motion'
 import type { Kind, Mover, Vec3 } from '../physics/motion'
 
 export const DT = 1 / 60
@@ -66,6 +66,11 @@ export class World {
   slots: Array<Particle | null> = new Array<Particle | null>(SLOTS).fill(null)
   private nextId = 1
   private nextHue = 0
+
+  /** The hue the next add() deals. */
+  get upcoming(): number {
+    return this.nextHue
+  }
 
   private ring = new Float64Array(HISTORY_FRAMES * FRAME)
   /** Ring index of the newest frame. */
@@ -235,20 +240,4 @@ export class World {
     this.ticks -= back
     this.impacts = this.impacts.filter((s) => s.tick <= this.ticks)
   }
-}
-
-/**
- * Where a step from `a` to `b` first crosses the sphere of `radius`, as a unit
- * vector. A step is long next to a ring a few pixels wide, so the end of it
- * would put the ring visibly past where the particle went in.
- */
-function landing(a: Vec3, b: Vec3, radius: number): Vec3 {
-  const d: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
-  const qa = dot(d, d)
-  const qb = dot(a, d)
-  const disc = qb * qb - qa * (dot(a, a) - radius * radius)
-  const t = qa > 1e-12 && disc >= 0 ? Math.max(0, Math.min(1, (-qb - Math.sqrt(disc)) / qa)) : 1
-  const p: Vec3 = [a[0] + d[0] * t, a[1] + d[1] * t, a[2] + d[2] * t]
-  const n = len(p) || 1
-  return [p[0] / n, p[1] / n, p[2] / n]
 }

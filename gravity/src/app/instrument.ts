@@ -18,6 +18,20 @@ import {
   surfaceClock,
 } from '../physics/bodies'
 import type { Field, Preset } from '../physics/bodies'
+import {
+  FORECAST_TICKS,
+  SNAP_PX,
+  circleDrag,
+  circleOffered,
+  circleVelocity,
+  dotsAlong,
+  fateOf,
+  runTrace,
+  snapTo,
+  startTrace,
+  tangentAt,
+} from '../physics/aim'
+import type { Fate, Trace } from '../physics/aim'
 import { buildNet, deform, detailFor, radialMap } from '../physics/lattice'
 import type { Net, RadialMap } from '../physics/lattice'
 import {
@@ -30,7 +44,6 @@ import {
   localSpeed,
   makeLight,
   makeProbe,
-  step,
 } from '../physics/motion'
 import type { Kind, Mover, Vec3 } from '../physics/motion'
 import { OrbitCamera, matricesOf, mixView, normalize, project, ray } from '../render/camera'
@@ -50,6 +63,8 @@ export const SIZE_LOG = [3, 14] as const
 /** A second press this soon and this close is a double-click. */
 const DOUBLE_MS = 320
 const DOUBLE_PX = 12
+/** A fingertip is less exact, and the aim starts with a double-tap. */
+const DOUBLE_TOUCH_PX = 24
 const CLICK_PX = 5
 const TURN_PER_PX = 0.006
 /** Rad per second the room turns by itself once nobody is touching it. */
@@ -62,7 +77,16 @@ const DOT_STRIDE = 6
 const DOT_COUNT = 40
 const LIGHT_FRAMES = 90
 const BEAM_PX = 3.2
-const FORECAST_S = 3
+/**
+ * The aim's forecast: up to this many dots, and this many ticks stepped a
+ * frame, so a wide orbit takes a few frames rather than one long one.
+ */
+const FORECAST_DOTS = 1500
+const FORECAST_CHUNK = 600
+/** A photon's release is kept this far inside the screen's edge. */
+const AIM_EDGE_PX = 28
+/** The aim's tab sits this far out from the release, away from the body. */
+const AIM_TAB_PX = 26
 /** A press further out than this releases from here, toward the press. */
 const REACH_PRESS = 8
 /**
@@ -131,6 +155,10 @@ const GOLD: Vec3 = [0.8, 0.58, 0.1]
 /** The core at the front of a streak, where the light is. */
 const HOT: Vec3 = [1, 0.72, 0.12]
 const INK: Vec3 = [26 / 255, 30 / 255, 44 / 255]
+/** Gold a step deeper for the forecast: drawn small, gold is the weakest hue on white. */
+const FORECAST_GOLD: Vec3 = [0.7, 0.49, 0.05]
+/** The ground, under the aim's marks, so they hold over the net and the body. */
+const PAPER: Vec3 = [1, 1, 1]
 
 export interface Snapshot {
   presetId: string | null
@@ -176,6 +204,13 @@ interface Press {
   dy?: number
   /** Light: how far wide of the middle it goes if not dragged, and which way. */
   miss?: Vec3
+  /** Aim: where the pointer was when it began, which the drag is measured from. */
+  ax?: number
+  ay?: number
+  touch?: boolean
+  /** Aim, probe: the target the drag is snapped to, or -1, and the drags for a circle. */
+  snap?: number
+  targets?: [number, number][]
   /** Click on a particle: its id, and whether this press toggled its hold. */
   toggled?: number
 }
@@ -206,7 +241,7 @@ export class Instrument {
   private presetId: string | null
   private field: Field = { rs: 0, radius: 1, hole: false }
   private rate = 1
-  private kind: Kind = 'light'
+  private kind: Kind = 'probe'
   /** Where the net draws a rest point, for laying light on a rope. */
   private map: RadialMap = radialMap(0, 1)
   /** Ticks until the next ray, and dice thrown so far. */
@@ -221,6 +256,7 @@ export class Instrument {
 
   private width = 1
   private height = 1
+  private dpr = 1
   private raf = 0
   private last = 0
   private acc = 0
@@ -245,7 +281,17 @@ export class Instrument {
   private lastDown = { x: -999, y: -999, t: -999, toggled: undefined as number | undefined }
   private hover: { x: number; y: number } | null = null
 
-  private points = new Float32Array(4096 * POINT_STRIDE)
+  /**
+   * The aim's forecast: the one being stepped, and the last finished one, which
+   * is what is drawn, so the line never grows on screen. Two paths, swapped.
+   */
+  private aimLive: Trace | null = null
+  private aimKey = ''
+  private aimShown: { trace: Trace; fate: Fate } | null = null
+  private aimPaths = [new Float32Array(3 * (FORECAST_TICKS + 1)), new Float32Array(3 * (FORECAST_TICKS + 1))]
+  private aimScreen = new Float32Array(2 * (FORECAST_TICKS + 1))
+
+  private points = new Float32Array(8192 * POINT_STRIDE)
   private beams = new Float32Array(12 * LIGHT_FRAMES * 6 * BEAM_STRIDE)
 
   private snap: Snapshot
@@ -319,12 +365,14 @@ export class Instrument {
   private resize = (): void => {
     this.width = window.innerWidth
     this.height = window.innerHeight
-    this.renderer.resize(this.width, this.height, Math.min(2, window.devicePixelRatio || 1))
+    this.dpr = Math.min(2, window.devicePixelRatio || 1)
+    this.renderer.resize(this.width, this.height, this.dpr)
   }
 
   // ------------------------------------------------------------------ body
 
   private applyBody(): void {
+    this.dropAim()
     this.field = fieldFor(this.mass, this.radius, this.frame)
     this.rate = rateFor(this.field.rs)
     this.map = radialMap(this.field.rs, this.field.radius)
@@ -336,11 +384,12 @@ export class Instrument {
   }
 
   /**
-   * The room opens already moving: three probes on tilted planes, or in Light,
+   * The room opens already moving: three probes on tilted planes, or in Photon,
    * the first ray of the stream.
    */
   private seed(): void {
     this.stepOff()
+    this.dropAim()
     this.world.clear()
     this.back = 0
     this.wait = 0
@@ -364,7 +413,7 @@ export class Instrument {
   }
 
   /**
-   * In Light, called every tick: after a random gap, a ray comes in along a
+   * In Photon, called every tick: after a random gap, a ray comes in along a
    * random rope, from either end of any of the three directions.
    */
   private sendLight(): void {
@@ -446,7 +495,7 @@ export class Instrument {
     this.kind = k
     this.seed()
     if (!this.playing) this.togglePlay()
-    this.announceText = k === 'probe' ? 'Probes' : 'Light'
+    this.announceText = k === 'probe' ? 'Probes' : 'Photons'
     this.emit()
   }
 
@@ -560,7 +609,7 @@ export class Instrument {
     this.ride = { id, kind: p.kind, along, normal, yaw: 0, rise: SEAT_RISE, back: SEAT_BACK }
     this.left = null
     this.swing = this.reduced ? null : { from: this.view, t0: performance.now() }
-    this.announceText = p.kind === 'probe' ? 'Riding the probe' : 'Riding the light'
+    this.announceText = p.kind === 'probe' ? 'Riding the probe' : 'Riding the photon'
     this.emit()
   }
 
@@ -741,10 +790,11 @@ export class Instrument {
 
     let pc = 0
     let bc = 0
-    const point = (p: Vec3, c: Vec3, a: number, size: number, ring: boolean): void => {
+    // Shape: 0 dot, 1 ring, 2 and 3 the same drawn on top of everything.
+    const point = (p: Vec3, c: Vec3, a: number, size: number, shape: number): void => {
       if (pc * POINT_STRIDE >= this.points.length) return
       const o = pc * POINT_STRIDE
-      this.points.set([p[0], p[1], p[2], c[0], c[1], c[2], a, size, ring ? 1 : 0], o)
+      this.points.set([p[0], p[1], p[2], c[0], c[1], c[2], a, size, shape], o)
       pc++
     }
     // A light's path, newest first, as a ribbon that narrows and fades behind it.
@@ -778,32 +828,91 @@ export class Instrument {
         const dots = this.world.trail(p.id, this.back, DOT_STRIDE, DOT_COUNT)
         for (let i = 1; i < dots.length; i++) {
           const k = 1 - i / DOT_COUNT
-          point(dots[i], c, 0.75 * k * life, 3.2, false)
+          point(dots[i], c, 0.75 * k * life, 3.2, 0)
         }
         // The one ridden is drawn where the eye is, between ticks, and as a ball.
-        point(p.id === this.ride?.id && this.seat ? this.seat.center : p.pos, c, life, 8, false)
-        if (p.held) point(p.pos, INK, 0.55 * life, 17, true)
+        point(p.id === this.ride?.id && this.seat ? this.seat.center : p.pos, c, life, 8, 0)
+        if (p.held) point(p.pos, INK, 0.55 * life, 17, 1)
       } else {
         // No head: the streak is the light, brightest where it has just been.
         beam(this.world.trail(p.id, this.back, 1, LIGHT_FRAMES), life)
-        if (p.held) point(p.pos, INK, 0.55 * life, 15, true)
+        if (p.held) point(p.pos, INK, 0.55 * life, 15, 1)
       }
     }
 
-    // The aim forecast: where the particle will go if let go now.
-    const aim = [...this.presses.values()].find((q) => q.mode === 'aim')
-    if (aim?.origin) {
-      const mover = this.aimMover(aim, b.right, b.up)
-      const c = mover.kind === 'light' ? GOLD : HUES[this.nextHue() % HUES.length]
-      point(mover.pos, c, 0.9, mover.kind === 'light' ? 4 : 8, false)
-      const frames = Math.round(FORECAST_S / DT)
-      const dt = DT * this.rate
-      for (let i = 1; i <= frames; i++) {
-        if (!step(mover, this.field.rs, dt)) break
-        const r = len(mover.pos)
-        if (r <= this.field.radius || r > ESCAPE_R) break
-        if (i % 5 === 0) point(mover.pos, c, 0.55 * (1 - i / frames) + 0.15, 2.6, false)
+    // The aim forecast: where the particle will go if let go now. Not a trail:
+    // a line laid evenly on screen, full strength to the end, which is the answer.
+    const aim = this.aimPress()
+    this.stepForecast(aim)
+    const shown = aim ? this.aimShown : null
+    if (aim && shown && shown.trace.count > 1) {
+      const tr = shown.trace
+      const path = tr.path
+      const n = tr.count
+      const light = tr.from.kind === 'light'
+      const c = light ? FORECAST_GOLD : HUES[this.world.upcoming % HUES.length]
+      const vp = m.viewProj
+      const sc = this.aimScreen
+      let total = 0
+      for (let i = 0; i < n; i++) {
+        const x = path[3 * i]
+        const y = path[3 * i + 1]
+        const z = path[3 * i + 2]
+        const w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15]
+        if (w <= 0) {
+          sc[2 * i] = NaN
+          sc[2 * i + 1] = NaN
+          continue
+        }
+        sc[2 * i] = ((vp[0] * x + vp[4] * y + vp[8] * z + vp[12]) / w / 2 + 0.5) * this.width
+        sc[2 * i + 1] = (0.5 - (vp[1] * x + vp[5] * y + vp[9] * z + vp[13]) / w / 2) * this.height
+        if (i > 0) total += Math.hypot(sc[2 * i] - sc[2 * i - 2], sc[2 * i + 1] - sc[2 * i - 1]) || 0
       }
+      // Bigger than a trail's dots, and close enough to read as one line.
+      const size = this.dpr >= 1.5 ? 3.4 : 4
+      const dots = dotsAlong(sc, n, Math.max(2 * size, total / FORECAST_DOTS), 10)
+      const base = light ? 0.95 : 0.9
+      dots.forEach((f, j) => {
+        const i = Math.min(n - 2, Math.floor(f))
+        const u = f - i
+        const o = 3 * i
+        const at: Vec3 = [
+          path[o] + (path[o + 3] - path[o]) * u,
+          path[o + 1] + (path[o + 4] - path[o + 1]) * u,
+          path[o + 2] + (path[o + 5] - path[o + 2]) * u,
+        ]
+        let a = base
+        // Off the room it goes on: the line fades out rather than stops.
+        if (tr.end === 'edge') a *= Math.min(1, (dots.length - j) / 11)
+        // A circle balanced inside 3 rs is no promise: its last half turn fades.
+        if (shown.fate === 'unstable') a *= Math.min(1, (1 - f / (n - 1)) * 4)
+        point(at, c, a, size, 0)
+      })
+      // Into the body: the ring a strike leaves, where it would strike.
+      const end: Vec3 = [path[3 * n - 3], path[3 * n - 2], path[3 * n - 1]]
+      if (tr.end === 'fall') {
+        point(end, PAPER, 0.85, 16, 3)
+        point(end, c, 0.95, 13, 3)
+      }
+      // A probe's two targets: the drag for a circle, one each way round.
+      const snapped = aim.snap ?? -1
+      if (!light) {
+        this.aimTargets(aim).forEach(([dx, dy], k) => {
+          if (snapped >= 0 && snapped !== k) return
+          const x = (aim.ax ?? aim.x) + dx
+          const y = (aim.ay ?? aim.y) + dy
+          if (x < 0 || y < 0 || x > this.width || y > this.height) return
+          const at = this.planeAt(x, y)
+          point(at, PAPER, 0.85, 18, 3)
+          point(at, c, snapped === k ? 1 : 0.8, 15, 3)
+          if (snapped === k) {
+            point(at, PAPER, 0.85, 8, 2)
+            point(at, c, 1, 5, 2)
+          }
+        })
+      }
+      point(tr.from.pos, PAPER, 0.85, light ? 9 : 11, 2)
+      point(tr.from.pos, c, 1, light ? 6 : 8, 2)
     }
 
     this.renderer.draw({
@@ -839,10 +948,40 @@ export class Instrument {
     return out
   }
 
-  private nextHue(): number {
-    const ids = this.world.slots.filter((p): p is Particle => p !== null)
-    const newest = ids.reduce<Particle | null>((a, p) => (!a || p.id > a.id ? p : a), null)
-    return newest ? newest.hue + 1 : 0
+  /**
+   * Steps the aim's forecast a chunk a frame, from fresh whenever what would
+   * be let go changes. The last finished one stays up until the new one ends.
+   */
+  private stepForecast(aim: Press | undefined): void {
+    if (!aim) {
+      this.aimLive = null
+      this.aimShown = null
+      this.aimKey = ''
+      return
+    }
+    const b = this.mats.basis
+    const m = this.aimMover(aim, b.right, b.up)
+    const { rs, radius } = this.field
+    const key = [m.kind, ...m.pos, ...m.vel, rs, radius, this.rate].join()
+    if (key !== this.aimKey) {
+      this.aimKey = key
+      const spare = this.aimShown?.trace.path === this.aimPaths[0] ? this.aimPaths[1] : this.aimPaths[0]
+      this.aimLive = startTrace(m, spare)
+    }
+    const live = this.aimLive
+    if (live && runTrace(live, rs, radius, ESCAPE_R, DT * this.rate, FORECAST_CHUNK)) {
+      this.aimShown = { trace: live, fate: fateOf(live, rs, radius, ESCAPE_R) }
+      this.aimLive = null
+    }
+  }
+
+  /** How the forecast ends, in a word or three. */
+  private aimWords(q: Press, shown: { trace: Trace; fate: Fate }): string {
+    const { trace, fate } = shown
+    if (fate === 'orbit') return (q.snap ?? -1) >= 0 && trace.from.kind === 'probe' ? 'Circular orbit' : 'Orbit'
+    if (fate === 'unstable') return 'No stable orbit here'
+    if (fate === 'fall') return this.field.hole ? 'Falls in' : 'Hits the surface'
+    return trace.from.kind === 'light' || trace.from.energy >= 1 ? 'Escapes' : 'Leaves the room'
   }
 
   // ------------------------------------------------------------- hover tab
@@ -864,7 +1003,41 @@ export class Instrument {
     return best
   }
 
+  /**
+   * While aiming, the tab names how the forecast ends. It sits just out from
+   * the release, away from the body, so it is off the path and the targets.
+   */
+  private drawAimTab(vp: Float32Array): boolean {
+    const aim = this.aimPress()
+    const shown = this.aimShown
+    if (!aim || !shown) return false
+    this.canvas.style.cursor = 'grabbing'
+    const s = project(vp, shown.trace.from.pos, this.width, this.height)
+    const c = project(vp, [0, 0, 0], this.width, this.height)
+    if (!s) {
+      this.tab.classList.remove('is-on')
+      return true
+    }
+    let ox = c ? s[0] - c[0] : 0
+    let oy = c ? s[1] - c[1] : -1
+    const d = Math.hypot(ox, oy)
+    ox = d > 1e-6 ? ox / d : 0
+    oy = d > 1e-6 ? oy / d : -1
+    const text = this.aimWords(aim, shown)
+    if (this.tab.textContent !== text) this.tab.textContent = text
+    const w = this.tab.offsetWidth
+    const h = this.tab.offsetHeight
+    const x = s[0] + ox * AIM_TAB_PX + ((ox - 1) * w) / 2
+    const y = s[1] + oy * AIM_TAB_PX + ((oy - 1) * h) / 2
+    const left = Math.max(8, Math.min(this.width - w - 8, x))
+    const top = Math.max(8, Math.min(this.height - h - 8, y))
+    this.tab.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`
+    this.tab.classList.add('is-on')
+    return true
+  }
+
   private drawTab(vp: Float32Array): void {
+    if (this.drawAimTab(vp)) return
     const hovered = this.hover && this.presses.size === 0 ? this.hitParticle(this.hover.x, this.hover.y) : null
     this.canvas.style.cursor = hovered ? 'pointer' : this.presses.size > 0 ? 'grabbing' : 'grab'
     // What is being ridden keeps its tab, pinned just above the seat, so the
@@ -891,7 +1064,7 @@ export class Instrument {
     if (target.kind === 'probe') {
       text = `Probe ${localSpeed(target, rs).toFixed(2)} c · Clock ${clockRate(target, rs).toFixed(2)}×`
     } else {
-      text = `Light ${lightSpeedSeen(target.pos, target.vel, rs).toFixed(2)} c seen from here`
+      text = `Photon ${lightSpeedSeen(target.pos, target.vel, rs).toFixed(2)} c seen from here`
     }
     if (target.held) text += ' · Held'
     if (this.tab.textContent !== text) this.tab.textContent = text
@@ -906,13 +1079,19 @@ export class Instrument {
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
 
-  /** Where a press lands: on the plane through the centre that faces the viewer. */
-  private pressPoint(x: number, y: number): Vec3 {
+  /** A screen point on the plane through the centre that faces the viewer. */
+  private planeAt(x: number, y: number): Vec3 {
     const m = this.mats
     const b = m.basis
     const d = ray(m.inverse, b.eye, x, y, this.width, this.height)
     const t = -dot(b.eye, b.forward) / dot(d, b.forward)
-    let p: Vec3 = [b.eye[0] + d[0] * t, b.eye[1] + d[1] * t, b.eye[2] + d[2] * t]
+    return [b.eye[0] + d[0] * t, b.eye[1] + d[1] * t, b.eye[2] + d[2] * t]
+  }
+
+  /** Where a press lands: on the plane through the centre that faces the viewer. */
+  private pressPoint(x: number, y: number): Vec3 {
+    const b = this.mats.basis
+    let p = this.planeAt(x, y)
     const r = len(p)
     const min = Math.max(this.field.radius * 1.25, this.field.rs * 1.6)
     if (r < min) {
@@ -925,8 +1104,50 @@ export class Instrument {
     return [(p[0] * REACH_PRESS) / far, (p[1] * REACH_PRESS) / far, (p[2] * REACH_PRESS) / far]
   }
 
+  /** A body or kind change ends an aim: what it forecast no longer holds. */
+  private dropAim(): void {
+    for (const q of this.presses.values()) {
+      if (q.mode !== 'aim') continue
+      q.mode = 'turn'
+      q.origin = undefined
+      q.moved = true
+    }
+    this.aimLive = null
+    this.aimShown = null
+  }
+
+  private aimPress(): Press | undefined {
+    for (const q of this.presses.values()) if (q.mode === 'aim' && q.origin) return q
+    return undefined
+  }
+
+  /**
+   * The drags that release a probe on an exact circle, one each way round,
+   * where one is offered: never inside 3 rs, nor where it would touch the body.
+   */
+  private aimTargets(q: Press): [number, number][] {
+    if (q.targets) return q.targets
+    q.targets = []
+    if (this.kind !== 'probe' || !q.origin) return q.targets
+    const b = this.mats.basis
+    const t = tangentAt(q.origin, b.forward, b.right)
+    if (circleOffered(q.origin, t, this.field.rs, this.field.radius, ESCAPE_R)) {
+      const [dx, dy] = circleDrag(t, b.right, b.up)
+      q.targets = [
+        [dx, dy],
+        [-dx, -dy],
+      ]
+    }
+    return q.targets
+  }
+
   private aimMover(q: Press, right: Vec3, up: Vec3): Mover {
     const p = q.origin as Vec3
+    if (this.kind === 'probe' && (q.snap ?? -1) >= 0) {
+      // Snapped: exactly circular, so what is drawn is the circle let go.
+      const t = tangentAt(p, this.mats.basis.forward, right)
+      return makeProbe(p, circleVelocity(p, t, q.snap === 0 ? 1 : -1, this.field.rs), this.field.rs)
+    }
     const dx = q.dx ?? 0
     const dy = q.dy ?? 0
     const drag = Math.hypot(dx, dy)
@@ -953,6 +1174,30 @@ export class Instrument {
     const circ = circularSpeed(len(p), this.field.rs)
     const speed = drag > 6 ? Math.min(circ * 2.4, circ * (drag / 70)) : circ * 0.92
     return makeProbe(p, [dir[0] * speed, dir[1] * speed, dir[2] * speed], this.field.rs)
+  }
+
+  /**
+   * Light let go near the body starts LIGHT_RUN out, on the same side, but
+   * never so far that it starts off the screen: on a phone it is drawn back to
+   * AIM_EDGE_PX inside the edge. Never nearer than the press itself.
+   */
+  private runIn(o: Vec3): Vec3 {
+    const r0 = len(o)
+    const at = (r: number): Vec3 => [(o[0] / r0) * r, (o[1] / r0) * r, (o[2] / r0) * r]
+    const inside = (r: number): boolean => {
+      const s = project(this.mats.viewProj, at(r), this.width, this.height)
+      const m = AIM_EDGE_PX
+      return s !== null && s[0] >= m && s[0] <= this.width - m && s[1] >= m && s[1] <= this.height - m
+    }
+    if (inside(LIGHT_RUN)) return at(LIGHT_RUN)
+    let lo = r0
+    let hi = LIGHT_RUN
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2
+      if (inside(mid)) lo = mid
+      else hi = mid
+    }
+    return at(lo)
   }
 
   /**
@@ -994,7 +1239,8 @@ export class Instrument {
     }
 
     const prev = this.lastDown
-    const double = e.timeStamp - prev.t < DOUBLE_MS && Math.hypot(prev.x - x, prev.y - y) < DOUBLE_PX
+    const reach = e.pointerType === 'touch' ? DOUBLE_TOUCH_PX : DOUBLE_PX
+    const double = e.timeStamp - prev.t < DOUBLE_MS && Math.hypot(prev.x - x, prev.y - y) < reach
     const press: Press = { id: e.pointerId, x, y, t: e.timeStamp, moved: false, mode: 'turn' }
 
     if (double && !this.ride) {
@@ -1007,10 +1253,14 @@ export class Instrument {
       press.origin = this.pressPoint(x, y)
       press.dx = 0
       press.dy = 0
+      press.ax = x
+      press.ay = y
+      press.touch = e.pointerType === 'touch'
+      press.snap = -1
       if (this.kind === 'light') {
         const o = press.origin
         const r = len(o)
-        if (r < LIGHT_RUN) press.origin = [(o[0] / r) * LIGHT_RUN, (o[1] / r) * LIGHT_RUN, (o[2] / r) * LIGHT_RUN]
+        if (r < LIGHT_RUN) press.origin = this.runIn(o)
         press.miss = this.throwMiss(press.origin)
       }
       this.lastDown = { x: -999, y: -999, t: -999, toggled: undefined }
@@ -1046,6 +1296,12 @@ export class Instrument {
       q.dy = (q.dy ?? 0) + dy
       q.x = x
       q.y = y
+      // Near the drag for a circle, the aim snaps to it exactly. Instant, both
+      // ways, so what is drawn is always what letting go makes.
+      const was = q.snap ?? -1
+      const [enter, leave] = q.touch ? SNAP_PX.touch : SNAP_PX.mouse
+      q.snap = snapTo(q.dx, q.dy, this.aimTargets(q), was, enter, leave)
+      if (q.touch && was < 0 && q.snap >= 0) navigator.vibrate?.(8)
       return
     }
 
@@ -1069,12 +1325,14 @@ export class Instrument {
       const b = this.mats.basis
       this.branch()
       const p = this.world.add(this.aimMover(q, b.right, b.up))
+      this.aimLive = null
+      this.aimShown = null
       // Light is ridden from the moment it is let go, until it is gone.
       if (p.kind === 'light') {
         this.rideOn(p.id)
         return
       }
-      this.announceText = 'Probe released'
+      this.announceText = (q.snap ?? -1) >= 0 ? 'Probe in orbit' : 'Probe released'
       this.emit()
       return
     }

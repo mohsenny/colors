@@ -95,15 +95,15 @@ Same verbs as Lightbox wherever there is an equivalent.
 | --- | --- | --- |
 | Turn the room | Drag | Drag a sheet |
 | Zoom | Scroll or pinch | |
-| Release a particle | Double-click. A probe goes into a slightly eccentric orbit whose plane faces you. Light starts at least five units out and heads for the mass, missing it by a throw of the dice (about one in five hits), and is ridden | Double-click takes a colour |
-| Aim it | Double-click and keep holding, then drag. A faint dotted forecast shows the next three seconds | |
+| Release a particle | Double-click. A probe goes into a slightly eccentric orbit whose plane faces you. A photon starts at least five units out and heads for the mass, missing it by a throw of the dice (about one in five hits), and is ridden | Double-click takes a colour |
+| Aim it | Double-click and keep holding, then drag. A dotted line shows where it will go: once round if it orbits, off the room if it leaves, to a ring on the body if it falls, and a tab names which. For a probe, two rings mark the drag for a circular orbit, one each way round; near one the aim snaps to it exactly. Inside 3 r_s there is no stable circle, and no rings | |
 | Ride a particle | Click a probe; released light is ridden from the moment it is let go. It is drawn as a ball and the eye sits on it, its top filling the bottom of the screen, looking where it goes and turned in toward the mass round the closest pass, with its speed and clock pinned above it. Riding light runs the room at a quarter speed. The ride ends when it hits or leaves, and light's as soon as it is on its way out past six units. Drag looks around, scroll moves back to following it. <kbd>Esc</kbd> or a click anywhere else steps off | |
 | Hold a light | Click it. Click again to let go | Click stops a sheet |
 | Read a particle | Hover it. A tab shows `PROBE 0.43 C · CLOCK 0.88×` | Hex tab on a sheet |
 | Stop time | <kbd>Space</kbd> | Same |
 | Go back a few seconds | Drag the timeline. 15 s ring buffer, replays exactly | Same |
 | Start over | <kbd>R</kbd>. Clears particles, deals three fresh probes or restarts the stream of light, recentres | <kbd>R</kbd> new colours |
-| Switch Light / Probe | <kbd>L</kbd>, or the segmented control. The room is dealt fresh in that kind | <kbd>B</kbd> Paint / Light |
+| Switch Probe / Photon | <kbd>L</kbd>, or the segmented control. The room is dealt fresh in that kind | <kbd>B</kbd> Paint / Light |
 | Choose a body | <kbd>1</kbd> to <kbd>7</kbd>, or the body chip | |
 | Go to Lightbox | Its name, top left | Same, the other way |
 
@@ -122,7 +122,7 @@ The same places Lightbox uses, and nothing else. No header, no sidebar, no foote
 1. **Body chip.** A 12 px sphere in the body's colour and its name in micro-type (`SUN`). It holds the place of Lightbox's `New` fan: the one place the chrome carries colour, and the colour is the room's own. Opens the bodies drawer.
 2. Play / pause.
 3. Timeline. Widens when paused, the dock pins its left edge, exactly as Lightbox.
-4. **Light | Probe** segmented control: what moves in the room, and what a double-click releases. Light is the default and comes first. Probe deals three probes in orbit. Light keeps an uneven stream coming, a ray every 0.15 to 0.75 s and at most six in flight, each sent in along a random rope from either end of x, y or z, so it starts on the lattice and leaves it only where the body bends it. Both five letters, for the same reason Lightbox's Paint and Light are: the sliding indicator is a 50% pill.
+4. **Probe | Photon** segmented control: what moves in the room, and what a double-click releases. Probe is the default and comes first, and deals three probes in orbit. Photon keeps an uneven stream coming, a ray every 0.15 to 0.75 s and at most six in flight, each sent in along a random rope from either end of x, y or z, so it starts on the lattice and leaves it only where the body bends it. The two cells are made equal, since the words are not: the sliding indicator is a 50% pill.
 5. Save, an arrow into a tray: the room as a PNG, as idle leaves it.
 6. Plus, opening the options drawer.
 
@@ -150,7 +150,7 @@ DOUBLE-CLICK    release, hold to aim
 
 While riding it reads `DRAG look around`, `SPACE stop time`, `ESC OR CLICK step off`. Hidden under 1,004 px, where the dock would come within 15 px of it.
 
-**Particle colours.** Light is always gold, and nothing else in the room is. Probes take the Lightbox roll at film strength, minus its amber, so the only saturated colour in the room, a photographed body aside, is on the particles and the chip. Probe trails are dots every 0.1 s for 4 s. Light is a streak with no head: widest and hottest where it has just been, narrowing and fading over 1.5 s, so a glance tells it from a probe's dots.
+**Particle colours.** Light is always gold, and nothing else in the room is. Probes take the Lightbox roll at film strength, minus its amber, so the only saturated colour in the room, a photographed body aside, is on the particles and the chip. Probe trails are dots every 0.1 s for 4 s. Light is a streak with no head: widest and hottest where it has just been, narrowing and fading over 1.5 s, so a glance tells it from a probe's dots. The aim's forecast is a dotted line in the particle's colour laid evenly in space, not in time, so it is never taken for a trail.
 
 **Idle.** Three seconds without the mouse, a touch or a key, or the window left for another, and every word and control goes, the tab on a particle and the cursor with them, playing or paused. Any of those brings them back, and a touch on an idle page does only that: the tap that wakes it does nothing in the room or on the dock. An open drawer, a press still down, the mouse resting on the chrome, or focus tabbed into it holds them. Shared with the other two (`src/ui/idle.ts`).
 
@@ -188,6 +188,7 @@ Physics, as unit tests:
 - Far from the mass a circular-orbit launch stays within 1% of its radius for five orbits.
 - A probe launched at circular speed inside 3 r_s does not stay in orbit; one outside does.
 - Light with impact parameter 2.5 r_s is captured; 2.7 r_s escapes.
+- The aim offers a circle only outside 3 r_s, and never calls a path that meets the surface an orbit.
 - Weak-field light deflection within 10% of 2 r_s / b.
 - Perihelion advances in the direction of motion.
 - Lattice map is monotonic in radius for every preset and never pushes a point outward outside the body.

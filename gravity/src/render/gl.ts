@@ -284,7 +284,10 @@ void main() {
   gl_Position = uVP * vec4(aPos, 1.0);
   gl_PointSize = aShape.x * uDpr;
   vColor = aColor;
-  vRing = aShape.y;
+  // Shape: 0 dot, 1 ring, and 2 and 3 the same drawn on top.
+  vRing = mod(aShape.y, 2.0);
+  // On top: the aim's marks sit on the limb, or over the body.
+  if (aShape.y > 1.5) gl_Position.z = -0.999 * gl_Position.w;
 }`
 
 const POINTS_FS = `#version 300 es

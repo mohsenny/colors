@@ -282,7 +282,7 @@
   transition: transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
-.lb-seg[data-mode='probe'] .lb-seg-indicator {
+.lb-seg[data-mode='light'] .lb-seg-indicator {
   transform: translateX(100%);
 }
 
@@ -316,6 +316,17 @@
 
 .lb-seg-3[data-index='2'] .lb-seg-indicator {
   transform: translateX(200%);
+}
+
+/*
+ * Two-up with unequal words. Two 1fr columns size both cells to the wider
+ * word, so the half-width indicator sits under either, at any font size.
+ * Not flexed, or a narrow dock shrinks it and the cells come out unequal.
+ */
+.lb-seg-2 {
+  display: grid;
+  flex: none;
+  grid-template-columns: 1fr 1fr;
 }
 
 .lb-seg-btn {
@@ -809,6 +820,12 @@
 
   .lt-readout .lb-tray-list {
     min-width: 0;
+  }
+
+  /* The title says what a page is right where the readout sits
+     (src/styles/title.css), so the readout steps out while it does. */
+  :root:has(.lb-title.is-telling) .lt-readout {
+    opacity: 0;
   }
 
   .lt-slider {
