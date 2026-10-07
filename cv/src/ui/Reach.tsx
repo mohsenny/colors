@@ -35,16 +35,14 @@ export function Mark({ way }: { way: Way }): ReactElement {
 
 /**
  * The four ways to reach him, in the corner across from the title on every
- * face, with who he is beside them where there is room. Email is copied; the
- * rest open in a new tab, so the page keeps its place.
+ * face. Email is copied; the rest open in a new tab, so the page keeps its
+ * place.
  */
 export function Reach({ away, copyEmail }: { away: boolean; copyEmail: () => void }): ReactElement {
   const { reach } = LIFE
   const copy = `Copy ${reach.email}`
   return (
-    <>
-      <p className={`cv-hello${away ? ' is-away' : ''}`}>{LIFE.intro}</p>
-      <nav className={`cv-ways${away ? ' is-away' : ''}`} aria-label="Reach">
+    <nav className={`cv-ways${away ? ' is-away' : ''}`} aria-label="Reach">
       <button type="button" className="cv-way" title={copy} aria-label={copy} onClick={copyEmail}>
         <Mark way="email" />
       </button>
@@ -61,7 +59,6 @@ export function Reach({ away, copyEmail }: { away: boolean; copyEmail: () => voi
           <Mark way={id} />
         </a>
       ))}
-      </nav>
-    </>
+    </nav>
   )
 }

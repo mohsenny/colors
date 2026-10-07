@@ -60,7 +60,8 @@ describe('textCv', () => {
   })
 
   it('has a part for each place the index jumps to', () => {
-    const ids = [...html.matchAll(/href="#(cv-[a-z]+)"/g)].map((m) => m[1])
+    const index = html.slice(html.indexOf('<nav class="cv-index"'), html.indexOf('</nav>', html.indexOf('<nav class="cv-index"')))
+    const ids = [...index.matchAll(/href="#(cv-[a-z]+)"/g)].map((m) => m[1])
     expect(ids).toHaveLength(5)
     for (const id of ids) expect(html).toContain(`<section class="cv-part" id="${id}"`)
   })

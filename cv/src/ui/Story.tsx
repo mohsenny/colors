@@ -1,11 +1,11 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { CSSProperties, ReactElement, Ref, SyntheticEvent } from 'react'
+import type { CSSProperties, HTMLAttributes, ReactElement, Ref, SyntheticEvent } from 'react'
 import type { Snapshot } from '../app/instrument'
 import { LIFE, yearsOf } from '../life'
 import type { Chapter } from '../life'
 import { LOGOS } from '../logos'
 import type { Logo as LogoData, LogoId } from '../logos'
-import { orgParts } from '../text'
+import { orgParts, siteOf } from '../text'
 
 /** The old face fading out, as `--lb-t-grow`. */
 const LEAVE_MS = 180
@@ -41,22 +41,43 @@ function keepNameIn(e: SyntheticEvent<HTMLElement>): void {
 }
 
 /**
+ * A logo's own element: a link to the org's site, in a new tab as its name in
+ * the copy is, where it has one, and otherwise a picture.
+ */
+function Shell({ href, children, ...rest }: { href: string | undefined } & HTMLAttributes<HTMLElement>): ReactElement {
+  return href ? (
+    <a {...rest} href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ) : (
+    <span {...rest} role="img">
+      {children}
+    </span>
+  )
+}
+
+/**
  * One logo, at its row's height times its own scale and as wide as its
  * viewBox makes that. Named for a screen reader and, under the pointer or
- * focus, in its own colour and in words under it. Not a link.
+ * focus, in its own colour and in words under it. A place of work with a
+ * site links to it.
  *
  * A `type` logo is its name, set in type. A place's mark alone in its
  * chapter, `named`, has its name beside it all the time, as a lockup: one
  * emblem on its own says too little to be known by.
  */
-function Logo({ id, named = false }: { id: LogoId; named?: boolean }): ReactElement {
+function Logo({ id, named = false, href }: { id: LogoId; named?: boolean; href?: string }): ReactElement {
   const logo: LogoData = LOGOS[id]
   const style = {
     '--cv-scale': logo.scale,
     '--cv-brand': logo.hex ?? 'var(--lb-ink-strong, #101014)',
   } as CSSProperties
   if (logo.kind === 'type') {
-    return (
+    return href ? (
+      <a className="cv-logo is-type" style={style} href={href} target="_blank" rel="noreferrer">
+        {logo.name}
+      </a>
+    ) : (
       <span className="cv-logo is-type" style={style}>
         {logo.name}
       </span>
@@ -73,20 +94,20 @@ function Logo({ id, named = false }: { id: LogoId; named?: boolean }): ReactElem
   )
   if (named) {
     return (
-      <span className="cv-logo is-named" role="img" aria-label={logo.name} style={style}>
+      <Shell href={href} className="cv-logo is-named" aria-label={logo.name} style={style}>
         {mark}
         <span className="cv-logo-type" aria-hidden="true">
           {logo.name}
         </span>
-      </span>
+      </Shell>
     )
   }
   return (
-    <span
+    <Shell
+      href={href}
       className="cv-logo"
-      role="img"
       aria-label={logo.name}
-      tabIndex={0}
+      tabIndex={href ? undefined : 0}
       style={style}
       onPointerEnter={keepNameIn}
       onFocus={keepNameIn}
@@ -95,7 +116,7 @@ function Logo({ id, named = false }: { id: LogoId; named?: boolean }): ReactElem
       <span className="cv-logo-name" aria-hidden="true">
         {logo.name}
       </span>
-    </span>
+    </Shell>
   )
 }
 
@@ -110,7 +131,7 @@ function Logos({ chapter }: { chapter: Chapter }): ReactElement | null {
       {orgs.length > 0 && (
         <span className="cv-orgs">
           {orgs.map((id) => (
-            <Logo key={id} id={id} named={named} />
+            <Logo key={id} id={id} named={named} href={siteOf(id)} />
           ))}
         </span>
       )}

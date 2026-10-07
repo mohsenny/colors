@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import type { ReactElement } from 'react'
 import type { Snapshot } from '../app/instrument'
-import { PageIcon, PauseIcon, PlayIcon } from './Icons'
+import { PAPER_ID } from '../text'
+import { CloseIcon, PageIcon, PauseIcon, PlayIcon } from './Icons'
 import { Timeline } from './Timeline'
 import type { TimelineProps } from './Timeline'
 
@@ -42,10 +43,20 @@ export function Dock(props: DockProps): ReactElement {
 
       <Timeline {...timeline} />
 
-      {/* A page and the word at every width: it is what a recruiter is looking for. */}
-      <button type="button" className="cv-paper-btn" aria-pressed={snap.paper} aria-label="CV as text" onClick={onPaper}>
-        <PageIcon />
+      {/* A page and the word at every width: it is what a recruiter is looking
+          for. Open, it turns light and the page becomes a cross after the word,
+          the same width, so the dock holds still. */}
+      <button
+        type="button"
+        className={`cv-paper-btn${snap.paper ? ' is-open' : ''}`}
+        aria-expanded={snap.paper}
+        aria-controls={PAPER_ID}
+        aria-label="CV as text"
+        onClick={onPaper}
+      >
+        {!snap.paper && <PageIcon />}
         <span aria-hidden="true">CV</span>
+        {snap.paper && <CloseIcon />}
       </button>
     </div>
   )

@@ -42,6 +42,11 @@ export function closingParts(text: string): Part[] {
   return parts
 }
 
+/** The site of the org a logo is the mark of, where it still has one. */
+export function siteOf(id: LogoId, life: Life = LIFE): string | undefined {
+  return life.chapters.flatMap((c) => c.roles ?? []).find((r) => r.logo === id && r.site)?.site
+}
+
 /** A chapter's copy in runs, each org named in it that has a site of its own a link to it. */
 export function orgParts(text: string, life: Life = LIFE): Part[] {
   const sites = new Map<string, string>()
@@ -170,8 +175,12 @@ function glance(life: Life): string {
   return rows.map(([icon, label, value]) => `<div><dt>${glyph(icon)}${esc(label)}</dt><dd>${value}</dd></div>`).join('')
 }
 
-/** The ways to reach him, each its mark alone on screen, its address in the link's name and in print. */
-function ways(life: Life): string {
+/**
+ * The ways to reach him, each its mark alone on screen, its address in the
+ * link's name and in print. A `tab` of -1 leaves them out of the tab order.
+ */
+function ways(life: Life, tab?: -1): string {
+  const index = tab === undefined ? '' : ` tabindex="${tab}"`
   const { reach } = life
   return [
     { label: 'Email', at: reach.email, href: `mailto:${reach.email}`, icon: glyph('mail', 'cv-way-glyph') },
@@ -181,7 +190,7 @@ function ways(life: Life): string {
   ]
     .map(
       (w) =>
-        `<li><a class="cv-way" href="${esc(w.href)}" aria-label="${w.label}, ${esc(w.at)}" title="${esc(w.at)}">${w.icon}<span class="cv-way-at">${esc(w.at)}</span></a></li>`,
+        `<li><a class="cv-way" href="${esc(w.href)}"${index} aria-label="${w.label}, ${esc(w.at)}" title="${esc(w.at)}">${w.icon}<span class="cv-way-at">${esc(w.at)}</span></a></li>`,
     )
     .join('')
 }
@@ -218,8 +227,12 @@ export function textCv(life: Life = LIFE): string {
     .join('')
   return [
     `<div id="${PAPER_ID}" class="lb-paper cv-paper is-in">`,
+    // The name and the ways again, small, for the bar Paper.tsx brings down
+    // once they are scrolled past. Only for the eye: the hero has them in order.
+    `<div class="cv-bar" aria-hidden="true"><a class="cv-bar-name" href="#cv-top" tabindex="-1">${esc(life.name)}</a>`,
+    `<ul class="cv-reach">${ways(life, -1)}</ul></div>`,
     `<article class="cv-text" tabindex="-1" aria-label="${esc(life.name)}, the CV as text">`,
-    '<header class="cv-hero">',
+    '<header class="cv-hero" id="cv-top">',
     `<h1>${esc(life.name)}</h1>`,
     `<p class="cv-now">${esc(life.role)}</p>`,
     `<ul class="cv-reach" aria-label="Reach">${ways(life)}</ul>`,

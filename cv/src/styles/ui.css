@@ -83,12 +83,94 @@
   inset: calc(18px + env(safe-area-inset-top, 0px)) 0 calc(72px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* The bar's 38px over the reading, and 8px more. */
+  scroll-padding-top: 46px;
   padding: 10px calc(28px + env(safe-area-inset-right, 0px)) 0 32px;
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 15.5px;
   /* Whole pixels here and below, so the rules and dots land on the grid. */
   line-height: 24px;
   color: var(--cv-ink-2);
+}
+
+/*
+ * The bar the name goes up into once the ways under it are scrolled past:
+ * the name small on the left, the four on the right, on the paper's own white
+ * over the top of the reading. 56px, so it covers the reading's first 38px;
+ * a jump down the index lands clear of it.
+ */
+.cv-bar {
+  --cv-ink-1: #121216;
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: calc(56px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) calc(19px + env(safe-area-inset-right, 0px)) 0 32px;
+  background:
+    var(--lb-fibre) 0 0 / 64px 64px,
+    linear-gradient(var(--lb-mount), var(--lb-mount)),
+    var(--lb-surface);
+  border-bottom: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+  box-shadow: 0 8px 16px -14px rgba(16, 16, 20, 0.35);
+  color: var(--cv-ink-1);
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    visibility 0s linear var(--lb-t-grow, 180ms);
+}
+
+.cv-paper.is-past .cv-bar {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* The name as the hero sets it, a third the size. Back to the top. */
+.cv-bar-name {
+  overflow: hidden;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 24px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cv-bar .cv-reach {
+  flex: none;
+  gap: 0;
+  margin: 0;
+}
+
+.cv-bar .cv-way {
+  --cv-row: 20px;
+  width: 36px;
+  height: 36px;
+  transition: background-color var(--lb-t-grow, 180ms) var(--lb-ease, ease);
+}
+
+.cv-bar .cv-way:hover {
+  background-color: rgba(30, 34, 48, 0.07);
+}
+
+.cv-bar .cv-way-glyph {
+  width: 18px;
+  height: 18px;
 }
 
 /* Without script the paper is never taken into the app, and there is no dock
@@ -1092,8 +1174,22 @@ body > .cv-paper .cv-text {
   outline-offset: 2px;
 }
 
-.cv-paper-btn[aria-pressed='true'] {
-  background: #3a3a42;
+/* Open, the paper's own white with ink on it, and the cross on the right, so
+   the padding swaps sides. */
+.cv-paper-btn.is-open {
+  padding: 0 10px 0 13px;
+  color: var(--lb-ink-strong, #101014);
+  background: var(--lb-mount, #fdfdfc);
+  box-shadow:
+    inset 0 0 0 1px var(--lb-hairline, rgba(30, 34, 48, 0.1)),
+    0 1px 2px rgba(16, 16, 20, 0.12);
+}
+
+.cv-paper-btn.is-open:hover {
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(30, 34, 48, 0.22),
+    0 1px 2px rgba(16, 16, 20, 0.12);
 }
 
 /* --------------------------------------------------------------- skip link */
@@ -1167,54 +1263,19 @@ body > .cv-paper .cv-text {
   outline-offset: -2px;
 }
 
-/* Where the title leaves the open paper, they go with it: the paper gives
-   all four in full. */
-@media (max-width: 1287px) {
-  .cv-ways.is-away {
-    visibility: hidden;
-    opacity: 0;
-    transition:
-      opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
-      visibility 0s linear var(--lb-t-enter, 240ms);
-  }
+/* With the paper open they go: it gives all four under the name. */
+.cv-ways.is-away {
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+    visibility 0s linear var(--lb-t-enter, 240ms);
 }
 
 /* A way's mark, at the line's `--cv-mark` times its own scale. */
 .cv-ways .cv-mark {
   flex: none;
   height: calc(var(--cv-mark) * var(--cv-scale, 1));
-}
-
-/* Who he is, in two balanced lines left of the four and centred on the
-   title's line. Only where it clears the title by 32px; the paper opens on it. */
-.cv-hello {
-  display: none;
-}
-
-@media (min-width: 900px) {
-  .cv-hello {
-    position: fixed;
-    top: calc(8px + env(safe-area-inset-top, 0px));
-    /* The four's 128px and 12px more. */
-    right: calc(150.5px + env(safe-area-inset-right, 0px));
-    z-index: 200;
-    display: block;
-    max-width: 360px;
-    font-size: 12.5px;
-    line-height: 1.4;
-    text-align: right;
-    text-wrap: balance;
-    color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
-    transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
-  }
-
-  .cv-hello.is-away {
-    visibility: hidden;
-    opacity: 0;
-    transition:
-      opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
-      visibility 0s linear var(--lb-t-enter, 240ms);
-  }
 }
 
 /* ------------------------------------------------------------------ swatch */
@@ -1330,12 +1391,6 @@ body > .cv-paper .cv-text {
   transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
 }
 
-/* Idle still leaves slowly, as in src/styles/title.css: that sheet loads
-   before this one, so the transition above would cut its fade short. */
-.is-idle .cv-stage .lb-title {
-  transition-duration: var(--lb-t-rest, 700ms);
-}
-
 /* 560px of paper and the title's 326px, with 16px between. */
 @media (max-width: 901px) {
   .cv-stage:has(.cv-paper.is-in) .lb-title {
@@ -1429,6 +1484,7 @@ body > .cv-paper .cv-text {
   flex: none;
   height: calc(var(--cv-row) * var(--cv-scale, 1));
   color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  text-decoration: none;
   outline: none;
   transition: color var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
@@ -1703,6 +1759,20 @@ body > .cv-paper .cv-text {
     top: calc(40px + env(safe-area-inset-top, 0px));
   }
 
+  /* 50px here, over the reading's first 36px, at its 18px insets. */
+  .cv-text {
+    scroll-padding-top: 44px;
+  }
+
+  .cv-bar {
+    height: calc(50px + env(safe-area-inset-top, 0px));
+    padding-inline: calc(18px + env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-right, 0px));
+  }
+
+  .cv-bar-name {
+    font-size: 17px;
+  }
+
   /* In the title's row, now 18px and 12px down, and at its 14px inset. */
   .cv-ways {
     --cv-mark: 18px;
@@ -1855,25 +1925,4 @@ body > .cv-paper .cv-text {
   .cv-ways {
     top: calc(34px + env(safe-area-inset-top, 0px));
   }
-}
-
-/* -------------------------------------------------------------------- idle */
-
-/*
- * Idle (src/ui/idle.ts, shared): the title, the tabs and the rest of the
- * chrome leave, which leaves the life as a picture. The story stays, being
- * what a reader came for.
- */
-.is-idle .lb-dock,
-.is-idle .lb-legend,
-.is-idle .lb-tab,
-.is-idle .cv-ways {
-  opacity: 0;
-  pointer-events: none;
-  transition-duration: var(--lb-t-rest, 700ms);
-}
-
-.is-idle,
-.is-idle *:not(.cv-story, .cv-story *) {
-  cursor: none !important;
 }

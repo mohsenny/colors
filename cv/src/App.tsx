@@ -13,7 +13,6 @@ import { Reach } from './ui/Reach'
 import { Story } from './ui/Story'
 import type { StoryActions } from './ui/Story'
 import type { Mark } from './ui/Timeline'
-import { useIdle } from '../../src/ui/idle'
 import { Title } from '../../src/ui/Title'
 import { Toast } from '../../src/ui/Toast'
 import type { Note } from '../../src/ui/Toast'
@@ -46,9 +45,6 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
     }),
   )
 
-  // An open paper holds the chrome up, as an open drawer does.
-  useIdle(snap.paper)
-
   // The life is laid under the story at its tallest, whichever face is up,
   // so the sheets keep their place as faces come and go, and a page opened
   // on a chapter lays them where the latest will. Every face lies unseen in the
@@ -74,6 +70,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
     }
   }, [measure, storySlot])
   const attachStory = useCallback((el: HTMLElement | null) => instrument.attachStory(el), [instrument])
+  const closePaper = useCallback(() => instrument.closePaper(), [instrument])
 
   const copyEmail = (): void => {
     // Where the page may not write the clipboard, the address opens in the
@@ -137,7 +134,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
           </>,
           storySlot,
         )}
-      <Paper open={snap.paper} />
+      <Paper open={snap.paper} onClose={closePaper} />
       <Legend />
       <Dock
         snap={snap}

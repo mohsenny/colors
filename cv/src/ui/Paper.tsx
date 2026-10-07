@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { ReactElement } from 'react'
 import { shadowStack } from '../../../src/render/shadow'
 import { PAPER_ID } from '../text'
@@ -6,13 +6,18 @@ import { PAPER_ID } from '../text'
 /** Lightbox lays its paper at the middle of the depth range, and this is the same card. */
 const PAPER_Z = 0.5
 
+/** A press on these is not a press away from the paper: the paper, and the dock that holds its button. */
+const NOT_AWAY = `#${PAPER_ID}, .lb-dock`
+
 /**
  * The text CV on Lightbox's paper. The paper is in index.html already,
  * written there by text.ts at build time, so it reads before this script
  * runs and without it. This only takes it in, so it stacks with the rest of
- * the page, and slides it out or back.
+ * the page, and slides it out or back. A press anywhere off it puts it away,
+ * and scrolled past the name, its bar comes down with the name and the four
+ * ways in it.
  */
-export function Paper({ open }: { open: boolean }): ReactElement {
+export function Paper({ open, onClose }: { open: boolean; onClose?: () => void }): ReactElement {
   const slot = useRef<HTMLDivElement | null>(null)
 
   useLayoutEffect(() => {
@@ -35,12 +40,37 @@ export function Paper({ open }: { open: boolean }): ReactElement {
       to.focus({ preventScroll: true })
     }
     paper.addEventListener('click', jump)
+    // The bar comes down once the ways under the name have scrolled up out of
+    // sight, and goes when they are back.
+    const text = paper.querySelector('.cv-text')
+    const ways = paper.querySelector('.cv-hero .cv-reach')
+    let watch: IntersectionObserver | null = null
+    if (text && ways) {
+      watch = new IntersectionObserver(
+        ([e]) => paper.classList.toggle('is-past', !!e && !e.isIntersecting && e.boundingClientRect.top < (e.rootBounds?.top ?? 0)),
+        { root: text },
+      )
+      watch.observe(ways)
+    }
     // Back where it was found, so the development double mount finds it again.
     return () => {
       paper.removeEventListener('click', jump)
+      watch?.disconnect()
+      paper.classList.remove('is-past')
       home?.insertBefore(paper, next)
     }
   }, [])
+
+  // Pressed, not clicked: a selection in the paper let go off it is still reading.
+  useEffect(() => {
+    if (!open || !onClose) return
+    const away = (e: PointerEvent): void => {
+      if (e.button !== 0 || (e.target instanceof Element && e.target.closest(NOT_AWAY))) return
+      onClose()
+    }
+    document.addEventListener('pointerdown', away, true)
+    return () => document.removeEventListener('pointerdown', away, true)
+  }, [open, onClose])
 
   const first = useRef(true)
   // What had focus when the paper came out, to have it back when the paper

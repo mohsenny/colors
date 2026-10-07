@@ -48,3 +48,13 @@ export function PageIcon(): ReactElement {
     </Icon>
   )
 }
+
+/** A cross, for putting the paper away. */
+export function CloseIcon(): ReactElement {
+  return (
+    <Icon>
+      <path d="M3.8 3.8l6.4 6.4" />
+      <path d="M10.2 3.8l-6.4 6.4" />
+    </Icon>
+  )
+}
