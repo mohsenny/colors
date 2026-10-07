@@ -1003,6 +1003,12 @@ body > .cv-paper .cv-text {
     transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
+/* Idle still leaves slowly, as in src/styles/title.css: that sheet loads
+   before this one, so the transition above would cut its fade short. */
+.is-idle .cv-stage .lb-title {
+  transition-duration: var(--lb-t-rest, 700ms);
+}
+
 .cv-stage:has(.cv-paper.is-in) .lb-title {
   transform: translateX(560px);
 }
