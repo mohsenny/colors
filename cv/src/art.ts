@@ -65,8 +65,8 @@ const BUTTONS = [
 /** Select and start, halfway between the cross and the buttons: two short strokes the round caps make pills of. */
 const PILLS = 'M18.05,19.5H19.05M21.55,19.5H22.55'
 
-/** Its cable, out of the top of the frame right of the tab, so it never reads as plugged into it. */
-const CABLE = 'M21.25,10C21.25,4 46,6.5 46,0'
+/** Its cable, slack, out of the top of the frame right of the tab, so it never reads as plugged into it: out at 46 it ran under 1989 IRAN on a 130px sheet. */
+const CABLE = 'M21.25,10C21.25,4.5 33,4.5 47,7.5C62,10.5 80,9 80,0'
 
 /** The tower's outline and its arch, from the left foot round to the right. */
 const TOWER =
