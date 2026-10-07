@@ -1,4 +1,4 @@
-Where each logo in cv/src/logos.ts came from (sources fetched 2026-10-06) and what was done to make it a single-colour mark.
+Where each logo in cv/src/logos.ts came from (sources fetched 2026-10-06 and 2026-10-07) and what was done to make it a single-colour mark.
 
 | id | name | source | licence or trademark | changed |
 | --- | --- | --- | --- | --- |
@@ -31,8 +31,8 @@ Where each logo in cv/src/logos.ts came from (sources fetched 2026-10-06) and wh
 | datadog | Datadog | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/datadog.svg | Trademark of Datadog, Inc. | cropped |
 | testrail | TestRail | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/testrail.svg | Trademark of Idera, Inc. | cropped |
 | claude | Claude | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/claude.svg | Trademark of Anthropic. | cropped |
+| openai | ChatGPT | https://commons.wikimedia.org/wiki/File:OpenAI_logo_2025_(symbol).svg | Public domain on Commons; trademark of OpenAI. The blossom OpenAI has used since 2025; not in simple-icons. | cropped |
+| deepseek | DeepSeek | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/deepseek.svg | Trademark of Hangzhou DeepSeek Artificial Intelligence Co., Ltd. Colour #4D6BFE is deepseek.com's own brand colour. | cropped |
 | jira | Jira | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/jira.svg | Trademark of Atlassian. | cropped |
-| confluence | Confluence | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/confluence.svg | Trademark of Atlassian. | cropped |
 | figma | Figma | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/figma.svg | Trademark of Figma, Inc. | cropped |
 | react | React | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/react.svg | Trademark of Meta Platforms, Inc. | cropped |
-| webgl | WebGL | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/webgl.svg | Trademark of the Khronos Group. | TM sign dropped, cropped |

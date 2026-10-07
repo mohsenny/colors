@@ -1423,10 +1423,11 @@ body > .cv-paper .cv-text {
 /*
  * A short phone gives the sheets the height Now's last lines would take:
  * under 760px the closing line goes, under 600px the aside too, the copy
- * comes down a size, and the facts and the ways to him are set as the paper
- * sets them, a label beside each. At 375x667 that leaves a 139px sheet, and
- * at 320x568 Now about as tall as the longest chapter. All of it is on the
- * paper.
+ * comes down two sizes and closes up, and the facts and the ways to him are
+ * set as the paper sets them, a label beside each. At 375x667 that leaves a
+ * 140px sheet, and at 320x568, where With AI is the tallest face, a 111px
+ * one: at 14px its copy left 100px and the tabs against its logos. All of it
+ * is on the paper.
  */
 @media (max-width: 619px) and (max-height: 759px) {
   .cv-signoff {
@@ -1439,8 +1440,18 @@ body > .cv-paper .cv-text {
     display: none;
   }
 
+  .cv-kicker {
+    margin-bottom: 6px;
+  }
+
   .cv-copy {
-    font-size: 14px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .cv-logos {
+    margin-top: 12px;
   }
 
   /* 56px is "Studied", the widest label, at 50px, and some air. */
@@ -1471,8 +1482,10 @@ body > .cv-paper .cv-text {
  * A desktop stage too short for the story and a row under it, a phone on
  * its side. The story comes down from the top in the phone's sizes and
  * smaller, the facts and the ways to him set as on a short phone, and the
- * asides go to the paper: that ends the story at 185px at 844x390, which
- * leaves an 82px sheet between it and the dock, and 118px at 932x430.
+ * asides go to the paper: that ends the story at 192px at 844x390, With AI
+ * the tallest face, which leaves a 77px sheet between it and the dock, and
+ * 111px at 932x430. The copy is the facts' 13px: at 14px With AI ran a line
+ * longer and the sheets came to 61px.
  */
 @media (min-width: 620px) and (max-height: 519px) {
   /* As wide as the stage allows, so the facts and the ways to him are a line each. */
@@ -1497,8 +1510,8 @@ body > .cv-paper .cv-text {
 
   .cv-copy {
     margin-top: 6px;
-    font-size: 14px;
-    line-height: 1.45;
+    font-size: 13px;
+    line-height: 1.4;
   }
 
   .cv-logos {

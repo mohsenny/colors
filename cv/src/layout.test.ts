@@ -143,12 +143,12 @@ describe('fit', () => {
 
   it('gives a stage too short for the desktop floor what its band holds, down to a tab', () => {
     // A phone on its side, 844x390: the story's lower edge as measured, and the dock's upper one.
-    const f = fit({ width: 844, height: 390, top: 185, bottom: 334 }, len)
+    const f = fit({ width: 844, height: 390, top: 192, bottom: 334 }, len)
     expect(f.narrow).toBe(false)
     expect(f.u).toBeLessThan(U_MIN)
     const lifted = toStage(f, placed[2] as (typeof placed)[number], aim(f, 2), 1)
     const [top, bottom] = reach(lifted)
-    expect(top - TAB_PROUD).toBeGreaterThanOrEqual(185)
+    expect(top - TAB_PROUD).toBeGreaterThanOrEqual(192)
     expect(bottom).toBeLessThanOrEqual(334)
     expect(fit({ width: 844, height: 390, top: 360, bottom: 334 }, len).u).toBe(TAB_W)
   })

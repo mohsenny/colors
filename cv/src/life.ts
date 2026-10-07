@@ -44,7 +44,7 @@ export interface Chapter {
   where?: string
   /** The story's big line. */
   headline: string
-  /** Three sentences at most. */
+  /** Five sentences and 500 characters at most, which the story holds on the smallest phone (life.test.ts). */
   copy: string
   /** Where it happened, drawn larger than the tools. */
   orgs: LogoId[]
@@ -271,8 +271,8 @@ export const LIFE: Life = {
           to: 'now',
           points: [
             'Lead the manual and automation QAs.',
-            'Built a test reporting dashboard.',
-            'Built an AI workflow hub: agent workflows for QA with human review steps. It is becoming the standard AI workflow tool at CGM in Germany.',
+            'Built an AI workflow hub that chains Claude agents into QA workflows with human review steps, from a Jira ticket to test cases, automated tests, a merge request and a code review. It is becoming the standard AI workflow tool at CGM in Germany.',
+            'Built a test reporting dashboard: trends and flaky tests from Allure results, coverage by team, a Jira bug dashboard, results synced to Zephyr, and visual snapshot review.',
           ],
         },
       ],
@@ -285,9 +285,9 @@ export const LIFE: Life = {
       from: 2024,
       to: 'now',
       headline: 'Building with AI',
-      copy: 'Since 2024 AI has been part of how I work, and since 2025 I build real things with it. At CGM: a test reporting dashboard, and an AI workflow hub that chains Claude agents into reviewed QA workflows. Outside work: this site.',
+      copy: 'Since 2024 AI has been part of how I work, and since 2025 I build real things with it. At CGM I built an AI workflow hub that chains Claude agents into reviewed QA workflows. Its agents take a Jira ticket through test cases, automated tests and a merge request to a code review. I also built a test reporting dashboard for nightly test runs, with trends, flaky tests, coverage by team and results synced to Zephyr. Outside work I built this site with Claude Code: the CV, Solar, Gravity and Lightbox.',
       orgs: [],
-      tools: ['claude', 'jira', 'confluence', 'figma', 'react', 'webgl'],
+      tools: ['claude', 'openai', 'deepseek', 'jira', 'figma', 'react'],
       dye: { L: 0.75, C: 0.14, h: 190, d: 0.55 },
       lean: 0.6,
     },

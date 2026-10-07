@@ -30,7 +30,7 @@ export const MARGIN_NARROW = MARGIN / 2
  * without panning. The largest is what 1920x1080 comes to by width, 279px,
  * with some to spare. A stage too short for the smallest, a phone on its
  * side, gets what its band holds with a phone's margins, down to a tab's
- * width: 82px at 844x390, where ui.css sets the story small.
+ * width: 77px at 844x390, where ui.css sets the story small.
  */
 export const U_MIN = 120
 export const U_MAX = 320

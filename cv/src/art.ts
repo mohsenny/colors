@@ -37,27 +37,34 @@ function grid(step: number, x0: number, y0: number, x1: number, y1: number): str
   return d
 }
 
+/** A circle as two half turns, as path data: a field of dots is then one path, and a clip path can cut round one. */
+function dot(x: number, y: number, r: number): string {
+  return `M${n(x - r)},${n(y)}a${r},${r} 0 1 0 ${n(2 * r)},0a${r},${r} 0 1 0 ${n(-2 * r)},0Z`
+}
+
 // --- growing up: Tehran, and a lot of games ----------------------------------
 
 /*
  * Azadi Tower in front of the Alborz, Damavand white on the right, the sky a
- * screen's pixel grid with a pixel sun in it, and the tower picked out the way
- * a strategy game picks out a unit: a health bar over it, and the cursor.
+ * screen's pixel grid with a game pad in front of it, and the tower picked out
+ * the way a strategy game picks out a unit: a health bar over it, and the
+ * cursor.
  */
 
-/** The sun, a disc drawn in half cells of the sky grid, outlined step by step down its right side and back up its left. */
-const SUN = (() => {
-  const [cx, cy, r, cell] = [20, 19, 10, 2.5]
-  const rows: [number, number, number][] = []
-  for (let y = cy - r; y < cy + r - 1e-6; y += cell) {
-    const mid = y + cell / 2 - cy
-    const half = Math.round(Math.sqrt(r * r - mid * mid) / cell) * cell
-    if (half > 0) rows.push([y, y + cell, half])
-  }
-  const right = rows.flatMap(([y0, y1, h]): [number, number][] => [[cx + h, y0], [cx + h, y1]])
-  const left = rows.flatMap(([y0, y1, h]): [number, number][] => [[cx - h, y0], [cx - h, y1]]).reverse()
-  return `${line([...right, ...left])}Z`
-})()
+/** The pad, a box on half cells of the sky grid with a cell cut from each corner, the way a pixel screen rounds one. The grid stops at it, as at the ridge. */
+const PAD = 'M7.5,10H35V12.5H37.5V22.5H35V25H7.5V22.5H5V12.5H7.5Z'
+
+/** Its cross, a cell to each arm. */
+const DPAD = 'M11.25,13.75h2.5v2.5h2.5v2.5h-2.5v2.5h-2.5v-2.5h-2.5v-2.5h2.5Z'
+
+/** Its two buttons, as far right of the pad's middle as the cross is left of it. */
+const BUTTONS = [
+  [27.5, 19.25],
+  [32.5, 15.75],
+] as const
+
+/** Its cable, out of the top of the frame right of the tab, so it never reads as plugged into it. */
+const CABLE = 'M21.25,10C21.25,4 46,6.5 46,0'
 
 /** The tower's outline and its arch, from the left foot round to the right. */
 const TOWER =
@@ -75,10 +82,13 @@ const SKY =
   'L9,56L5,54L0,58Z'
 
 const growingUp = [
-  `<clipPath id="cv-art-tehran-sky"><path d="${SKY}"/></clipPath>`,
+  `<clipPath id="cv-art-tehran-sky"><path clip-rule="evenodd" d="${SKY}${PAD}"/></clipPath>`,
   `<path class="cv-fine" clip-path="url(#cv-art-tehran-sky)" d="${grid(5, 0, 0, 100, 60)}"/>`,
-  `<path class="cv-tint" d="${SUN}"/>`,
-  `<path d="${SUN}"/>`,
+  // The pad and its cable.
+  `<path class="cv-tint" d="${PAD}"/>`,
+  `<path d="${PAD}${CABLE}"/>`,
+  `<path class="cv-solid" d="${DPAD}"/>`,
+  ...BUTTONS.map(([x, y]) => `<circle class="cv-solid" cx="${x}" cy="${y}" r="2.3"/>`),
   `<path d="${RIDGE_LEFT}${RIDGE_RIGHT}"/>`,
   `<path class="cv-tint" d="M78,28.5L79,28L81,28L82,28.5L90,36.5L87,34.5L84.5,37L81.5,34.5L79,37L76,34.5L72.5,36Z"/>`,
   // The tower: the swept sides, the arch, the lattice and window over it, the crown.
@@ -274,130 +284,200 @@ const finland = [
 // --- automation: Berlin, and testing as a craft ------------------------------
 
 /*
- * A test run as it reads on a screen: a pipeline of stages, all passed, and
- * row after row of passing checks behind, with the one bug caught under a
- * magnifying glass.
+ * Berlin at start-up scale: a street of Altbau roofs, none of them high, with
+ * the Fernsehturm over them and a pipeline of four stages in the sky, all
+ * passed. The sky is hatched as an engraving is, and every line of the
+ * hatching is a passing check.
  */
 
-/** The log: a check and a line on every row, of a length that varies the way test names do. */
-const LOG = (() => {
-  const lengths = [52, 70, 38, 61, 77, 45, 66, 30, 58, 72, 49]
+/** The tower's ball. */
+const BALL = { x: 30, y: 31, r: 6 }
+
+/** The mast over the ball, its tip and two bars between the hatching's rows: on the rows, the bars were lost in the ruling and the tip hung from it. */
+const MAST = 'M30,25V7.5M29.1,17.5H30.9M29.4,12.5H30.6'
+
+/**
+ * The sky the hatching leaves round the mast, as it leaves the ball: a unit
+ * clear of the bars and the tip, which still reads as a gap at 150px. It stops
+ * on the ball's own curve, since the clip is even-odd and an overlap would let
+ * the hatching back in.
+ */
+const MAST_CLEAR = (() => {
+  const [half, top] = [2.5, 6]
+  const y = BALL.y - Math.sqrt(BALL.r * BALL.r - half * half)
+  return `M${BALL.x - half},${top}H${BALL.x + half}V${n(y)}A${BALL.r},${BALL.r} 0 0 0 ${BALL.x - half},${n(y)}Z`
+})()
+
+/**
+ * The roofline along the street, left to right: a mansard, a pitched roof with
+ * the tower's shaft standing out of it, a low house under a bare firewall, and
+ * three more. The shaft widens toward the roofs: of even width it read as a
+ * pin at 150px.
+ */
+const ROOFLINE =
+  'M0,63L2,57H5V54H7V57H13L15,63V61L18,54H27.6L28.9,37H31.1L32.4,54H33L36,61V67H39V63.5H41V67H47' +
+  'V58L49,53H61L63,58V62L66,56H70V52.5H72V56H77L80,62V64L82,59H91V55.5H93V59H100'
+
+/** The houses under it: where each starts and ends, and its eave. */
+const HOUSES: [number, number, number][] = [
+  [0, 15, 63],
+  [15, 36, 61],
+  [36, 47, 67],
+  [47, 63, 58],
+  [63, 80, 62],
+  [80, 100, 64],
+]
+
+/** The roofs over the eaves, all but the flat one. */
+const ROOFS = 'M0,63L2,57H13L15,63ZM15,61L18,54H33L36,61ZM47,58L49,53H61L63,58ZM63,62L66,56H77L80,62ZM80,64L82,59H100V64Z'
+
+/** Each house's windows, tall as an Altbau's, a column every 4 or so and a floor every 6, the ground floor left to the shops. */
+const WINDOWS = HOUSES.map(([x0, x1, eave]) => {
+  const cols = Math.floor((x1 - x0) / 4)
   let d = ''
-  for (const [i, len] of lengths.entries()) {
-    const y = 34 + i * 6
-    d += `M5,${y}l1.5,1.5l3,-3M14,${y}h${len}`
+  for (let y = eave + 4; y + 3 <= 82; y += 6) {
+    for (let i = 0; i < cols; i++) d += `M${n(x0 + ((i + 0.5) * (x1 - x0)) / cols)},${y}v3`
+  }
+  return d
+}).join('')
+
+/** The pipeline's stages, a step apart along the top: at 4.2 the four fit between the mast and the edge. */
+const STAGE = { y: 15, r: 4.2, step: 14 }
+const STAGES = Array.from({ length: 4 }, (_, i) => 50 + i * STAGE.step)
+
+/**
+ * The sky's hatching, a row every 5 in two columns as a test run prints them:
+ * each a passing check and a line after it, of a length that varies the way
+ * test names do. Scattered at random, the checks read as birds at 150px. The
+ * right column starts under the pipeline, so the stages have clear sky round
+ * them.
+ */
+const SKY_CHECKS = (() => {
+  const rng = new Rng(2016)
+  let d = ''
+  for (let y = 5; y < 70; y += 5) {
+    for (const x of [5, 53]) {
+      if (x > 5 && y < 25) continue
+      d += `M${x},${y}l1.5,1.5l3,-3M${x + 7},${y}h${n(rng.range(22, 39))}`
+    }
   }
   return d
 })()
 
-/** The lens and what it hides of the log. */
-const LENS = { x: 54, y: 62, r: 18 }
-
 const automation = [
-  `<clipPath id="cv-art-automation-log"><path clip-rule="evenodd" d="M0,0H100V100H0ZM${LENS.x - LENS.r},${LENS.y}a${LENS.r},${LENS.r} 0 1 0 ${2 * LENS.r},0a${LENS.r},${LENS.r} 0 1 0 ${-2 * LENS.r},0Z"/></clipPath>`,
-  `<path class="cv-fine" clip-path="url(#cv-art-automation-log)" d="${LOG}"/>`,
+  `<clipPath id="cv-art-automation-sky"><path clip-rule="evenodd" d="M0,0H100V100H0Z${ROOFLINE}V100H0Z${dot(BALL.x, BALL.y, BALL.r)}${MAST_CLEAR}${STAGES.map((x) => dot(x, STAGE.y, STAGE.r)).join('')}"/></clipPath>`,
+  `<path class="cv-fine" clip-path="url(#cv-art-automation-sky)" d="${SKY_CHECKS}"/>`,
   // The pipeline: four stages joined, each passed, the last one shipped.
-  `<path d="M19.2,15H32.8M43.2,15H56.8M67.2,15H80.8"/>`,
-  `<circle cx="14" cy="15" r="5.2"/><circle cx="38" cy="15" r="5.2"/><circle cx="62" cy="15" r="5.2"/><circle cx="86" cy="15" r="5.2"/>`,
-  `<circle class="cv-tint" cx="86" cy="15" r="5.2"/>`,
-  `<path d="M11.6,15.2l1.7,1.7l3.2,-3.4M35.6,15.2l1.7,1.7l3.2,-3.4M59.6,15.2l1.7,1.7l3.2,-3.4M83.6,15.2l1.7,1.7l3.2,-3.4"/>`,
-  // The glass.
-  `<circle class="cv-tint" cx="${LENS.x}" cy="${LENS.y}" r="${LENS.r}"/>`,
-  `<circle cx="${LENS.x}" cy="${LENS.y}" r="${LENS.r}"/>`,
-  `<circle class="cv-fine" cx="${LENS.x}" cy="${LENS.y}" r="${LENS.r - 2.4}"/>`,
-  `<path class="cv-tint" d="M69.1,73.9L83.6,88.4A2.25,2.25 0 0 1 80.4,91.6L65.9,77.1Z"/>`,
-  `<path d="M69.1,73.9L83.6,88.4A2.25,2.25 0 0 1 80.4,91.6L65.9,77.1"/>`,
-  // The bug: head, body split into wings, six legs, two feelers.
-  `<circle cx="54" cy="52.5" r="3"/>`,
-  `<ellipse class="cv-tint" cx="54" cy="63" rx="6.2" ry="8"/>`,
-  `<ellipse cx="54" cy="63" rx="6.2" ry="8"/>`,
-  `<path d="M54,55V71M48.2,59L44,56.5M47.9,63.5H43M48.4,68L44.2,71M59.8,59L64,56.5M60.1,63.5H65M59.6,68L63.8,71M52.6,50C51.5,47.5 49.5,46.5 48,46.8M55.4,50C56.5,47.5 58.5,46.5 60,46.8"/>`,
-  `<circle class="cv-solid" cx="51.3" cy="61" r="0.9"/><circle class="cv-solid" cx="56.7" cy="61" r="0.9"/><circle class="cv-solid" cx="51.5" cy="66.5" r="0.9"/><circle class="cv-solid" cx="56.5" cy="66.5" r="0.9"/>`,
+  `<path d="${STAGES.slice(0, -1)
+    .map((x) => `M${n(x + STAGE.r)},${STAGE.y}H${n(x + STAGE.step - STAGE.r)}`)
+    .join('')}"/>`,
+  ...STAGES.map((x) => `<circle cx="${x}" cy="${STAGE.y}" r="${STAGE.r}"/>`),
+  `<circle class="cv-tint" cx="${STAGES.at(-1)}" cy="${STAGE.y}" r="${STAGE.r}"/>`,
+  `<path d="${STAGES.map((x) => `M${n(x - 1.9)},${n(STAGE.y + 0.2)}l1.4,1.4l2.6,-2.8`).join('')}"/>`,
+  // The Fernsehturm: the ball with its band of windows, curved, since a bar straight across read as a theta; the collar under it, the mast.
+  `<circle class="cv-tint" cx="${BALL.x}" cy="${BALL.y}" r="${BALL.r}"/>`,
+  `<circle cx="${BALL.x}" cy="${BALL.y}" r="${BALL.r}"/>`,
+  `<path d="M24.05,30.2Q30,33.6 35.95,30.2M28.2,38.6H31.8${MAST}"/>`,
+  `<path class="cv-fine" d="M24.42,33.2Q30,36.4 35.58,33.2"/>`,
+  // The street: the roofs, the eaves and the party walls, the windows.
+  `<path class="cv-tint" d="${ROOFS}"/>`,
+  `<path class="cv-fine" d="${WINDOWS}"/>`,
+  `<path d="${ROOFLINE}${HOUSES.map(([x0, x1, eave]) => `M${x0},${eave}H${x1}`).join('')}M15,61V88M36,61V88M47,58V88M63,58V88M80,62V88"/>`,
+  `<path d="M0,88H100"/>`,
+  `<path class="cv-fine" d="M0,92H100M6,96h7M22,96h7M38,96h7M54,96h7M70,96h7M86,96h7"/>`,
 ].join('')
 
 // --- leading QA: start-ups to large companies --------------------------------
 
 /*
- * A skyline that grows from left to right: two small houses, Berlin's TV
- * tower, three Amsterdam gables on a canal, then the towers, the last one too
- * tall for the frame. The sky is hatched like an engraving and stops at the
- * roofs.
+ * A skyline that grows from left to right: two small houses, three Amsterdam
+ * gables on a canal, then three towers, the last one too tall for the frame.
+ * A magnifying glass is held over the first tower's windows, with a bug caught
+ * in it. The sky is hatched like an engraving and stops at the roofs.
  */
 
 /** The skyline's silhouette, left to right along the ground. */
 const SKYLINE =
-  'M0,90V80H2L7,73L12,80H14V78L18.5,71.5L23,78V90H28.4L29.2,36.4H30.8L31.6,90H36V62H37V59H37.8V56H38.5V52.5' +
-  'H40.5V56H41.2V59H42V62H43V58C44.6,58 45,55 45,52V49Q46.75,45.5 48.5,49V52C48.5,55 48.9,58 50.5,58V63L53.75,56.5L57,63V90' +
-  'H60V50H71V90H73V40H75V34H83V40H85V90H87V16H100V90Z' +
-  'M24.6,31a5.4,5.4 0 1 0 10.8,0a5.4,5.4 0 1 0 -10.8,0Z'
+  'M0,90V80H2L7,73L12,80H14V78L18.5,71.5L23,78V90H25V58H26V55H26.8V52H27.5V48.5H29.5V52H30.2V55H31V58H32V54' +
+  'C33.6,54 34,51 34,48V45Q35.75,41.5 37.5,45V48C37.5,51 37.9,54 39.5,54V59L42.75,52.5L46,59V90' +
+  'H49V42H65V90H68V28H70V22H80V28H82V90H85V4H100V90Z'
 
 const TOWERS = [
   // Office windows as a grid of fine lines.
-  grid(2.75, 60, 50, 71, 90),
-  grid(3, 73, 40, 85, 90),
-  grid(3.25, 87, 16, 100, 90),
+  grid(4, 49, 42, 65, 90),
+  grid(3.5, 68, 28, 82, 90),
+  grid(3.75, 85, 4, 100, 90),
 ].join('')
+
+/**
+ * The glass, over the first tower, clearing the gables and the second tower
+ * at radius 10. Over the middle tower it left the left half of the slide bare,
+ * and at 11 it cut into the gables and hid the tower it was over.
+ */
+const GLASS = { x: 57, y: 64, r: 10 }
+
+/** The glass's handle, out from just past its rim at 45 degrees, as an outline from one side round to the other. */
+const HANDLE = (() => {
+  const [u, h, from, to] = [Math.SQRT1_2, 2.25, GLASS.r + 0.8, GLASS.r + 13]
+  const at = (d: number, side: number) => `${n(GLASS.x + u * d + u * h * side)},${n(GLASS.y + u * d - u * h * side)}`
+  return `M${at(from, 1)}L${at(to, 1)}A${h},${h} 0 0 1 ${at(to, -1)}L${at(from, -1)}`
+})()
+
+/** The bug, centred on (x, y) and drawn at scale s: head, body split into wings, six legs, two feelers. */
+function bug(x: number, y: number, s: number): string[] {
+  const p = (dx: number, dy: number) => `${n(x + dx * s)},${n(y + dy * s)}`
+  const legs = [-1, 1]
+    .map((k) => `M${p(5.8 * k, -3)}L${p(10 * k, -5.5)}M${p(6.1 * k, 1.5)}L${p(11 * k, 1.5)}M${p(5.6 * k, 6)}L${p(9.8 * k, 9)}`)
+    .join('')
+  const feelers = [-1, 1].map((k) => `M${p(1.4 * k, -12)}C${p(2.5 * k, -14.5)} ${p(4.5 * k, -15.5)} ${p(6 * k, -15.2)}`).join('')
+  return [
+    `<circle cx="${n(x)}" cy="${n(y - 9.5 * s)}" r="${n(3 * s)}"/>`,
+    `<ellipse class="cv-tint" cx="${n(x)}" cy="${n(y + s)}" rx="${n(6.2 * s)}" ry="${n(8 * s)}"/>`,
+    `<ellipse cx="${n(x)}" cy="${n(y + s)}" rx="${n(6.2 * s)}" ry="${n(8 * s)}"/>`,
+    `<path d="M${p(0, -7)}L${p(0, 9)}${legs}${feelers}"/>`,
+  ]
+}
 
 const leadingQa = [
   `<clipPath id="cv-art-leading-qa-sky"><path clip-rule="evenodd" d="M0,0H100V100H0Z${SKYLINE}"/></clipPath>`,
+  `<clipPath id="cv-art-leading-qa-glass"><path clip-rule="evenodd" d="M0,0H100V100H0Z${dot(GLASS.x, GLASS.y, GLASS.r)}${HANDLE}Z"/></clipPath>`,
+  // Everything behind the glass, cut round it.
+  `<g clip-path="url(#cv-art-leading-qa-glass)">`,
   `<path class="cv-fine" clip-path="url(#cv-art-leading-qa-sky)" d="${Array.from({ length: 22 }, (_, i) => `M0,${3 + i * 4}H100`).join('')}"/>`,
   // The start-ups.
   `<path d="M2,90V80L7,73L12,80V90M14,90V78L18.5,71.5L23,78V90M5.5,90V85H8.5V90M17,81.5h3v3h-3z"/>`,
-  // The Fernsehturm: shaft, ball, and the mast.
-  `<path d="M28.4,90L29.3,36.5M31.6,90L30.7,36.5M30,25.8V7M29.1,17H30.9M29.4,12H30.6"/>`,
-  `<circle class="cv-tint" cx="30" cy="31" r="5.2"/>`,
-  `<circle cx="30" cy="31" r="5.2"/>`,
-  `<path d="M24.8,31H35.2M28.6,37.2H31.4"/>`,
   // The gables: stepped, bell and spout.
-  `<path d="M36,90V62H37V59H37.8V56H38.5V52.5H40.5V56H41.2V59H42V62H43V90"/>`,
-  `<path d="M43,58C44.6,58 45,55 45,52V49Q46.75,45.5 48.5,49V52C48.5,55 48.9,58 50.5,58V90"/>`,
-  `<path d="M50.5,63L53.75,56.5L57,63V90"/>`,
-  `<path class="cv-fine" d="M38,66v4M41,66v4M38,74v4M41,74v4M38,82v4M41,82v4M45.5,61v4M48,61v4M45.5,69v4M48,69v4M45.5,77v4M48,77v4M52.5,67v4M55,67v4M52.5,75v4M55,75v4"/>`,
-  `<path class="cv-fine" d="M35,94H58M39,97H54"/>`,
+  `<path d="M25,90V58H26V55H26.8V52H27.5V48.5H29.5V52H30.2V55H31V58H32V90"/>`,
+  `<path d="M32,54C33.6,54 34,51 34,48V45Q35.75,41.5 37.5,45V48C37.5,51 37.9,54 39.5,54V90"/>`,
+  `<path d="M39.5,59L42.75,52.5L46,59V90"/>`,
+  `<path class="cv-fine" d="M27,62v4M30,62v4M27,70v4M30,70v4M27,78v4M30,78v4M34.5,57v4M37,57v4M34.5,65v4M37,65v4M34.5,73v4M37,73v4M41.5,63v4M44,63v4M41.5,71v4M44,71v4"/>`,
+  `<path class="cv-fine" d="M24,94H47M28,97H43"/>`,
   // The towers.
-  `<path class="cv-tint" d="M60,90V50H71V90ZM73,90V40H75V34H83V40H85V90ZM87,90V16H100V90Z"/>`,
+  `<path class="cv-tint" d="M49,90V42H65V90ZM68,90V28H70V22H80V28H82V90ZM85,90V4H100V90Z"/>`,
   `<path class="cv-fine" d="${TOWERS}"/>`,
-  `<path d="M60,90V50H71V90M73,90V40H75V34H83V40H85V90M79,34V28M87,90V16H100"/>`,
+  `<path d="M49,90V42H65V90M68,90V28H70V22H80V28H82V90M75,22V16M85,90V4H100"/>`,
+  `</g>`,
   `<path d="M0,90H100"/>`,
+  // The glass and its inner rim, the bug as large as fits inside the rim, the handle. The bug
+  // sits a little low, since its feelers reach further up than its legs down. At 0.6 its legs
+  // and feelers crossed the rim.
+  `<circle class="cv-tint" cx="${GLASS.x}" cy="${GLASS.y}" r="${GLASS.r}"/>`,
+  `<circle class="cv-fine" cx="${GLASS.x}" cy="${GLASS.y}" r="${GLASS.r - 2.2}"/>`,
+  ...bug(GLASS.x, GLASS.y + 0.8, 0.46),
+  `<circle cx="${GLASS.x}" cy="${GLASS.y}" r="${GLASS.r}"/>`,
+  `<path class="cv-tint" d="${HANDLE}Z"/>`,
+  `<path d="${HANDLE}"/>`,
 ].join('')
 
 // --- with AI: building with AI -----------------------------------------------
 
 /*
- * The sparkle at the middle of a small system: space bent under it as in
- * Gravity, a ringed planet on its orbit as in Solar, three sheets crossing as
- * in Lightbox, and a network of nodes, the agents, chained to it.
+ * A workflow as the hub's builder draws it, cards on a dotted canvas: a
+ * ticket, a page and a design frame go into an agent, a person reviews what it
+ * made and either sends it back (the dashed loop) or approves it, and a second
+ * agent turns it into a ticked list of test cases. The agents carry a
+ * sparkle with a small one by it; the person's card is the one without.
  */
-
-const WELL = { x: 50, y: 42 }
-
-/** The sparkle's reach, the tallest thing on the slide after the orbit: at 12 the orbit swallowed it. */
-const SPARKLE_R = 14
-
-/** A grid line pulled toward the well, sampled every 2 units. */
-function bent(points: [number, number][]): string {
-  return line(
-    points.map(([x, y]) => {
-      const dx = WELL.x - x
-      const dy = WELL.y - y
-      const r = Math.hypot(dx, dy)
-      if (r < 1e-6) return [x, y]
-      const pull = 9 * Math.exp(-(r * r) / (2 * 20 * 20))
-      return [x + (dx / r) * pull, y + (dy / r) * pull]
-    }),
-  )
-}
-
-const BENT = (() => {
-  let d = ''
-  const ticks = Array.from({ length: 52 }, (_, i) => -2 + i * 2)
-  for (let k = 0; k <= 12; k++) {
-    const c = k * 8.33
-    d += bent(ticks.map((t) => [c, t]))
-    d += bent(ticks.map((t) => [t, c]))
-  }
-  return d
-})()
 
 /** The four-point sparkle: four tips joined by curves that bow in. */
 function sparkle(cx: number, cy: number, r: number): string {
@@ -410,78 +490,139 @@ function sparkle(cx: number, cy: number, r: number): string {
   )
 }
 
-/** The orbit, tilted, and the planet on it, a little past its top right. */
-const ORBIT = { rx: 36, ry: 11.5, tilt: -10 }
-const PLANET = (() => {
-  const a = (-38 * Math.PI) / 180
-  const t = (ORBIT.tilt * Math.PI) / 180
-  const x = ORBIT.rx * Math.cos(a)
-  const y = ORBIT.ry * Math.sin(a)
-  return { x: WELL.x + x * Math.cos(t) - y * Math.sin(t), y: WELL.y + x * Math.sin(t) + y * Math.cos(t), r: 6 }
+type Point = readonly [number, number]
+type Box = { x: number; y: number; w: number; h: number }
+
+/** A card with rounded corners round a box. */
+function card({ x, y, w, h }: Box, r: number): string {
+  return (
+    `M${n(x + r)},${n(y)}H${n(x + w - r)}A${r},${r} 0 0 1 ${n(x + w)},${n(y + r)}V${n(y + h - r)}` +
+    `A${r},${r} 0 0 1 ${n(x + w - r)},${n(y + h)}H${n(x + r)}A${r},${r} 0 0 1 ${n(x)},${n(y + h - r)}` +
+    `V${n(y + r)}A${r},${r} 0 0 1 ${n(x + r)},${n(y)}Z`
+  )
+}
+
+/** The middle of a box, and of the sides the edges meet it on. */
+const middleOf = ({ x, y, w, h }: Box): Point => [x + w / 2, y + h / 2]
+const leftOf = ({ x, y, h }: Box): Point => [x, y + h / 2]
+const rightOf = ({ x, y, w, h }: Box): Point => [x + w, y + h / 2]
+const topOf = ({ x, y, w }: Box): Point => [x + w / 2, y]
+
+/** An edge as the canvas draws one, leaving and landing level: across, or down when `down` is set. */
+function edge([ax, ay]: Point, [bx, by]: Point, down = false): string {
+  const d = Math.max(Math.abs(down ? by - ay : bx - ax) / 2, 3)
+  const c1 = down ? `${n(ax)},${n(ay + d)}` : `${n(ax + d)},${n(ay)}`
+  const c2 = down ? `${n(bx)},${n(by - d)}` : `${n(bx - d)},${n(by)}`
+  return `M${n(ax)},${n(ay)}C${c1} ${c2} ${n(bx)},${n(by)}`
+}
+
+/** The head of an arrow landing on a point, pointing right, or down when `down` is set. */
+function arrive([x, y]: Point, down = false, s = 1.8): string {
+  return down
+    ? `M${n(x - s)},${n(y - s)}L${n(x)},${n(y)}L${n(x + s)},${n(y - s)}`
+    : `M${n(x - s)},${n(y - s)}L${n(x)},${n(y)}L${n(x - s)},${n(y + s)}`
+}
+
+/** The inputs down the left: a ticket, a page with its corner folded, and a design frame, its crop marks 1.8 out past its corners. */
+const TICKET: Box = { x: 5, y: 9, w: 12, h: 10 }
+const PAGE: Box = { x: 5.5, y: 24, w: 11, h: 14 }
+const FRAME: Box = { x: 6, y: 44, w: 12, h: 10 }
+const MARK = 1.8
+const INPUTS = [
+  `<path class="cv-tint" d="${card(TICKET, 1.2)}M5.5,24H13L16.5,27.5V38H5.5ZM6,44H18V54H6Z"/>`,
+  `<path d="${card(TICKET, 1.2)}M10.2,12.2H14.8M5.5,24H13L16.5,27.5V38H5.5ZM13,24V27.5H16.5M6,44H18V54H6Z"/>`,
+  `<path class="cv-fine" d="M7,15.6H15M7,17H12M8,30.5H14M8,33.2H14M8,35.9H11.5"/>`,
+  `<rect class="cv-solid" x="7" y="11" width="2.4" height="2.4" rx="0.4"/>`,
+  // The frame's crop marks, and the picture in it.
+  `<path d="M4.2,44H6M6,42.2V44M18,42.2V44M19.8,44H18M4.2,54H6M6,55.8V54M19.8,54H18M18,55.8V54"/>`,
+  `<path d="M7.8,52.2L11,48.5L13.4,51L14.6,49.8L16.2,52.2"/>`,
+  `<circle class="cv-solid" cx="14.6" cy="46.9" r="1"/>`,
+].join('')
+
+/** The cards: the first agent and the person's on the top row, the second agent under the first. */
+const AGENT_A: Box = { x: 27, y: 22, w: 20, h: 18 }
+const REVIEW: Box = { x: 63, y: 22, w: 20, h: 18 }
+const AGENT_B: Box = { x: 16, y: 66, w: 20, h: 18 }
+const CARDS = [AGENT_A, REVIEW, AGENT_B].map((b) => card(b, 2.2)).join('')
+
+/**
+ * The agents' mark: a sparkle low and left of the card's middle and a small
+ * one up by its corner, the pair AI features carry. One four-point star alone
+ * is Gemini's logo, and these agents are Claude. The large one reaches 5.2,
+ * still the first thing to read at 150px, and the pair stay clear of the
+ * card's sides and of each other.
+ */
+const SPARKLE_R = 5.2
+function agentMark(box: Box): string {
+  const [cx, cy] = middleOf(box)
+  return sparkle(cx - 1.5, cy + 1.5, SPARKLE_R) + sparkle(cx + 5, cy - 4.5, SPARKLE_R * 0.42)
+}
+
+/** The person, a head and shoulders that end level with the chin, in the middle of the card. */
+const PERSON = (() => {
+  const [cx, cy] = middleOf(REVIEW)
+  const shoulders = `M${n(cx - 5.2)},${n(cy + 6)}C${n(cx - 5.2)},${n(cy + 0.6)} ${n(cx + 5.2)},${n(cy + 0.6)} ${n(cx + 5.2)},${n(cy + 6)}`
+  return `${dot(cx, cy - 2.6, 2.6)}${shoulders}`
 })()
 
-/** The planet's ring, an ellipse round it whose far half goes behind it. */
-const RING = (() => {
-  const t = (-20 * Math.PI) / 180
-  const pts: [number, number, boolean][] = Array.from({ length: 73 }, (_, i) => {
-    const a = (i / 72) * Math.PI * 2
-    const x = PLANET.x + 11.5 * Math.cos(a) * Math.cos(t) - 3.2 * Math.sin(a) * Math.sin(t)
-    const y = PLANET.y + 11.5 * Math.cos(a) * Math.sin(t) + 3.2 * Math.sin(a) * Math.cos(t)
-    const hidden = Math.sin(a) < 0 && Math.hypot(x - PLANET.x, y - PLANET.y) < PLANET.r + 0.8
-    return [x, y, hidden]
-  })
+/** The approval, a check in a ring on the way out of the review: at a radius of 3.4 the check still reads at 150px. */
+const STAMP = { x: middleOf(REVIEW)[0], y: REVIEW.y + REVIEW.h + 6.5, r: 3.4 }
+
+/** Sent back for changes: up from the review, over the arrow between them, and down onto the first agent. */
+const LOOP = (() => {
+  const [ax, ay] = topOf(AGENT_A)
+  const [rx, ry] = topOf(REVIEW)
+  return `M${n(rx)},${n(ry)}C${n(rx)},${n(ry - 14)} ${n(ax)},${n(ay - 14)} ${n(ax)},${n(ay - 1)}`
+})()
+
+/** The test cases: a check and a name on every row, the names of a length that varies as test names do. */
+const CASES: Box = { x: 54, y: 62, w: 38, h: 30.5 }
+const CASE_ROWS = [32, 26, 32, 24].map((len, i) => ({ y: CASES.y + 6 + i * 6.5, len }))
+
+/**
+ * The canvas: a dot every 5, the step of the other slides' grids, at a size
+ * that reads as a canvas at 150px without pulling at the cards. It stops short
+ * of everything on it, as the grids stop at the tower and the roofs.
+ */
+const CANVAS = (() => {
+  const clear: Box[] = [
+    TICKET,
+    PAGE,
+    { x: FRAME.x - MARK, y: FRAME.y - MARK, w: FRAME.w + 2 * MARK, h: FRAME.h + 2 * MARK },
+    AGENT_A,
+    REVIEW,
+    AGENT_B,
+    CASES,
+    { x: STAMP.x - STAMP.r, y: STAMP.y - STAMP.r, w: 2 * STAMP.r, h: 2 * STAMP.r },
+  ]
+  const covered = (px: number, py: number) =>
+    clear.some(({ x, y, w, h }) => px > x - 1.2 && px < x + w + 1.2 && py > y - 1.2 && py < y + h + 1.2)
   let d = ''
-  let run: [number, number][] = []
-  for (const [x, y, hidden] of pts) {
-    if (hidden) {
-      if (run.length > 1) d += line(run)
-      run = []
-    } else run.push([x, y])
-  }
-  if (run.length > 1) d += line(run)
+  for (let y = 2.5; y < 100; y += 5) for (let x = 2.5; x < 100; x += 5) if (!covered(x, y)) d += dot(x, y, 0.45)
   return d
 })()
 
-/** The agents as a small network: three in, two, one, then up to the sparkle. */
-const LAYER_IN: [number, number][] = [
-  [8, 62],
-  [8, 74],
-  [8, 86],
-]
-const LAYER_MID: [number, number][] = [
-  [22, 68],
-  [22, 80],
-]
-const AGENT_OUT: [number, number] = [36, 74]
-const NETWORK =
-  LAYER_IN.flatMap((a) => LAYER_MID.map((b) => line([a, b]))).join('') +
-  LAYER_MID.map((b) => line([b, AGENT_OUT])).join('') +
-  line([AGENT_OUT, [WELL.x, WELL.y + SPARKLE_R]])
-
-/** Three sheets crossing, each its own tint so the crossings come out deeper, as on the lightbox. */
-const SHEETS = [
-  'M63,66.5l14.8,-1.2l1.2,14.8l-14.8,1.2z',
-  'M70.5,72.5l14.9,0.8l-0.8,14.9l-14.9,-0.8z',
-  'M61.5,76.5l14.9,0.3l-0.3,14.9l-14.9,-0.3z',
-]
-
 const withAi = [
-  `<path class="cv-fine" d="${BENT}"/>`,
-  // The orbit, hidden behind the planet, and the ringed planet on it.
-  `<clipPath id="cv-art-with-ai-orbit"><path clip-rule="evenodd" d="M0,0H100V100H0ZM${PLANET.x - PLANET.r - 0.8},${PLANET.y}a${PLANET.r + 0.8},${PLANET.r + 0.8} 0 1 0 ${2 * PLANET.r + 1.6},0a${PLANET.r + 0.8},${PLANET.r + 0.8} 0 1 0 ${-2 * PLANET.r - 1.6},0Z"/></clipPath>`,
-  `<ellipse clip-path="url(#cv-art-with-ai-orbit)" cx="${WELL.x}" cy="${WELL.y}" rx="${ORBIT.rx}" ry="${ORBIT.ry}" transform="rotate(${ORBIT.tilt} ${WELL.x} ${WELL.y})"/>`,
-  `<circle class="cv-tint" cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}"/>`,
-  `<circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}"/>`,
-  `<path d="${RING}"/>`,
-  // The sparkle at the middle.
-  `<path class="cv-tint" d="${sparkle(WELL.x, WELL.y, SPARKLE_R)}"/>`,
-  `<path d="${sparkle(WELL.x, WELL.y, SPARKLE_R)}"/>`,
-  // The sheets.
-  ...SHEETS.map((d) => `<path class="cv-tint" d="${d}"/>`),
-  `<path d="${SHEETS.join('')}"/>`,
-  // The agents, chained to the sparkle.
-  `<path d="${NETWORK}"/>`,
-  ...[...LAYER_IN, ...LAYER_MID, AGENT_OUT].map(([x, y]) => `<circle class="cv-solid" cx="${x}" cy="${y}" r="1.9"/>`),
+  `<path class="cv-fine cv-solid" d="${CANVAS}"/>`,
+  INPUTS,
+  `<path d="${[TICKET, PAGE, FRAME].map((b) => edge(rightOf(b), leftOf(AGENT_A))).join('')}"/>`,
+  // A port where the three meet the agent, so they join there rather than cross.
+  `<path class="cv-solid" d="${dot(...leftOf(AGENT_A), 1.3)}"/>`,
+  // The cards, the agents' sparkles and the person.
+  `<path class="cv-tint" d="${CARDS}"/>`,
+  `<path d="${CARDS}${PERSON}"/>`,
+  `<path class="cv-solid" d="${agentMark(AGENT_A)}${agentMark(AGENT_B)}"/>`,
+  // Into the review, and back to the agent when it asks for changes.
+  `<path d="${edge(rightOf(AGENT_A), leftOf(REVIEW))}${arrive(leftOf(REVIEW))}${arrive(topOf(AGENT_A), true, 1.6)}"/>`,
+  `<path stroke-dasharray="2 2" d="${LOOP}"/>`,
+  // Approved: the stamp, down to the second agent, and on to the cases.
+  `<circle class="cv-tint" cx="${STAMP.x}" cy="${STAMP.y}" r="${STAMP.r}"/>`,
+  `<path d="${dot(STAMP.x, STAMP.y, STAMP.r)}M${n(STAMP.x - 1.7)},${n(STAMP.y + 0.1)}l1.2,1.2l2.3,-2.4M${STAMP.x},${REVIEW.y + REVIEW.h}V${n(STAMP.y - STAMP.r)}"/>`,
+  `<path d="${edge([STAMP.x, STAMP.y + STAMP.r], topOf(AGENT_B), true)}${arrive(topOf(AGENT_B), true)}"/>`,
+  `<path d="${edge(rightOf(AGENT_B), leftOf(CASES))}${arrive(leftOf(CASES))}"/>`,
+  `<path class="cv-tint" d="${card(CASES, 1.8)}"/>`,
+  `<path d="${card(CASES, 1.8)}${CASE_ROWS.map(({ y }) => `M${CASES.x + 3.2},${n(y)}l1.5,1.5l3,-3`).join('')}"/>`,
+  `<path class="cv-fine" d="${CASE_ROWS.map(({ y, len }) => `M${CASES.x + 11},${n(y)}h${len - 11}`).join('')}"/>`,
 ].join('')
 
 /** Each chapter's picture on its film, by chapter id: inner SVG markup for a 0 0 100 100 viewBox, in currentColor. */

@@ -41,11 +41,16 @@ describe('the life', () => {
     expect(LIFE.chapters.slice(1).some((c) => c.from === 'Iran')).toBe(false)
   })
 
-  it('keeps the copy to three sentences under a headline', () => {
+  // The tallest face sets where the sheets lie for every chapter, so one long
+  // copy shrinks them all. Five sentences and 500 characters is With AI's,
+  // the tallest face at 320x568 and on a phone on its side, where it leaves
+  // the sheets 111px and 77px: anything longer takes them under.
+  it('keeps the copy to five sentences and 500 characters under a headline', () => {
     for (const c of LIFE.chapters) expect(c.headline, c.id).not.toBe('')
     for (const text of [LIFE.intro, ...LIFE.chapters.map((c) => c.copy)]) {
       expect(sentences(text), text).toBeGreaterThan(0)
-      expect(sentences(text), text).toBeLessThanOrEqual(3)
+      expect(sentences(text), text).toBeLessThanOrEqual(5)
+      expect(text.length, text).toBeLessThanOrEqual(500)
     }
   })
 
