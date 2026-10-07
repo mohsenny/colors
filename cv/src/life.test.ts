@@ -47,7 +47,8 @@ describe('the life', () => {
   // the sheets 111px and 77px: anything longer takes them under.
   it('keeps the copy to five sentences and 500 characters under a headline', () => {
     for (const c of LIFE.chapters) expect(c.headline, c.id).not.toBe('')
-    for (const text of [LIFE.intro, ...LIFE.chapters.map((c) => c.copy)]) {
+    expect(LIFE.cover.headline).not.toBe('')
+    for (const text of [LIFE.intro, LIFE.cover.copy, ...LIFE.chapters.map((c) => c.copy)]) {
       expect(sentences(text), text).toBeGreaterThan(0)
       expect(sentences(text), text).toBeLessThanOrEqual(5)
       expect(text.length, text).toBeLessThanOrEqual(500)

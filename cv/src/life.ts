@@ -83,6 +83,11 @@ export interface Life {
   /** The year he was born, which Growing up's tab starts at. */
   born: number
   intro: string
+  /**
+   * The face the page lands on, before any chapter: where, a hello, who he
+   * is and the ways in. Play and CV in the copy are the dock's buttons too.
+   */
+  cover: { kicker: string; headline: string; copy: string }
   /** What he does, in a line under the name. */
   role: string
   based: string
@@ -108,6 +113,11 @@ export const LIFE: Life = {
   name: 'Mohsen Nasiri',
   born: 1989,
   intro: "Based in Germany. If it takes creativity, tech or AI, it's for me.",
+  cover: {
+    kicker: 'Based in Germany',
+    headline: "Hi, I'm Mohsen",
+    copy: "Tech lead with a focus on quality. If it takes creativity, tech or AI, it's for me. My story is in the cards below: pick one to read it, press Play to go through them all, or open my CV.",
+  },
   role: 'Tech lead with a focus on quality',
   based: 'Germany',
   reach: {
@@ -237,7 +247,7 @@ export const LIFE: Life = {
       from: 2018,
       to: 'now',
       headline: 'Leading QA, from start-ups to big companies',
-      copy: 'I stepped up to QA lead and built and grew teams at OSRAM, HeyJobs and Talentspace. Then came MessageBird in Amsterdam, LucaNet, and now CompuGroup Medical, where I lead manual and automation QAs.',
+      copy: 'I stepped up to QA lead and built and grew teams at OSRAM, HeyJobs and Talentspace. Then came MessageBird in Amsterdam, LucaNet, and now CompuGroup Medical. Day to day I lead and coach manual and automation QAs, set the test automation strategy and own release management.',
       orgs: ['osram', 'heyjobs', 'talentspace', 'messagebird', 'lucanet', 'cgm'],
       tools: [],
       roles: [

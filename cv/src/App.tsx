@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
 import { createPortal } from 'react-dom'
-import { Instrument } from './app/instrument'
+import { COVER_SAID, Instrument } from './app/instrument'
 import type { Snapshot } from './app/instrument'
 import { LIFE, yearsOf } from './life'
 import { PAPER_ID } from './text'
@@ -22,10 +22,10 @@ const REDUCED = '(prefers-reduced-motion: reduce)'
 /** Keys that are only half of one, and stop nothing on their own. */
 const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'])
 
-/** What the tape's input says where the clock is: the chapter and its years. */
+/** What the tape's input says where the clock is: the chapter and its years, or the cover. */
 function momentOf(snap: Snapshot): string {
   const c = LIFE.chapters[snap.chapter]
-  return c ? `${c.name}, ${yearsOf(c)}` : ''
+  return c ? `${c.name}, ${yearsOf(c)}` : COVER_SAID
 }
 
 function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: HTMLElement | null }): ReactElement {
@@ -47,7 +47,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
 
   // The life is laid under the story at its tallest, whichever face is up,
   // so the sheets keep their place as faces come and go, and a page opened
-  // on a chapter lays them where the latest will. Every face lies unseen in the
+  // on a chapter lays them where the cover will. Every face lies unseen in the
   // probe, so a font arriving or the width changing measures again.
   const measure = useCallback(() => {
     const rect = probe.current?.getBoundingClientRect()
@@ -86,7 +86,11 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
       .writeText(LIFE.reach.email)
       .then(() => setNote({ text: 'Email copied', at: Date.now() }), mail)
   }
-  const actions: StoryActions = { hold: (on) => instrument.holdPlay(on) }
+  const actions: StoryActions = {
+    hold: (on) => instrument.holdPlay(on),
+    play: () => instrument.togglePlay(),
+    paper: () => instrument.openPaper(),
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -147,7 +151,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
           onScrub: (p) => instrument.scrubTo(p),
           onScrubEnd: () => instrument.scrubEnd(),
           onStep: (way) => instrument.stepBy(way),
-          onFirst: () => instrument.go(0),
+          onFirst: () => instrument.toCover(),
           onLast: () => instrument.toLatest(),
         }}
         onTogglePlay={() => instrument.togglePlay()}

@@ -1,11 +1,13 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, HTMLAttributes, ReactElement, Ref, SyntheticEvent } from 'react'
+import { COVER } from '../app/instrument'
 import type { Snapshot } from '../app/instrument'
 import { LIFE, yearsOf } from '../life'
 import type { Chapter } from '../life'
 import { LOGOS } from '../logos'
 import type { Logo as LogoData, LogoId } from '../logos'
 import { orgParts, siteOf } from '../text'
+import { PageIcon, PlayIcon } from './Icons'
 
 /** The old face fading out, as `--lb-t-grow`. */
 const LEAVE_MS = 180
@@ -16,6 +18,8 @@ const ENTER_MS = 450
 export interface StoryActions {
   /** The pointer is on the story, so Play waits. */
   hold: (on: boolean) => void
+  play: () => void
+  paper: () => void
 }
 
 /** A chapter's years and place in the kicker, as a reader says them: `2012 to 2015, Joensuu`. */
@@ -171,19 +175,48 @@ function ChapterFace({ chapter }: { chapter: Chapter }): ReactElement {
   )
 }
 
-function Face({ chapter }: { chapter: number }): ReactElement | null {
+/**
+ * The cover, the face before any chapter: where, a hello, who he is and the
+ * ways in. Play and CV in it press the dock's buttons, each with its mark, so
+ * the words teach the dock.
+ */
+function CoverFace({ actions }: { actions?: StoryActions }): ReactElement {
+  const { cover } = LIFE
+  return (
+    <>
+      <p className="cv-kicker">{cover.kicker}</p>
+      <h2 className="cv-headline">{cover.headline}</h2>
+      <p className="cv-copy">
+        {cover.copy.split(/\b(Play|CV)\b/).map((part, i) =>
+          part === 'Play' || part === 'CV' ? (
+            <button key={i} type="button" className="cv-link cv-press" onClick={part === 'Play' ? actions?.play : actions?.paper}>
+              {part === 'Play' ? <PlayIcon /> : <PageIcon />}
+              {part}
+            </button>
+          ) : (
+            <span key={i}>{part}</span>
+          ),
+        )}
+      </p>
+    </>
+  )
+}
+
+function Face({ chapter, actions }: { chapter: number; actions?: StoryActions }): ReactElement | null {
+  if (chapter === COVER) return <CoverFace actions={actions} />
   const c = LIFE.chapters[chapter]
   return c ? <ChapterFace chapter={c} /> : null
 }
 
 /**
- * Every face, unseen, in the same cell, for App.tsx to lay the sheets under
- * the tallest. They never change, so the story's every move leaves them be.
+ * Every face, the cover's too, unseen, in the same cell, for App.tsx to lay
+ * the sheets under the tallest. They never change, so the story's every move
+ * leaves them be.
  */
 const Probe = memo(function Probe({ probeRef }: { probeRef: Ref<HTMLDivElement> }): ReactElement {
   return (
     <div ref={probeRef} className="cv-faces cv-probe" aria-hidden="true" inert>
-      {LIFE.chapters.map((_, i) => (
+      {[COVER, ...LIFE.chapters.keys()].map((i) => (
         <div key={i} className="cv-face">
           <Face chapter={i} />
         </div>
@@ -211,7 +244,7 @@ interface Faces {
 
 /**
  * The story, open type on the lit surface over the sheets: the chapter being
- * read. It stays when the rest of the chrome rests, and a press on it is
+ * read, or the cover. It stays when the rest of the chrome rests, and a press on it is
  * never only a wake, so a recruiter's first tap on a link follows it.
  *
  * A new face rises in line by line as the old one fades up and away, laid
@@ -313,7 +346,7 @@ export function Story({
             aria-hidden={f.out || undefined}
             inert={f.out}
           >
-            <Face chapter={f.chapter} />
+            <Face chapter={f.chapter} actions={actions} />
           </div>
         ))}
       </div>

@@ -44,9 +44,9 @@ function clamp01(v: number): number {
 
 /**
  * Copied from Solar's, with the tape always full: it is the whole life rather
- * than the last two minutes watched. Every chapter has a mark in its own
- * colour, an equal step apart, the latest at the end, and pointing at a mark
- * says which chapter it is. A drag snaps to a mark it
+ * than the last two minutes watched. The cover is its start, unmarked, and
+ * every chapter has a mark in its own colour after it, an equal step apart,
+ * the latest at the end; pointing at a mark says which chapter it is. A drag snaps to a mark it
  * comes within 6px of and settles on the nearest when it is let go; the
  * arrow keys go a chapter at a time.
  */
@@ -110,7 +110,7 @@ export function Timeline(props: TimelineProps): ReactElement {
         min={0}
         max={1}
         step={0.0001}
-        defaultValue={1}
+        defaultValue={0}
         aria-label="Move through the years"
         aria-valuetext={moment}
         onChange={(e) => {
