@@ -28,6 +28,7 @@ import {
   NORTH,
   across,
   add,
+  cross,
   dot,
   frameOf,
   globeEye,
@@ -49,6 +50,8 @@ import {
   zgMax,
 } from '../render/camera'
 import type { Eye, Frame } from '../render/camera'
+import { globeAngles, planTravel, smoother, travelEye } from '../render/travel'
+import type { Travel } from '../render/travel'
 import { ORBIT_UNIT, Renderer } from '../render/gl'
 import type { BodyDraw, OrbitDraw, Shade } from '../render/gl'
 import { EARTH_CLOUDS, EARTH_NIGHT, SATURN_RING, STARS, SURFACE } from '../render/maps'
@@ -156,6 +159,10 @@ interface Flight {
   rel: Vec3
   start: number
   ms: number
+  /** When the lens starts to change, ms in, and when it is done. Without it the lens goes with the rest. */
+  lens?: [number, number]
+  /** Becoming a body: the way there, worked out when it set off. */
+  travel?: Travel
 }
 
 interface Orbit {
@@ -188,11 +195,6 @@ function smoothstep(a: number, b: number, x: number): number {
 function pale(c: readonly [number, number, number]): [number, number, number] {
   const top = Math.max(c[0], c[1], c[2], 1e-3)
   return [0.5 + (0.5 * c[0]) / top, 0.5 + (0.5 * c[1]) / top, 0.5 + (0.5 * c[2]) / top]
-}
-
-function smoother(t: number): number {
-  const x = Math.max(0, Math.min(1, t))
-  return x * x * x * (x * (x * 6 - 15) + 10)
 }
 
 /** Share of a disc covered by another, both given by angular radius and separation. */
@@ -288,6 +290,11 @@ export class Instrument {
   private yaw = 0
   private pitch = 0.3
   private flight: Flight | null = null
+  /** The way the eye faced a frame before, and when the last frame was: how fast the view is turning. */
+  private before: { forward: Vec3; at: number } | null = null
+  private drawnAt = -Infinity
+  /** Travel arrives at once for anyone who has asked for less motion. */
+  private still = window.matchMedia('(prefers-reduced-motion: reduce)')
   private poses: Poses
   private eye: Eye
   private frame: Frame | null = null
@@ -356,6 +363,20 @@ export class Instrument {
     this.observer.observe(canvas)
     this.resize()
     this.loadMaps()
+    ;(window as unknown as { __travel?: unknown }).__travel = { // travel-probe
+      eye: () => this.eye, // travel-probe
+      rest: () => this.restingEye(), // travel-probe
+      seat: () => this.seat, // travel-probe
+      look: () => this.look, // travel-probe
+      flight: () => this.flight, // travel-probe
+      angles: () => ({ yaw: this.yaw, pitch: this.pitch, zg: this.zg, z: this.z }), // travel-probe
+      body: (id: BodyId) => ({ at: this.at(id), radius: this.radius(id) }), // travel-probe
+      screen: (id: BodyId) => (this.frame ? project(this.frame, norm(sub(this.at(id), this.eye.at)), this.width, this.height) : null), // travel-probe
+      become: (id: BodyId) => this.become(id), // travel-probe
+      lookAt: (id: BodyId) => this.lookAt(id), // travel-probe
+      clock: (playing: boolean) => (this.playing = playing), // travel-probe
+      globe: (yaw: number, pitch: number) => ((this.yaw = yaw), (this.pitch = pitch)), // travel-probe
+    } // travel-probe
   }
 
   /**
@@ -455,7 +476,9 @@ export class Instrument {
       this.tape.record(dt, this.ms)
     }
     this.poses = posesAt(this.ms)
+    this.before = { forward: this.eye.forward, at: this.drawnAt }
     this.eye = this.flownEye(now)
+    this.drawnAt = now
     this.frame = frameOf(this.eye, this.width / this.height)
     this.mergeMoons()
     this.refreshOrbits(now)
@@ -531,15 +554,17 @@ export class Instrument {
     const to = this.restingEye()
     const f = this.flight
     if (!f) return to
-    const t = (now - f.start) / f.ms
-    if (t >= 1) {
+    if (now - f.start >= Math.max(f.ms, f.lens?.[1] ?? 0)) {
       this.flight = null
       return to
     }
+    if (f.travel) return this.travelled(f, f.travel, now)
+    const t = (now - f.start) / f.ms
     const p = smoother(t)
     const seat = this.at(this.seat)
     let at: Vec3
-    let fov = Math.exp(Math.log(f.from.fov) + (Math.log(to.fov) - Math.log(f.from.fov)) * p)
+    const pl = f.lens ? smoother((now - f.start - f.lens[0]) / (f.lens[1] - f.lens[0])) : p
+    let fov = Math.exp(Math.log(f.from.fov) + (Math.log(to.fov) - Math.log(f.from.fov)) * pl)
     let turn = p
     if (f.fromSeat === this.seat) {
       // Round the seat, never through it.
@@ -562,6 +587,17 @@ export class Instrument {
     return { at, forward, up, fov }
   }
 
+  /** The eye on its way to the seat. It goes over the planets either end goes round, and the Sun, should the line pass through one. */
+  private travelled(f: Flight, tr: Travel, now: number): Eye {
+    const eye = travelEye(tr, now - f.start, this.at(f.fromSeat), this.at(this.seat))
+    const ends = [f.fromSeat, this.seat]
+    const near = ends.map((id) => bodyById(id)?.parent ?? 'sun').filter((id) => !ends.includes(id))
+    const at = this.clear(eye.at, near)
+    if (at === eye.at) return eye
+    const forward = norm(sub(this.at(this.seat), at))
+    return { ...eye, at, forward, up: across(eye.up, forward, NORTH) }
+  }
+
   /** A point on a flight lifted to just over any of these bodies, or the planets they go round, that it would be inside. */
   private clear(at: Vec3, ids: BodyId[]): Vec3 {
     for (const id of ids) {
@@ -577,7 +613,7 @@ export class Instrument {
   }
 
   /** A flight to wherever the eye now rests, reckoned from `round`: the seat, or a body the eye goes straight into. */
-  private fly(ms: number, round: BodyId = this.seat): void {
+  private fly(ms: number, round: BodyId = this.seat, lens?: [number, number]): void {
     this.dived = null
     this.push = null
     this.flight = {
@@ -586,6 +622,7 @@ export class Instrument {
       rel: sub(this.eye.at, this.at(round)),
       start: performance.now(),
       ms,
+      lens,
     }
   }
 
@@ -620,10 +657,14 @@ export class Instrument {
       }
       return
     }
-    this.fly(900)
     this.look = id
-    if (id === this.seat) this.enterGlobe()
-    else {
+    if (id === this.seat) {
+      this.fly(900)
+      this.enterGlobe()
+    } else {
+      // The lens waits until the turn is well under way, so a second click
+      // that makes this a trip there finds it as it was.
+      this.fly(900, this.seat, [500, 1250])
       this.z = this.zoomFor(this.seat, id)
       this.settle()
     }
@@ -632,11 +673,13 @@ export class Instrument {
   }
 
   /**
-   * Become a body: fly there and look at its globe, the whole of it in the
+   * Become a body: travel there and look at its globe, the whole of it in the
    * frame. Picking the body you are on brings its globe back to that view.
    */
   become(id: BodyId): void {
     if (id === this.seat) {
+      // Already on the way there.
+      if (this.flight?.travel) return
       if (this.look !== id) this.lookAt(id)
       else {
         this.fly(700)
@@ -646,13 +689,43 @@ export class Instrument {
       }
       return
     }
-    const dist = len(sub(this.at(id), this.at(this.seat)))
-    this.fly(1300 + 260 * Math.max(0, Math.log10(dist / 1e5)))
-    this.seat = id
-    this.look = id
-    this.enterGlobe()
+    this.travel(id)
     this.touch(`On ${(bodyById(id) as Body).name}`)
     this.emit(true)
+  }
+
+  /**
+   * Turn to a body and go straight to it, coming to rest over its globe on
+   * the side you came from, or its day side. The globe is set to where the
+   * way ends from the start, so the last step of it is where the eye rests.
+   */
+  private travel(id: BodyId): void {
+    const from = this.seat
+    const target = this.at(id)
+    const r = this.radius(id)
+    const reach = GLOBE * Math.exp(this.globeFit(id)) * r
+    const sun = id === 'sun' ? null : this.at('sun')
+    const tr = planTravel(this.eye, this.spin(), this.at(from), this.radius(from), target, sun, reach)
+    const end = globeAngles(target, r, add(target, scale(tr.side, tr.reach)))
+    this.seat = id
+    this.look = id
+    this.yaw = end.yaw
+    this.pitch = end.pitch
+    this.zg = end.zg
+    this.fly(tr.ms, from)
+    const f = this.flight as Flight
+    // It sets off from the eye last drawn, so its clock starts then too.
+    if (f.start - this.drawnAt < 100) f.start = this.drawnAt
+    if (this.still.matches) this.flight = null
+    else f.travel = tr
+  }
+
+  /** How fast the view is turning, radians a ms about the axis it turns round. Still after a pause. */
+  private spin(): Vec3 {
+    const b = this.before
+    const dt = this.drawnAt - (b?.at ?? -Infinity)
+    if (!b || !(dt > 0 && dt < 100)) return [0, 0, 0]
+    return scale(cross(b.forward, this.eye.forward), 1 / dt)
   }
 
   /** Facing the target from over the seat's north, its horizon where it rests. */
@@ -824,10 +897,12 @@ export class Instrument {
     d.x = e.clientX
     d.y = e.clientY
     if (this.seat === this.look) {
+      this.land()
       // Grabbing the globe, slower near the ground so it keeps up with the hand.
       const k = 0.005 * Math.min(1, (GLOBE * Math.exp(this.zg) - 1) / (GLOBE - 1))
       this.yaw -= dx * k
       this.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, this.pitch + dy * k))
+      this.arrive()
     } else if (d.ground) {
       // Taking hold of the ground: across, you go round the seat, its sky
       // turning about the target, and the ground under the hand keeps up with
@@ -890,11 +965,13 @@ export class Instrument {
     // Scrolling on without moving from where the eye went down to the globe
     // goes straight in, to the ground that was pointed at.
     if (this.dived && Math.hypot(x - this.dived[0], y - this.dived[1]) > CLICK_PX) this.dived = null
-    const under = this.dived ? null : this.underPointer(x, y)
+    const away = this.seat === this.look && this.land()
+    const under = this.dived || away ? null : this.underPointer(x, y)
     if (this.seat === this.look) {
       this.push = null
       this.zg = Math.max(ZG_MIN, Math.min(zgMax(r), this.zg + step))
       if (under) this.keepUnder(under)
+      this.arrive()
     } else if (under && step < 0) this.dive(under, step, x, y)
     else if (step < 0 && this.z <= Z_MIN && !this.flight) {
       if (this.push === null ? gap > PUSH_GAP_MS : gap > PUSH_FORGET_MS) this.push = 0
@@ -909,6 +986,34 @@ export class Instrument {
       this.push = null
       this.z = Math.max(Z_MIN, Math.min(zMax(r), this.z + step))
     }
+  }
+
+  /**
+   * A hand on the globe while on the way to it. Nearly there, the globe is
+   * taken from wherever the eye has got to. Further out the way carries on,
+   * and the hand moves where it ends: true then.
+   */
+  private land(): boolean {
+    const tr = this.flight?.travel
+    if (!tr) return false
+    const r = this.radius(this.seat)
+    if (len(sub(this.eye.at, this.at(this.seat))) > 3 * tr.reach) return true
+    const a = globeAngles(this.at(this.seat), r, this.eye.at)
+    this.yaw = a.yaw
+    this.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, a.pitch))
+    this.zg = Math.max(ZG_MIN, Math.min(zgMax(r), a.zg))
+    this.fly(500)
+    return false
+  }
+
+  /** The end of the way there, moved to where the globe's yaw, pitch and zoom now put the eye. */
+  private arrive(): void {
+    const tr = this.flight?.travel
+    if (!tr) return
+    const c = this.at(this.seat)
+    const to = sub(globeEye(c, this.radius(this.seat), this.zg, this.yaw, this.pitch).at, c)
+    tr.side = norm(to)
+    tr.reach = len(to)
   }
 
   /** The seat's ground under the pointer, as the eye will see it once it comes to rest. Null over the sky. */

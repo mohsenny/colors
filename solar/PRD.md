@@ -11,7 +11,7 @@
 
 The Sun, the eight planets and Pluto, the Moon, nine moons of Jupiter, thirteen of Saturn, five of Uranus, Neptune's Triton and Pluto's Charon where they are right now, at their true sizes and distances. The planets, the Moon, the giants' round moons, Pluto and Charon wear a photographed map of their surface but Titan, which is all haze; the small moons wear their colour. It opens on the Earth looking at the Moon, at real speed.
 
-You are always on a body, the seat. Looking at another body, you sit just above the seat with its horizon low in the frame and the other body in the middle, the way that planet's own sky would show it. Look at the seat itself and you circle it as a globe. Double-click anything to become it, and the eye flies there and shows you its globe.
+You are always on a body, the seat. Looking at another body, you sit just above the seat with its horizon low in the frame and the other body in the middle, the way that planet's own sky would show it. Look at the seat itself and you circle it as a globe. Double-click anything to become it: the eye turns to it and goes straight there, the body growing in the middle of the frame, and comes to rest over its globe on the side you came from, or swings round to its day side.
 
 Speed the clock up and the sky starts to move: the Moon's phases, the Earth turning its cities into the night, Venus swinging from evening to morning, Mars looping backward, Jupiter's moons dropping their shadows on it. Every frame is the real geometry for that moment.
 
@@ -50,7 +50,7 @@ Speed the clock up and the sky starts to move: the Moon's phases, the Earth turn
 | You want to | Do this |
 | --- | --- |
 | Look at a body | Click it or its name |
-| Become a body | Double-click it, its key (<kbd>S</kbd> the Sun, then <kbd>1</kbd> Mercury to <kbd>0</kbd> Pluto, the Moon after the Earth), or the seat chip, where the moons sit under their planet. You arrive over its globe, the whole of it in the frame; picking it again brings that back |
+| Become a body | Double-click it, its key (<kbd>S</kbd> the Sun, then <kbd>1</kbd> Mercury to <kbd>0</kbd> Pluto, the Moon after the Earth), or the seat chip, where the moons sit under their planet. You travel there and arrive over its globe, the whole of it in the frame, on the side you came from unless that is night; picking it again brings that back |
 | Look around | Drag the sky. It turns round you; click the target to bring it back to the middle |
 | Go round the body you are on | Drag its ground. Across goes round it, the target staying put; up and down moves the horizon |
 | Zoom | Scroll. A globe zooms toward the pointer; scrolling in over the ground you sit on turns to that side of its globe, and a new scroll past the narrowest lens goes into the body under the pointer, or the one you look at |
