@@ -334,7 +334,7 @@ const MAST_CLEAR = (() => {
 
 /**
  * The roofline along the street, left to right: a mansard, a pitched roof with
- * the tower's shaft standing out of it, a low house under a bare firewall, and
+ * the tower's shaft rising behind it, a low house under a bare firewall, and
  * three more. The shaft widens toward the roofs: of even width it read as a
  * pin at 150px.
  */
@@ -411,10 +411,10 @@ const automation = [
   `<circle cx="${BALL.x}" cy="${BALL.y}" r="${BALL.r}"/>`,
   `<path d="M24.05,30.2Q30,33.6 35.95,30.2M28.2,38.6H31.8${MAST}"/>`,
   `<path class="cv-fine" d="M24.42,33.2Q30,36.4 35.58,33.2"/>`,
-  // The street: the roofs, the eaves and the party walls, the windows. The two walls behind the train stop at its roof.
+  // The street: the roofs, the eaves and the party walls, the windows. The ridge runs on over the shaft's foot, since the house stands in front of the tower: left open, the roof read as broken. The two walls behind the train stop at its roof.
   `<path class="cv-tint" d="${ROOFS}"/>`,
   `<path class="cv-fine" d="${WINDOWS}"/>`,
-  `<path d="${ROOFLINE}${HOUSES.map(([x0, x1, eave]) => `M${x0},${eave}H${x1}`).join('')}M15,61V88M36,61V88M47,58V88M63,58V${TRAIN.top}M80,62V${TRAIN.top}"/>`,
+  `<path d="${ROOFLINE}${HOUSES.map(([x0, x1, eave]) => `M${x0},${eave}H${x1}`).join('')}M27.6,54H32.4M15,61V88M36,61V88M47,58V88M63,58V${TRAIN.top}M80,62V${TRAIN.top}"/>`,
   // The S-Bahn: its lower half and the arches' shadow, the cars, their windows; the deck and its arches.
   `<path class="cv-tint" d="${TRAIN_SKIRT}${ARCHES}"/>`,
   `<path d="${TRAIN_CARS}"/>`,
