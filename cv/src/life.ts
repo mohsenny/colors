@@ -27,6 +27,8 @@ export interface Role {
   org: string
   /** The org where the facts have no room for all of it. */
   short?: string
+  /** The org's own site, where it still has one: its name in the story links to it. */
+  site?: string
   title: string
   /** Left out where it is not known. */
   place?: string
@@ -170,6 +172,7 @@ export const LIFE: Life = {
         {
           kind: 'degree',
           org: 'University of Eastern Finland',
+          site: 'https://www.uef.fi/en',
           short: 'Eastern Finland',
           title: 'M.Sc. Computer Science',
           place: 'Joensuu, Finland',
@@ -181,6 +184,7 @@ export const LIFE: Life = {
         {
           kind: 'job',
           org: 'Arbonaut',
+          site: 'https://arbonaut.com',
           title: 'Full-stack Developer',
           place: 'Finland',
           from: 'Feb 2013',
@@ -211,6 +215,7 @@ export const LIFE: Life = {
         {
           kind: 'job',
           org: 'Hubrick',
+          site: 'https://www.linkedin.com/company/hubrick',
           title: 'Senior QA Engineer',
           place: 'Berlin',
           from: 'Jan 2016',
@@ -239,6 +244,7 @@ export const LIFE: Life = {
         {
           kind: 'job',
           org: 'OSRAM',
+          site: 'https://www.osram.com',
           title: 'QA Lead',
           place: 'Berlin',
           from: 'Aug 2018',
@@ -254,6 +260,7 @@ export const LIFE: Life = {
         {
           kind: 'job',
           org: 'HeyJobs',
+          site: 'https://www.heyjobs.co',
           title: 'QA Lead',
           place: 'Berlin',
           from: 'Nov 2019',
@@ -285,6 +292,7 @@ export const LIFE: Life = {
         {
           kind: 'job',
           org: 'MessageBird',
+          site: 'https://bird.com',
           title: 'Senior QA Engineer',
           place: 'Amsterdam',
           from: 'Feb 2022',
@@ -300,6 +308,7 @@ export const LIFE: Life = {
         {
           kind: 'job',
           org: 'LucaNet',
+          site: 'https://www.lucanet.com',
           title: 'QA Lead',
           from: '2024',
           to: '2025',
@@ -309,6 +318,8 @@ export const LIFE: Life = {
         {
           kind: 'job',
           org: 'CompuGroup Medical',
+          short: 'CGM',
+          site: 'https://www.cgm.com/corp_en',
           title: 'QA Lead',
           from: '2025',
           to: 'now',

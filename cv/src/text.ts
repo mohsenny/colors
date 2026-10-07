@@ -42,6 +42,29 @@ export function closingParts(text: string): Part[] {
   return parts
 }
 
+/** A chapter's copy in runs, each org named in it that has a site of its own a link to it. */
+export function orgParts(text: string, life: Life = LIFE): Part[] {
+  const sites = new Map<string, string>()
+  for (const r of life.chapters.flatMap((c) => c.roles ?? [])) {
+    if (!r.site) continue
+    sites.set(r.org, r.site)
+    if (r.short) sites.set(r.short, r.site)
+  }
+  if (sites.size === 0) return [{ text }]
+  // Longest first, so University of Eastern Finland is not cut down to Eastern Finland.
+  const names = [...sites.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const pattern = new RegExp(`\\b(${names.join('|')})\\b`)
+  const parts: Part[] = []
+  for (const [i, run] of text.split(pattern).entries()) {
+    if (run === '') continue
+    const href = i % 2 === 1 ? sites.get(run) : undefined
+    parts.push(href ? { text: run, href } : { text: run })
+  }
+  return parts
+}
+
 function esc(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }

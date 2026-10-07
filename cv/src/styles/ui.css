@@ -1185,6 +1185,38 @@ body > .cv-paper .cv-text {
   height: calc(var(--cv-mark) * var(--cv-scale, 1));
 }
 
+/* Who he is, in two balanced lines left of the four and centred on the
+   title's line. Only where it clears the title by 32px; the paper opens on it. */
+.cv-hello {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .cv-hello {
+    position: fixed;
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    /* The four's 128px and 12px more. */
+    right: calc(150.5px + env(safe-area-inset-right, 0px));
+    z-index: 200;
+    display: block;
+    max-width: 360px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    text-align: right;
+    text-wrap: balance;
+    color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+    transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
+  }
+
+  .cv-hello.is-away {
+    visibility: hidden;
+    opacity: 0;
+    transition:
+      opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
+      visibility 0s linear var(--lb-t-enter, 240ms);
+  }
+}
+
 /* ------------------------------------------------------------------ swatch */
 
 /* A chapter's film at chip size, as Lightbox's tray shows a colour: the chip,
@@ -1722,9 +1754,9 @@ body > .cv-paper .cv-text {
   }
 
   .lb-dock {
-    /* 122px is the rest of the dock, and 14px either side. */
+    /* 138px is the rest of the dock, and 14px either side. */
     --lb-tl-w: 48px;
-    --lb-tl-open: min(260px, calc(100vw - 150px));
+    --lb-tl-open: min(260px, calc(100vw - 166px));
     --sl-group: 4px;
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     gap: 2px;
@@ -1822,22 +1854,6 @@ body > .cv-paper .cv-text {
 @media (max-width: 411px) {
   .cv-ways {
     top: calc(34px + env(safe-area-inset-top, 0px));
-  }
-}
-
-/* The last few pixels come out of the gaps, then the tape, which keeps 20px
-   to be dragged by. 161px is the rest of the dock here, and 7px either side. */
-@media (max-width: 394px) {
-  .lb-dock {
-    --lb-tl-w: max(20px, min(48px, calc(100vw - 161px)));
-    --lb-tl-open: max(var(--lb-tl-w), calc(100vw - 161px));
-    --sl-group: 0px;
-    gap: 0;
-    padding: 5px 4px;
-  }
-
-  .sl-clock {
-    margin: 0;
   }
 }
 

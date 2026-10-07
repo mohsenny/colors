@@ -5,6 +5,7 @@ import { LIFE, yearsOf } from '../life'
 import type { Chapter } from '../life'
 import { LOGOS } from '../logos'
 import type { Logo as LogoData, LogoId } from '../logos'
+import { orgParts } from '../text'
 
 /** The old face fading out, as `--lb-t-grow`. */
 const LEAVE_MS = 180
@@ -124,13 +125,26 @@ function Logos({ chapter }: { chapter: Chapter }): ReactElement | null {
   )
 }
 
-/** A chapter: when and where, the line it is, what happened, and the logos. */
+/**
+ * A chapter: when and where, the line it is, what happened, and the logos.
+ * Each company named in the copy links to its site, in a new tab.
+ */
 function ChapterFace({ chapter }: { chapter: Chapter }): ReactElement {
   return (
     <>
       <p className="cv-kicker">{kickerOf(chapter)}</p>
       <h2 className="cv-headline">{chapter.headline}</h2>
-      <p className="cv-copy">{chapter.copy}</p>
+      <p className="cv-copy">
+        {orgParts(chapter.copy).map((p, i) =>
+          p.href ? (
+            <a key={i} className="cv-link" href={p.href} target="_blank" rel="noreferrer">
+              {p.text}
+            </a>
+          ) : (
+            <span key={i}>{p.text}</span>
+          ),
+        )}
+      </p>
       <Logos chapter={chapter} />
     </>
   )

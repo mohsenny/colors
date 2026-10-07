@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { LIFE, bare, degrees, jobs } from './life'
-import { PAPER_ID, closingParts, textCv, titleRow } from './text'
+import { PAPER_ID, closingParts, orgParts, textCv, titleRow } from './text'
 
 describe('closingParts', () => {
   it('links each instrument from the CV, and nothing else', () => {
@@ -11,6 +11,25 @@ describe('closingParts', () => {
       { text: 'Lightbox', href: 'lightbox/' },
     ])
     expect(closingParts(LIFE.closing).map((p) => p.text).join('')).toBe(LIFE.closing)
+  })
+})
+
+describe('orgParts', () => {
+  const copy = (id: string): string => LIFE.chapters.find((c) => c.id === id)?.copy ?? ''
+
+  it('links each company with a site, by its full name or its short one', () => {
+    const named = (id: string): string[] => orgParts(copy(id)).flatMap((p) => (p.href ? [p.text] : []))
+    expect(named('finland')).toEqual(['University of Eastern Finland', 'Arbonaut'])
+    expect(named('leading-qa')).toEqual(['OSRAM', 'HeyJobs', 'MessageBird', 'LucaNet', 'CompuGroup Medical'])
+    expect(named('with-ai')).toEqual(['CGM'])
+  })
+
+  it('keeps every word of the copy, and links only to https', () => {
+    for (const c of LIFE.chapters) {
+      const parts = orgParts(c.copy)
+      expect(parts.map((p) => p.text).join('')).toBe(c.copy)
+      for (const p of parts) if (p.href) expect(p.href.startsWith('https://')).toBe(true)
+    }
   })
 })
 
