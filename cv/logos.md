@@ -36,6 +36,8 @@ Where each logo in cv/src/logos.ts came from (sources fetched 2026-10-06 and 202
 | jira | Jira | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/jira.svg | Trademark of Atlassian. | cropped |
 | figma | Figma | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/figma.svg | Trademark of Figma, Inc. | cropped |
 | react | React | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/react.svg | Trademark of Meta Platforms, Inc. | cropped |
+| go | Go | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/go.svg | Trademark of Google LLC (the Go project). | cropped |
+| graphql | GraphQL | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/graphql.svg | Trademark of the GraphQL Foundation (The Linux Foundation). | cropped |
 | linkedin | LinkedIn | https://commons.wikimedia.org/wiki/File:LinkedIn_2021.svg | Public domain text logo on Commons; trademark of LinkedIn Corporation. | in mark only (word mark dropped), one colour, cropped |
 | github | GitHub | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/github.svg | Trademark of GitHub, Inc. | cropped |
 | medium | Medium | https://github.com/simple-icons/simple-icons/blob/16.34.0/icons/medium.svg | Trademark of A Medium Corporation. | cropped |

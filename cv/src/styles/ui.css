@@ -21,9 +21,10 @@
 
 /*
  * The text CV, on the paper Lightbox lays over its sheets: mount white, the
- * fibre, the cut edge on the right. Full height like Lightbox's, with the
- * reading between the title and the dock. Laid out here, not by the app, so
- * it reads the same with no script at all.
+ * fibre, the cut edge on its left. It comes in from the right, so the story
+ * steps left and the title, top left, stays in sight. Full height like
+ * Lightbox's, with the reading clear of the dock. Laid out here, not by the
+ * app, so it reads the same with no script at all.
  */
 .cv-paper {
   /* Fixed rather than the stage's absolute, so it holds before the app takes it in. */
@@ -31,8 +32,12 @@
   /* Over the sheets (10 and up), under the title and the dock (200).
      Lightbox's is 5, under its sheets, because there they lie on it. */
   z-index: 100;
+  right: 0;
+  left: auto;
   display: block;
   width: min(560px, 100vw);
+  border-right: 0;
+  border-left: 1px solid var(--lb-card-edge);
   /* Lightbox's paper lies under its sheets; this one lies over them, so the
      mount white is laid over the bare surface rather than over the film. */
   background:
@@ -43,10 +48,10 @@
   user-select: text;
   -webkit-user-select: text;
   -webkit-touch-callout: default;
-  /* Out to the left, the way it came, and gone from the reading order once
+  /* Out to the right, the way it came, and gone from the reading order once
      it is out of sight. */
   visibility: hidden;
-  transform: translateX(-100%);
+  transform: translateX(100%);
   transition:
     transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
     visibility 0s linear var(--lb-t-enter, 240ms);
@@ -58,128 +63,542 @@
   transition: transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
-/* The scroll. The title is away while the paper is in, so the reading starts
-   at the paper's own inset; 72px clears the dock (18px up, 38px tall) by 16px. */
+/*
+ * The scroll, and the type it is set in. Three greys: the name and titles,
+ * the reading at 11:1, and labels, years and dates at 7:1. Years and labels
+ * run down the side in the gutter, and the spine's line runs down the axis
+ * beside it; everything else reads in the column after them. 72px clears
+ * the dock (18px up, 38px tall) by 16px.
+ */
 .cv-text {
+  --cv-ink-1: #121216;
+  --cv-ink-2: #3a3a40;
+  --cv-ink-3: #55555c;
+  --cv-rule: rgba(30, 34, 48, 0.13);
+  --cv-gutter: 84px;
+  --cv-axis: 28px;
+  --cv-column: calc(var(--cv-gutter) + var(--cv-axis));
+  --cv-mono: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   position: absolute;
   inset: calc(18px + env(safe-area-inset-top, 0px)) 0 calc(72px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 28px 0 calc(18px + env(safe-area-inset-left, 0px));
-  color: var(--lb-ink-soft, rgba(26, 26, 30, 0.58));
+  padding: 10px calc(28px + env(safe-area-inset-right, 0px)) 0 32px;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 15.5px;
+  /* Whole pixels here and below, so the rules and dots land on the grid. */
+  line-height: 24px;
+  color: var(--cv-ink-2);
 }
 
 /* Without script the paper is never taken into the app, and there is no dock
-   to clear: the reading runs to the foot of the page. The title stays, the
-   only way across, so 52px clears it (14px down, 22px tall) by 16px. */
+   to clear: the reading runs to the foot of the page, in the middle of a wide
+   one. The title stays, the only way across, so 52px clears it (14px down,
+   22px tall) by 16px. */
+body > .cv-paper {
+  right: max(0px, calc(50vw - 280px));
+  border-right: 1px solid var(--lb-card-edge);
+}
+
 body > .cv-paper .cv-text {
   top: calc(52px + env(safe-area-inset-top, 0px));
   bottom: 0;
   padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
 }
 
-.cv-text h1 {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--lb-ink-strong, #101014);
-}
-
-.cv-intro {
-  margin-top: 4px;
-  color: var(--lb-ink, #1a1a1e);
-}
-
-.cv-part {
-  margin-top: 22px;
-}
-
-.cv-text h2 {
-  margin-bottom: 8px;
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-}
-
-.cv-role + .cv-role {
-  margin-top: 14px;
-}
-
-.cv-text h3 {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--lb-ink, #1a1a1e);
-}
-
-.cv-at {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0 14px;
-}
-
-/* Dates as the tabs and the clock set numbers. */
-.cv-when {
-  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10.5px;
-  font-variant-numeric: slashed-zero tabular-nums;
-  white-space: nowrap;
-}
-
-.cv-role ul,
-.cv-writing {
-  margin-top: 4px;
-}
-
-.cv-role li,
-.cv-writing li {
-  position: relative;
-  padding-left: 12px;
-}
-
-/* A short rule rather than a bullet, the weight of the cut edge. */
-.cv-role li::before,
-.cv-writing li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.68em;
-  width: 6px;
-  height: 1px;
-  background: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-}
-
-.cv-reach {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 2px 14px;
-}
-
-.cv-reach dt {
-  font-size: 9.5px;
-  font-weight: 500;
-  line-height: 1.85;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-}
-
-.cv-closing {
-  margin: 22px 0 24px;
-  color: var(--lb-ink, #1a1a1e);
+.cv-text:focus,
+.cv-part:focus {
+  outline: none;
 }
 
 .cv-text a {
-  color: var(--lb-ink, #1a1a1e);
-  text-decoration-color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
-  text-underline-offset: 2px;
-  transition: text-decoration-color var(--lb-t-grow, 180ms) var(--lb-ease, ease);
+  color: inherit;
+  text-decoration-color: var(--cv-rule);
+  text-underline-offset: 3px;
+  transition:
+    text-decoration-color var(--lb-t-grow, 180ms) var(--lb-ease, ease),
+    background-color var(--lb-t-grow, 180ms) var(--lb-ease, ease);
 }
 
 .cv-text a:hover {
   text-decoration-color: currentColor;
+}
+
+.cv-text a:focus-visible {
+  outline: 2px solid var(--lb-focus, rgba(26, 30, 44, 0.55));
+  outline-offset: 2px;
+}
+
+/* Read out and printed, not shown. */
+.cv-unseen {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Logos at their own optical size, as the story's: a row's height times the
+   mark's scale, as wide as its viewBox makes that. In the reading's ink. */
+.cv-mark {
+  flex: none;
+  width: auto;
+  height: calc(var(--cv-row, 20px) * var(--cv-scale, 1));
+  color: var(--cv-ink-1);
+}
+
+.cv-glyph {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* --- the glance: who, what now, how to reach him, then three rows of facts */
+
+.cv-hero h1 {
+  font-size: 52px;
+  font-weight: 500;
+  line-height: 54px;
+  letter-spacing: -0.03em;
+  color: var(--cv-ink-1);
+}
+
+.cv-now {
+  margin-top: 10px;
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 26px;
+  color: var(--cv-ink-1);
+}
+
+/* The marks alone, each with a 40px target. The first sits on the text's
+   edge, its target running past it. */
+.cv-reach {
+  display: flex;
+  gap: 4px;
+  margin: 12px 0 0 -11px;
+}
+
+.cv-way {
+  --cv-row: 22px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--cv-ink-1);
+}
+
+.cv-text .cv-way:hover {
+  background-color: rgba(30, 34, 48, 0.07);
+}
+
+.cv-way-glyph {
+  width: 20px;
+  height: 20px;
+}
+
+/* The address, for print. */
+.cv-way-at {
+  display: none;
+}
+
+.cv-intro {
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 25px;
+  color: var(--cv-ink-1);
+  text-wrap: pretty;
+}
+
+/* One grid for the three rows, so the labels make one column as wide as
+   the longest. */
+.cv-glance {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 20px;
+  margin-top: 20px;
+  padding: 10px 0;
+  border-block: 1px solid var(--cv-rule);
+}
+
+.cv-glance > div {
+  display: contents;
+}
+
+.cv-glance dt,
+.cv-glance dd {
+  min-height: 34px;
+}
+
+/* The labels in mono, as the tabs and the clock set them. */
+.cv-glance dt,
+.cv-skills dt,
+.cv-year,
+.cv-when,
+.cv-head span {
+  font-family: var(--cv-mono);
+  font-variant-numeric: slashed-zero tabular-nums;
+}
+
+.cv-glance dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cv-ink-3);
+}
+
+.cv-glance dd {
+  --cv-row: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cv-ink-1);
+}
+
+.cv-tools {
+  --cv-row: 19px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+
+.cv-tools li {
+  display: flex;
+}
+
+/* --- the index: a pill for each section, a jump down the one scroll */
+
+.cv-index ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.cv-text .cv-index a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px 5px 9px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--cv-rule);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--cv-ink-1);
+  text-decoration: none;
+}
+
+.cv-text .cv-index a:hover {
+  background-color: rgba(30, 34, 48, 0.06);
+}
+
+.cv-index .cv-glyph {
+  width: 14px;
+  height: 14px;
+  color: var(--cv-ink-3);
+}
+
+/* --- sections: each a head on the axis, the reading in the column after it */
+
+.cv-part {
+  margin-top: 36px;
+  scroll-margin-top: 8px;
+}
+
+.cv-head {
+  display: grid;
+  grid-template-columns: var(--cv-gutter) var(--cv-axis) minmax(0, 1fr);
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* A disc of mount white, over the spine's line where there is one. */
+.cv-head-glyph {
+  position: relative;
+  grid-column: 2;
+  justify-self: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--cv-rule);
+  color: var(--cv-ink-1);
+}
+
+.cv-head span {
+  grid-column: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cv-ink-1);
+}
+
+.cv-head span::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--cv-rule);
+}
+
+/* --- the spine: Experience and Education on one line of years */
+
+.cv-timeline {
+  position: relative;
+  margin-top: 36px;
+}
+
+.cv-timeline > .cv-part:first-child {
+  margin-top: 0;
+}
+
+/* From the first head's disc to the last degree, fading out under it. */
+.cv-timeline::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 0;
+  left: calc(var(--cv-gutter) + var(--cv-axis) / 2 - 0.5px);
+  width: 1px;
+  background: linear-gradient(var(--cv-rule) calc(100% - 48px), transparent);
+}
+
+.cv-node {
+  /* The film is thin, so its dot gets an edge in the film's own hue. */
+  --cv-film-edge: color-mix(in oklch, var(--cv-film), black 35%);
+  display: grid;
+  grid-template-columns: var(--cv-gutter) var(--cv-axis) minmax(0, 1fr);
+  padding-bottom: 24px;
+}
+
+.cv-year {
+  grid-area: 1 / 1;
+  justify-self: end;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 26px;
+  color: var(--cv-ink-2);
+}
+
+/* The dot, in its chapter's film; a degree's is a ring. Mount white round
+   it cuts the line. */
+.cv-node::before {
+  content: '';
+  grid-area: 1 / 2;
+  justify-self: center;
+  width: 10px;
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--cv-film);
+  box-shadow:
+    0 0 0 3px #fff,
+    inset 0 0 0 1.5px var(--cv-film-edge);
+}
+
+.cv-node.is-degree::before {
+  background: #fff;
+  box-shadow:
+    0 0 0 3px #fff,
+    inset 0 0 0 2.5px var(--cv-film-edge);
+}
+
+.cv-node-body {
+  grid-area: 1 / 3;
+  min-width: 0;
+}
+
+/* The org's mark and the title on one line, 26px tall like the year's. A
+   wordmark comes to 15px at least, so a long thin one still reads. */
+.cv-node h3 {
+  --cv-row: 30px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  min-height: 26px;
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--cv-ink-1);
+}
+
+.cv-brand {
+  display: flex;
+  align-items: center;
+}
+
+.cv-brand .cv-mark.is-wordmark {
+  height: max(15px, calc(var(--cv-row) * var(--cv-scale)));
+}
+
+.cv-brand .cv-mark.is-mark {
+  height: calc(23px * var(--cv-scale));
+}
+
+.cv-meta {
+  margin-top: 1px;
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--cv-ink-3);
+}
+
+.cv-sep {
+  margin: 0 7px;
+}
+
+.cv-place,
+.cv-when {
+  white-space: nowrap;
+}
+
+.cv-when {
+  font-size: 12.5px;
+}
+
+.cv-points {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+}
+
+.cv-points li,
+.cv-writing li {
+  position: relative;
+  padding-left: 15px;
+  text-wrap: pretty;
+}
+
+/* A short rule rather than a bullet, as a border so it prints. */
+.cv-points li::before,
+.cv-writing li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 7px;
+  border-top: 1.5px solid var(--cv-ink-3);
+}
+
+.cv-spine:last-child .cv-node:last-child {
+  padding-bottom: 8px;
+}
+
+/* --- skills: the label down the side, the marks and names after it */
+
+/* Lined up by their 26px lines: a mark has no baseline to line up by. */
+.cv-skills > div {
+  display: grid;
+  grid-template-columns: var(--cv-gutter) var(--cv-axis) minmax(0, 1fr);
+  align-items: start;
+  padding: 7px 0;
+}
+
+.cv-skills > div + div {
+  border-top: 1px solid rgba(30, 34, 48, 0.07);
+}
+
+.cv-skills dt {
+  grid-column: 1;
+  justify-self: end;
+  font-size: 12px;
+  line-height: 26px;
+  letter-spacing: 0.04em;
+  text-align: right;
+  text-transform: uppercase;
+  color: var(--cv-ink-3);
+}
+
+.cv-skills dd {
+  grid-column: 3;
+}
+
+.cv-chips {
+  --cv-row: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  color: var(--cv-ink-1);
+}
+
+.cv-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  line-height: 26px;
+}
+
+.cv-chip .cv-mark.is-wordmark {
+  height: max(16px, calc(var(--cv-row) * var(--cv-scale)));
+}
+
+/* --- writing and outside work, in the column */
+
+.cv-profile,
+.cv-writing,
+.cv-interests {
+  margin-left: var(--cv-column);
+}
+
+.cv-text .cv-profile a {
+  --cv-row: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cv-ink-1);
+}
+
+.cv-writing {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cv-text .cv-writing a {
+  color: var(--cv-ink-1);
+}
+
+.cv-interests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  color: var(--cv-ink-1);
+}
+
+.cv-interests li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.cv-interests .cv-glyph {
+  width: 18px;
+  height: 18px;
+}
+
+.cv-closing {
+  margin: 40px 0 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cv-rule);
+  color: var(--cv-ink-2);
+}
+
+.cv-text .cv-closing a {
+  color: var(--cv-ink-1);
 }
 
 /* -------------------------------------------------------------------- film */
@@ -240,12 +659,6 @@ body > .cv-paper .cv-text {
   user-select: none;
   pointer-events: none;
   transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
-}
-
-/* The paper comes out over this corner, and what the legend says is about
-   the life under it. */
-.lb-legend.is-away {
-  opacity: 0;
 }
 
 .lb-legend-row {
@@ -917,7 +1330,7 @@ body > .cv-paper .cv-text {
   transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
 }
 
-.cv-way {
+.cv-ways .cv-way {
   display: grid;
   place-items: center;
   width: 32px;
@@ -927,13 +1340,13 @@ body > .cv-paper .cv-text {
   transition: color var(--lb-t-fade, 320ms) var(--lb-ease, ease);
 }
 
-.cv-way:hover,
-.cv-way:focus-visible {
+.cv-ways .cv-way:hover,
+.cv-ways .cv-way:focus-visible {
   color: var(--lb-ink, #1a1a1e);
 }
 
 /* The ring inside the target, so on a phone it clears the title and the headline. */
-.cv-way:focus-visible {
+.cv-ways .cv-way:focus-visible {
   outline-offset: -2px;
 }
 
@@ -950,7 +1363,7 @@ body > .cv-paper .cv-text {
 }
 
 /* A way's mark, at the line's `--cv-mark` times its own scale. */
-.cv-mark {
+:is(.cv-ways, .cv-contact) .cv-mark {
   flex: none;
   height: calc(var(--cv-mark) * var(--cv-scale, 1));
 }
@@ -1043,13 +1456,13 @@ body > .cv-paper .cv-text {
 }
 
 /*
- * The paper comes out over the left of the stage. Where the story still fits
- * to the right of it, 560px and the column's 680 and 24px either side, it
+ * The paper comes in over the right of the stage. Where the story still fits
+ * to the left of it, 560px and the column's 680 and 24px either side, it
  * moves over into the rest; where it does not, it goes, the paper being the
  * whole of it.
  */
 .cv-story.is-reading {
-  transform: translateX(280px);
+  transform: translateX(-280px);
 }
 
 @media (max-width: 1287px) {
@@ -1062,12 +1475,10 @@ body > .cv-paper .cv-text {
   }
 }
 
-/* The title is not the paper's: it goes over with the story, the paper's
-   width along, and where the story goes, it goes too. */
+/* The title is not the paper's, and the paper comes in from the other side:
+   it stays where it is, and goes only where the paper would cover it. */
 .cv-stage .lb-title {
-  transition:
-    opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease),
-    transform var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+  transition: opacity var(--lb-t-fade, 320ms) var(--lb-ease, ease);
 }
 
 /* Idle still leaves slowly, as in src/styles/title.css: that sheet loads
@@ -1076,15 +1487,11 @@ body > .cv-paper .cv-text {
   transition-duration: var(--lb-t-rest, 700ms);
 }
 
-.cv-stage:has(.cv-paper.is-in) .lb-title {
-  transform: translateX(560px);
-}
-
-@media (max-width: 1287px) {
+/* 560px of paper and the title's 326px, with 16px between. */
+@media (max-width: 901px) {
   .cv-stage:has(.cv-paper.is-in) .lb-title {
     visibility: hidden;
     opacity: 0;
-    transform: none;
     transition:
       opacity var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1)),
       visibility 0s linear var(--lb-t-enter, 240ms);
@@ -1462,8 +1869,63 @@ body > .cv-paper .cv-text {
    script, is 18px and 12px down, so 40px clears that by the same. */
 @media (max-width: 619px) {
   .cv-text {
+    --cv-gutter: 42px;
+    --cv-axis: 24px;
     inset: calc(14px + env(safe-area-inset-top, 0px)) 0 calc(60px + env(safe-area-inset-bottom, 0px));
-    padding: 0 18px 0 calc(14px + env(safe-area-inset-left, 0px));
+    padding: 6px calc(18px + env(safe-area-inset-right, 0px)) 0 calc(18px + env(safe-area-inset-left, 0px));
+    font-size: 15px;
+    line-height: 23px;
+  }
+
+  .cv-hero h1 {
+    font-size: 38px;
+    line-height: 42px;
+  }
+
+  .cv-now {
+    font-size: 17px;
+    line-height: 24px;
+  }
+
+  .cv-intro {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .cv-points li::before,
+  .cv-writing li::before {
+    top: 11px;
+  }
+
+  .cv-glance {
+    column-gap: 16px;
+  }
+
+  .cv-glance dd {
+    font-size: 14.5px;
+    line-height: 20px;
+  }
+
+  .cv-year {
+    font-size: 12px;
+  }
+
+  .cv-node h3 {
+    font-size: 16px;
+  }
+
+  /* No room down the side for a label: it goes over its marks, in the column. */
+  .cv-skills > div {
+    grid-template-columns: minmax(0, 1fr);
+    margin-left: var(--cv-column);
+    padding: 6px 0;
+  }
+
+  .cv-skills dt,
+  .cv-skills dd {
+    grid-column: 1;
+    justify-self: start;
+    text-align: left;
   }
 
   body > .cv-paper .cv-text {

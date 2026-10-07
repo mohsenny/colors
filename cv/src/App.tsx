@@ -141,7 +141,7 @@ function Chrome({ instrument, storySlot }: { instrument: Instrument; storySlot: 
           storySlot,
         )}
       <Paper open={snap.paper} />
-      <Legend away={snap.paper} />
+      <Legend />
       <Dock
         snap={snap}
         attachClock={attachClock}

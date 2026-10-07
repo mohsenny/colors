@@ -23,8 +23,21 @@ export function Paper({ open }: { open: boolean }): ReactElement {
     const next = paper.nextSibling
     at.append(paper)
     paper.style.boxShadow = shadowStack(PAPER_Z)
+    // The index jumps down the paper. The hash is the app's, read when the
+    // page opens, so a jump scrolls without writing it.
+    const jump = (e: MouseEvent): void => {
+      const href = e.target instanceof Element ? e.target.closest('a')?.getAttribute('href') : null
+      const to = href?.startsWith('#cv-') ? paper.querySelector<HTMLElement>(href) : null
+      if (!to) return
+      e.preventDefault()
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      to.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' })
+      to.focus({ preventScroll: true })
+    }
+    paper.addEventListener('click', jump)
     // Back where it was found, so the development double mount finds it again.
     return () => {
+      paper.removeEventListener('click', jump)
       home?.insertBefore(paper, next)
     }
   }, [])

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LIFE, jobs } from './life'
+import { LIFE, bare, degrees, jobs } from './life'
 import { PAPER_ID, closingParts, textCv, titleRow } from './text'
 
 describe('closingParts', () => {
@@ -26,6 +26,24 @@ describe('textCv', () => {
     const at = orgs.map((org) => html.indexOf(org))
     for (const i of at) expect(i).toBeGreaterThan(-1)
     expect(at).toEqual([...at].sort((a, b) => b - a))
+  })
+
+  it('names each org in words beside its mark', () => {
+    for (const r of [...jobs(), ...degrees()]) expect(html).toContain(`<span class="cv-unseen">${r.org}, </span>`)
+  })
+
+  it('says each address, though the screen shows only its mark', () => {
+    const { email, linkedin, github, medium } = LIFE.reach
+    for (const at of [email, bare(linkedin), bare(github), bare(medium)]) {
+      expect(html).toContain(`, ${at}" title="${at}">`)
+      expect(html).toContain(`<span class="cv-way-at">${at}</span>`)
+    }
+  })
+
+  it('has a part for each place the index jumps to', () => {
+    const ids = [...html.matchAll(/href="#(cv-[a-z]+)"/g)].map((m) => m[1])
+    expect(ids).toHaveLength(5)
+    for (const id of ids) expect(html).toContain(`<section class="cv-part" id="${id}"`)
   })
 
   it('links each article, and lists one without a url as plain text', () => {

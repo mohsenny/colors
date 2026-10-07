@@ -70,6 +70,18 @@ describe('the life', () => {
     }
   })
 
+  it('marks each role with an org of its chapter', () => {
+    for (const c of LIFE.chapters) for (const r of c.roles ?? []) expect(c.orgs, r.org).toContain(r.logo)
+  })
+
+  it('sets the skills in rows, each mark one there is', () => {
+    for (const set of LIFE.skills) {
+      expect(set.skills.length, set.label).toBeGreaterThan(0)
+      for (const s of set.skills) if (s.logo) expect(LOGOS[s.logo], s.name).toBeDefined()
+    }
+    expect(LIFE.interests.length).toBeGreaterThan(0)
+  })
+
   it('sends the old chapters and crossings to the chapter that holds them now', () => {
     const ids = new Set(LIFE.chapters.map((c) => c.id))
     for (const [from, to] of Object.entries(MOVED)) {

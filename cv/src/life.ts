@@ -13,6 +13,7 @@
  */
 
 import type { Dye } from '../../src/core/types.ts'
+import type { GlyphId } from './glyphs.ts'
 import type { LogoId } from './logos.ts'
 
 /** A fact not known yet, written so the ship gate can find it. */
@@ -31,7 +32,22 @@ export interface Role {
   place?: string
   from: string
   to: string
+  /** The org's mark, one of its chapter's orgs. */
+  logo: LogoId
+  /** Short lines, one thing each. */
   points: string[]
+}
+
+/** A skill: a tool by its mark, or by its name alone where it has none. */
+export interface Skill {
+  name: string
+  logo?: LogoId
+}
+
+/** Skills under one label, which the text CV sets as a row. */
+export interface SkillSet {
+  label: string
+  skills: Skill[]
 }
 
 export interface Chapter {
@@ -65,14 +81,18 @@ export interface Life {
   /** The year he was born, which Growing up's tab starts at. */
   born: number
   intro: string
+  /** What he does, in a line under the name. */
+  role: string
   based: string
   reach: { email: string; linkedin: string; github: string; medium: string }
   /** In start order, which is also left to right. */
   chapters: Chapter[]
-  skills: string
+  skills: SkillSet[]
   /** Medium articles, after the profile in reach. An empty url lists the title without a link. */
   writing: { title: string; url: string }[]
   outside: string
+  /** `outside` in parts, each with a line icon, for the text CV. */
+  interests: { glyph: GlyphId; text: string }[]
   /** The instruments' names in it become links. */
   closing: string
 }
@@ -86,6 +106,7 @@ export const LIFE: Life = {
   name: 'Mohsen Nasiri',
   born: 1989,
   intro: "I'm Mohsen, a tech lead in Germany with a focus on quality. If it takes creativity, tech or AI, it's for me.",
+  role: 'Tech lead with a focus on quality',
   based: 'Germany',
   reach: {
     email: 'mohsen.n89@gmail.com',
@@ -127,6 +148,7 @@ export const LIFE: Life = {
           place: 'Tehran, Iran',
           from: '2008',
           to: '2012',
+          logo: 'iust',
           points: [],
         },
       ],
@@ -153,6 +175,7 @@ export const LIFE: Life = {
           place: 'Joensuu, Finland',
           from: '2012',
           to: '2015',
+          logo: 'uef',
           points: [],
         },
         {
@@ -162,6 +185,7 @@ export const LIFE: Life = {
           place: 'Finland',
           from: 'Feb 2013',
           to: 'Dec 2015',
+          logo: 'arbonaut',
           points: [
             'Web apps in PHP, JavaScript and OpenLayers.',
             'ArcGIS plugins with GeoServer, PostGIS and PostgreSQL.',
@@ -191,8 +215,9 @@ export const LIFE: Life = {
           place: 'Berlin',
           from: 'Jan 2016',
           to: 'Jul 2018',
+          logo: 'hubrick',
           points: [
-            'A QA workflow inside the feature teams, with test steps in CI/CD and TestRail.',
+            'QA workflow inside the feature teams, with test steps in CI/CD and TestRail.',
             'Test automation with WebdriverIO, and load testing with JMeter and Python.',
             'QA metrics with Prometheus and Grafana.',
           ],
@@ -218,9 +243,11 @@ export const LIFE: Life = {
           place: 'Berlin',
           from: 'Aug 2018',
           to: 'Nov 2019',
+          logo: 'osram',
           points: [
             'Built a QA team of three from the ground up.',
-            'Manual and automated testing of web apps, backend microservices and their API, with QA engaged early.',
+            'Manual and automated testing of web apps, microservices and their API.',
+            'QA engaged early.',
             'Performance and load testing of the IoT cloud.',
           ],
         },
@@ -231,9 +258,11 @@ export const LIFE: Life = {
           place: 'Berlin',
           from: 'Nov 2019',
           to: 'Aug 2020',
+          logo: 'heyjobs',
           points: [
-            'Quality metrics for error rate, page speed and downtime, with monitors and alerts.',
-            'Grew the team through hiring, and took QA from the product spec to after the release.',
+            'Metrics, monitors and alerts for error rate, page speed and downtime.',
+            'Grew the team through hiring.',
+            'QA from the product spec to after the release.',
             'Less flaky test automation, visual regression, parallel runs and device farms.',
           ],
         },
@@ -244,9 +273,12 @@ export const LIFE: Life = {
           place: 'Berlin',
           from: 'Nov 2020',
           to: 'Feb 2022',
+          logo: 'talentspace',
           points: [
-            'Created and managed the QA team, and the QA process across all feature teams, with company-wide bug triage.',
-            'An end-to-end framework with visual regression in Cypress, WebdriverIO and Percy, and API testing in Chai and Supertest.',
+            'Created and managed the QA team.',
+            'QA process across all feature teams, with company-wide bug triage.',
+            'End-to-end framework with visual regression in Cypress, WebdriverIO and Percy.',
+            'API testing in Chai and Supertest.',
             'Quality of service dashboards on Datadog, plus SonarCloud and FullStory.',
           ],
         },
@@ -257,10 +289,12 @@ export const LIFE: Life = {
           place: 'Amsterdam',
           from: 'Feb 2022',
           to: '2024',
+          logo: 'messagebird',
           points: [
             'Web and API automation with Cypress and Supertest.',
-            'A load testing framework for load-heavy user journeys, in k6 and Chai.',
-            'Bug reporting and triage for all product teams, and dashboards, monitors and alerts on quality metrics.',
+            'Load testing framework in k6 and Chai for load-heavy user journeys.',
+            'Bug reporting and triage for all product teams.',
+            'Dashboards, monitors and alerts on quality metrics.',
           ],
         },
         {
@@ -269,6 +303,7 @@ export const LIFE: Life = {
           title: 'QA Lead',
           from: '2024',
           to: '2025',
+          logo: 'lucanet',
           points: ['Led the manual and automation QAs.'],
         },
         {
@@ -277,10 +312,12 @@ export const LIFE: Life = {
           title: 'QA Lead',
           from: '2025',
           to: 'now',
+          logo: 'cgm',
           points: [
             'Lead the manual and automation QAs.',
-            'Built an AI workflow hub that chains agents, tools and human review steps into QA workflows, from a Jira ticket to test cases, automated tests, a merge request and a code review. It is becoming the standard AI workflow tool at CGM in Germany.',
-            'Built a test reporting dashboard: trends and flaky tests from Allure results, coverage by team, a Jira bug dashboard, results synced to Zephyr, and visual snapshot review.',
+            'Built an AI workflow hub: agents, tools and human review take a Jira ticket to test cases, automated tests, a merge request and a code review.',
+            'The hub is becoming the standard AI workflow tool at CGM in Germany.',
+            'Built a test reporting dashboard on Allure results: trends, flaky tests, coverage by team, Jira bugs, Zephyr sync and visual snapshot review.',
           ],
         },
       ],
@@ -300,8 +337,71 @@ export const LIFE: Life = {
       lean: 0.6,
     },
   ],
-  skills:
-    'Working in agile and scrum teams. Building QA teams and managing people: 1-on-1s, syncs and performance reviews. Python, Java, JavaScript and Go. Test automation with Cypress, WebdriverIO and Selenium-based libraries. Desktop and mobile clients, REST and GraphQL services, and TestRail. Quality metrics defined and made visible in Grafana, Prometheus and Datadog. Daily work with developers, product owners, designers and customer success.',
+  // The sentence the paper had, in rows, plus k6 and JMeter from the roles
+  // and the AI tools from With AI's sheet.
+  skills: [
+    {
+      label: 'Leading',
+      skills: [
+        { name: 'Building QA teams' },
+        { name: '1-on-1s, syncs and reviews' },
+        { name: 'Agile and scrum' },
+      ],
+    },
+    {
+      label: 'Code',
+      skills: [
+        { name: 'Python', logo: 'python' },
+        { name: 'Java' },
+        { name: 'JavaScript', logo: 'javascript' },
+        { name: 'Go', logo: 'go' },
+      ],
+    },
+    {
+      label: 'Automation',
+      skills: [
+        { name: 'Cypress', logo: 'cypress' },
+        { name: 'WebdriverIO', logo: 'webdriverio' },
+        { name: 'Selenium', logo: 'selenium' },
+      ],
+    },
+    {
+      label: 'Load',
+      skills: [
+        { name: 'k6', logo: 'k6' },
+        { name: 'JMeter', logo: 'jmeter' },
+      ],
+    },
+    {
+      label: 'Testing',
+      skills: [
+        { name: 'Desktop and mobile clients' },
+        { name: 'REST' },
+        { name: 'GraphQL', logo: 'graphql' },
+        { name: 'TestRail', logo: 'testrail' },
+      ],
+    },
+    {
+      label: 'Metrics',
+      skills: [
+        { name: 'Grafana', logo: 'grafana' },
+        { name: 'Prometheus', logo: 'prometheus' },
+        { name: 'Datadog', logo: 'datadog' },
+      ],
+    },
+    {
+      label: 'AI',
+      skills: [
+        { name: 'Claude', logo: 'claude' },
+        { name: 'ChatGPT', logo: 'openai' },
+        { name: 'DeepSeek', logo: 'deepseek' },
+      ],
+    },
+    {
+      label: 'Daily with',
+      skills: [{ name: 'Developers' }, { name: 'Product owners' }, { name: 'Designers' }, { name: 'Customer success' }],
+    },
+  ],
   writing: [
     {
       title: 'Testing Agent Workflows Like End-to-End Systems',
@@ -317,6 +417,11 @@ export const LIFE: Life = {
     },
   ],
   outside: 'Space and physics, quantum field theory especially, and my golden retriever.',
+  interests: [
+    { glyph: 'orbit', text: 'Space and physics' },
+    { glyph: 'wave', text: 'Quantum field theory' },
+    { glyph: 'paw', text: 'My golden retriever' },
+  ],
   closing:
     'Then see what I make for fun: Solar keeps the planets at true scale, Gravity bends space with a mass, Lightbox mixes colour.',
 }

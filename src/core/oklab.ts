@@ -11,7 +11,7 @@
  *     `mix-blend-mode: multiply` multiplies.
  */
 
-import type { Dye, Oklch } from './types'
+import type { Dye, Oklch } from './types.ts'
 
 const DEG = Math.PI / 180
 

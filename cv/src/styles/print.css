@@ -43,24 +43,131 @@
     transition: none;
     background: none;
     box-shadow: none !important;
-    /* The cut edge, stage.css's border on the right, would print as a rule down every page. */
+    /* The cut edge, a border on its left, would print as a rule down every page. */
     border: 0 !important;
   }
 
+  /* Black on white, at a size for A4, and every fact in words: the marks and
+     glyphs go, and the names and addresses they stood for are printed. */
   .cv-text {
+    --cv-ink-1: #000;
+    --cv-ink-2: #000;
+    --cv-ink-3: #333;
+    --cv-gutter: 48px;
+    --cv-axis: 12px;
     position: static;
     overflow: visible;
     padding: 0;
-    color: #3a3a40;
+    font-size: 10pt;
+    line-height: 1.4;
+  }
+
+  .cv-text svg,
+  .cv-index,
+  .cv-glance > div:last-child,
+  .cv-meta .cv-org,
+  .cv-meta .cv-org + .cv-sep,
+  .cv-timeline::before,
+  .cv-node::before {
+    display: none !important;
+  }
+
+  .cv-unseen {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .cv-text a {
+    text-decoration: none;
+  }
+
+  .cv-hero h1 {
+    font-size: 24pt;
+  }
+
+  .cv-hero h1,
+  .cv-now,
+  .cv-intro,
+  .cv-node h3,
+  .cv-meta,
+  .cv-chip {
+    line-height: 1.3;
+  }
+
+  .cv-now,
+  .cv-intro {
+    font-size: 11pt;
+  }
+
+  .cv-reach {
+    flex-wrap: wrap;
+    gap: 0 14px;
+    margin: 6px 0 0;
+  }
+
+  .cv-way {
+    display: inline;
+    width: auto;
+    height: auto;
+  }
+
+  .cv-way-at {
+    display: inline;
+  }
+
+  .cv-glance {
+    margin-top: 10px;
+    padding: 4px 0;
+  }
+
+  .cv-glance dt,
+  .cv-glance dd {
+    min-height: 0;
+  }
+
+  .cv-part,
+  .cv-timeline {
+    margin-top: 14pt;
+  }
+
+  .cv-head {
+    display: block;
+    margin-bottom: 6pt;
+  }
+
+  .cv-head span {
+    padding-left: 0;
+  }
+
+  .cv-node {
+    padding-bottom: 8pt;
+  }
+
+  .cv-node h3 {
+    display: block;
+  }
+
+  .cv-points li::before,
+  .cv-writing li::before {
+    top: 0.7em;
   }
 
   /* A role stays on one sheet where it fits. */
-  .cv-role,
-  .cv-text h2 {
+  .cv-node,
+  .cv-skills > div,
+  .cv-head {
     break-inside: avoid;
   }
 
-  .cv-text h2 {
+  .cv-head {
     break-after: avoid;
+  }
+
+  .cv-closing {
+    margin: 14pt 0 0;
   }
 }

@@ -8,10 +8,10 @@ const ROWS: ReadonlyArray<Row> = [
   { key: 't', gesture: 'T', effect: 'open the CV as text' },
 ]
 
-/** The three things that cannot be found by moving the mouse. Out of the way while the paper is. */
-export function Legend({ away }: { away: boolean }): ReactElement {
+/** The three things that cannot be found by moving the mouse. The paper comes in on the other side. */
+export function Legend(): ReactElement {
   return (
-    <div className={`lb-legend${away ? ' is-away' : ''}`}>
+    <div className="lb-legend">
       {ROWS.map((row) => (
         <div key={row.key} className="lb-legend-row">
           <span className="lb-legend-gesture">{row.gesture}</span>
