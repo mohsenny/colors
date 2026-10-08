@@ -1472,6 +1472,11 @@ body > .cv-paper .cv-text {
   text-wrap: pretty;
 }
 
+/* Its paragraphs, apart by a third of a line. */
+.cv-copy p + p {
+  margin-top: 0.5em;
+}
+
 /* ------------------------------------------------------------------ logos */
 
 /*
@@ -1900,6 +1905,15 @@ body > .cv-paper .cv-text {
     line-height: 1.45;
   }
 
+  /* The paragraphs run on, as the sheets have no lines to spare. */
+  .cv-copy p {
+    display: inline;
+  }
+
+  .cv-copy p + p::before {
+    content: ' ';
+  }
+
   .cv-logos {
     margin-top: 12px;
   }
@@ -1936,6 +1950,14 @@ body > .cv-paper .cv-text {
     margin-top: 6px;
     font-size: 13px;
     line-height: 1.4;
+  }
+
+  .cv-copy p {
+    display: inline;
+  }
+
+  .cv-copy p + p::before {
+    content: ' ';
   }
 
   .cv-logos {

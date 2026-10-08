@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { CSSProperties, HTMLAttributes, ReactElement, Ref, SyntheticEvent } from 'react'
+import type { CSSProperties, HTMLAttributes, ReactElement, ReactNode, Ref, SyntheticEvent } from 'react'
 import { COVER } from '../app/instrument'
 import type { Snapshot } from '../app/instrument'
 import { LIFE, yearsOf } from '../life'
@@ -150,6 +150,17 @@ function Logos({ chapter }: { chapter: Chapter }): ReactElement | null {
   )
 }
 
+/** Copy in its paragraphs, a line break each, every one set by `line`. One block, so the face still rises in four lines. */
+function Copy({ text, line }: { text: string; line: (paragraph: string) => ReactNode }): ReactElement {
+  return (
+    <div className="cv-copy">
+      {text.split('\n').map((paragraph, i) => (
+        <p key={i}>{line(paragraph)}</p>
+      ))}
+    </div>
+  )
+}
+
 /**
  * A chapter: when and where, the line it is, what happened, and the logos.
  * Each company named in the copy links to its site, in a new tab.
@@ -159,17 +170,20 @@ function ChapterFace({ chapter }: { chapter: Chapter }): ReactElement {
     <>
       <p className="cv-kicker">{kickerOf(chapter)}</p>
       <h2 className="cv-headline">{chapter.headline}</h2>
-      <p className="cv-copy">
-        {orgParts(chapter.copy).map((p, i) =>
-          p.href ? (
-            <a key={i} className="cv-link" href={p.href} target="_blank" rel="noreferrer">
-              {p.text}
-            </a>
-          ) : (
-            <span key={i}>{p.text}</span>
-          ),
-        )}
-      </p>
+      <Copy
+        text={chapter.copy}
+        line={(paragraph) =>
+          orgParts(paragraph).map((p, i) =>
+            p.href ? (
+              <a key={i} className="cv-link" href={p.href} target="_blank" rel="noreferrer">
+                {p.text}
+              </a>
+            ) : (
+              <span key={i}>{p.text}</span>
+            ),
+          )
+        }
+      />
       <Logos chapter={chapter} />
     </>
   )
@@ -186,18 +200,21 @@ function CoverFace({ actions }: { actions?: StoryActions }): ReactElement {
     <>
       <p className="cv-kicker">{cover.kicker}</p>
       <h2 className="cv-headline">{cover.headline}</h2>
-      <p className="cv-copy">
-        {cover.copy.split(/\b(Play|CV)\b/).map((part, i) =>
-          part === 'Play' || part === 'CV' ? (
-            <button key={i} type="button" className="cv-link cv-press" onClick={part === 'Play' ? actions?.play : actions?.paper}>
-              {part === 'Play' ? <PlayIcon /> : <PageIcon />}
-              {part}
-            </button>
-          ) : (
-            <span key={i}>{part}</span>
-          ),
-        )}
-      </p>
+      <Copy
+        text={cover.copy}
+        line={(paragraph) =>
+          paragraph.split(/\b(Play|CV)\b/).map((part, i) =>
+            part === 'Play' || part === 'CV' ? (
+              <button key={i} type="button" className="cv-link cv-press" onClick={part === 'Play' ? actions?.play : actions?.paper}>
+                {part === 'Play' ? <PlayIcon /> : <PageIcon />}
+                {part}
+              </button>
+            ) : (
+              <span key={i}>{part}</span>
+            ),
+          )
+        }
+      />
     </>
   )
 }

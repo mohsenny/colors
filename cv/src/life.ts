@@ -64,7 +64,7 @@ export interface Chapter {
   country?: string
   /** The story's big line. */
   headline: string
-  /** Five sentences and 500 characters at most, which the story holds on the smallest phone (life.test.ts). */
+  /** Five sentences and 500 characters at most, which the story holds on the smallest phone (life.test.ts). A line break starts a paragraph. */
   copy: string
   /** Where it happened, drawn larger than the tools. */
   orgs: LogoId[]
@@ -85,7 +85,8 @@ export interface Life {
   intro: string
   /**
    * The face the page lands on, before any chapter: where, a hello, who he
-   * is and the ways in. Play and CV in the copy are the dock's buttons too.
+   * is and the ways in, in paragraphs as a chapter's copy. Play and CV in it
+   * are the dock's buttons too.
    */
   cover: { kicker: string; headline: string; copy: string }
   /** What he does, in a line under the name. */
@@ -116,7 +117,7 @@ export const LIFE: Life = {
   cover: {
     kicker: 'Based in Germany',
     headline: "Hi, I'm Mohsen",
-    copy: "Tech lead with a focus on quality. If it takes creativity, tech or AI, it's for me. My story is in the cards below: pick one to read it, press Play to go through them all, or open my CV.",
+    copy: "Tech lead with a focus on quality. I started out as a developer, moved into test automation in 2016 and have led QA teams since 2018, today at CompuGroup Medical.\nIf it takes creativity, tech or AI, it's for me.\nMy story is in the cards below: pick one to read it, press Play to go through them all, or open my CV.",
   },
   role: 'Tech lead with a focus on quality',
   based: 'Germany',
@@ -135,7 +136,7 @@ export const LIFE: Life = {
       where: 'Tehran',
       country: 'Iran',
       headline: 'Growing up on video games',
-      copy: 'StarCraft, Warcraft and Dota were the ones I kept coming back to.',
+      copy: 'I was a bit of an introvert. I watched a lot of movies with my brother, and played games whenever I could.\nStarCraft, Warcraft and Dota were the ones I kept coming back to.',
       orgs: [],
       tools: ['starcraft', 'warcraft', 'dota'],
       stickers: true,
@@ -149,7 +150,7 @@ export const LIFE: Life = {
       to: 2012,
       where: 'Tehran',
       headline: 'Physics, maths, then software',
-      copy: 'Those were my best subjects at school, so engineering was the natural next step. I did a B.Sc. in Software Engineering at Iran University of Science and Technology.',
+      copy: 'Those were my best subjects at school, so engineering was the natural next step.\nI did a B.Sc. in Software Engineering at Iran University of Science and Technology.',
       orgs: ['iust'],
       tools: [],
       roles: [
@@ -175,7 +176,7 @@ export const LIFE: Life = {
       where: 'Joensuu',
       country: 'Finland',
       headline: 'A new life in Finland',
-      copy: 'I moved to Joensuu for an M.Sc. in Computer Science at the University of Eastern Finland. Long winters, deep snow, saunas, and my first job alongside the studies: full-stack developer at Arbonaut.',
+      copy: 'I moved to Joensuu for an M.Sc. in Computer Science at the University of Eastern Finland.\nLong winters, deep snow, saunas, and my first job alongside the studies: full-stack developer at Arbonaut.',
       orgs: ['uef', 'arbonaut'],
       tools: ['php', 'javascript', 'openlayers', 'postgresql', 'dotnet'],
       roles: [
@@ -218,7 +219,7 @@ export const LIFE: Life = {
       where: 'Berlin',
       country: 'Germany',
       headline: 'Testing as a craft',
-      copy: 'I moved to Berlin and its start-up scene, as a Senior QA Engineer at Hubrick. Automation became my thing: WebdriverIO and CI/CD, load tests in JMeter and Python, and quality metrics in Grafana.',
+      copy: 'I moved to Berlin and its start-up scene, as a Senior QA Engineer at Hubrick.\nAutomation became my thing: WebdriverIO and CI/CD, load tests in JMeter and Python, and quality metrics in Grafana.',
       orgs: ['hubrick'],
       tools: ['selenium', 'webdriverio', 'cypress', 'k6', 'jmeter', 'python', 'grafana', 'prometheus', 'datadog', 'testrail'],
       roles: [
@@ -247,7 +248,7 @@ export const LIFE: Life = {
       from: 2018,
       to: 'now',
       headline: 'Leading QA, from start-ups to big companies',
-      copy: 'I stepped up to QA lead and built and grew teams at OSRAM, HeyJobs and Talentspace. Then came MessageBird in Amsterdam, LucaNet, and now CompuGroup Medical. Day to day I lead and coach manual and automation QAs, set the test automation strategy and own release management.',
+      copy: 'I stepped up to QA lead and built and grew teams at OSRAM, HeyJobs and Talentspace. Then came MessageBird in Amsterdam, LucaNet, and now CompuGroup Medical.\nDay to day I lead and coach manual and automation QAs, set the test automation strategy and own release management.',
       orgs: ['osram', 'heyjobs', 'talentspace', 'messagebird', 'lucanet', 'cgm'],
       tools: [],
       roles: [
@@ -351,7 +352,7 @@ export const LIFE: Life = {
       from: 2024,
       to: 'now',
       headline: 'Building with AI',
-      copy: 'AI has been part of how I work since 2024, and since 2025 I ship real things with it. At CGM I built an AI workflow hub where agents, tools and human review take a Jira ticket through test cases, automated tests and a merge request to a code review. There is also my test reporting dashboard for nightly runs: trends, flaky tests, coverage by team and results synced to Zephyr. Outside work I made this site with Claude Code: the CV, Solar, Gravity and Lightbox.',
+      copy: 'AI has been part of how I work since 2024, and since 2025 I ship real things with it.\nAt CGM I built an AI workflow hub where agents, tools and human review take a Jira ticket through test cases, automated tests and a merge request to a code review. There is also my test reporting dashboard for nightly runs: trends, flaky tests, coverage by team and results synced to Zephyr.\nOutside work I made this site with Claude Code: the CV, Solar, Gravity and Lightbox.',
       orgs: [],
       tools: ['claude', 'openai', 'deepseek', 'jira', 'figma', 'react'],
       dye: { L: 0.75, C: 0.14, h: 190, d: 0.55 },
@@ -437,9 +438,9 @@ export const LIFE: Life = {
       url: 'https://medium.com/@mohsenny/your-agent-is-just-a-markdown-file-we-can-do-better-0a681cb78739',
     },
   ],
-  outside: 'Space and physics, quantum physics especially, tennis and my golden retriever.',
+  outside: 'Astronomy, quantum physics, tennis and my golden retriever.',
   interests: [
-    { glyph: 'orbit', text: 'Space and physics' },
+    { glyph: 'orbit', text: 'Astronomy' },
     { glyph: 'atom', text: 'Quantum physics' },
     { glyph: 'tennis', text: 'Tennis' },
     { glyph: 'dog', text: 'My golden retriever' },
