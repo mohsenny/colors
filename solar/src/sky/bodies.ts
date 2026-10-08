@@ -193,8 +193,8 @@ export const BODIES: readonly Body[] = [
   { id: 'hydra', name: 'Hydra', kind: 'moon', radius: 18.5, outer: 28.7, flat: 0, color: '#dcdcda', parent: 'pluto' },
 ]
 
-/** The eleven with a row of their own in the drawer and a key: the Sun S, then 1 Mercury to 0 Pluto. The other moons ride under what they go round. */
-export const KEYED: readonly Body[] = BODIES.filter((b) => !b.parent || b.parent === 'earth')
+/** The ten with a row of their own in the drawer and a key: the Sun 0, then 1 Mercury to 9 Pluto. The moons ride under what they go round. */
+export const KEYED: readonly Body[] = BODIES.filter((b) => !b.parent)
 
 const BY_ID = new Map(BODIES.map((b) => [b.id, b]))
 

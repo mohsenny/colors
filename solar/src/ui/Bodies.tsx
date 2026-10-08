@@ -6,10 +6,8 @@ import { Sphere } from './Sphere'
 
 const KIND: Record<BodyKind, string> = { star: 'Star', planet: 'Planet', dwarf: 'Dwarf planet', moon: 'Moon' }
 
-/** The moons with no key of their own, under their planet. */
-const MOONS = new Map<BodyId, Body[]>(
-  KEYED.map((b) => [b.id, BODIES.filter((m) => m.parent === b.id && !KEYED.includes(m))]),
-)
+/** The moons, under their planet. */
+const MOONS = new Map<BodyId, Body[]>(KEYED.map((b) => [b.id, BODIES.filter((m) => m.parent === b.id)]))
 
 export interface BodiesProps {
   open: boolean
@@ -21,8 +19,7 @@ export interface BodiesProps {
 
 /**
  * The drawer behind the seat chip: the Sun, the planets and Pluto, Sun
- * outward, each with its key, and the moons of Mars, the four giants and
- * Pluto under what they go round.
+ * outward, each with its key, and the moons under what they go round.
  */
 export function Bodies({ open, seat, gone, onSelect }: BodiesProps): ReactElement {
   const tab = open ? undefined : -1
@@ -41,9 +38,7 @@ export function Bodies({ open, seat, gone, onSelect }: BodiesProps): ReactElemen
             <Sphere color={b.color} star={b.kind === 'star'} />
             <span className="lt-body-name">{b.name}</span>
             <span className="lt-body-kind">{gone.has(b.id) ? 'Taken' : KIND[b.kind]}</span>
-            <span className="lt-body-key" aria-hidden="true">
-              {i === 0 ? 'S' : i % 10}
-            </span>
+            <span className="lt-body-key" aria-hidden="true">{i}</span>
           </button>
           {MOONS.get(b.id)?.length ? (
             <div className="lt-moons" role="group" aria-label={`Moons of ${b.name}`}>

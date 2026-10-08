@@ -432,6 +432,8 @@ export class Instrument {
     for (const b of BODIES) this.renderer.paint(b.id, b.color)
     for (const [key, hex] of Object.entries(CROWD_COLOURS)) this.renderer.paint(key, hex)
     for (const b of KEYED) this.loadMap(b.id)
+    // And the Moon, the first thing looked at.
+    this.loadMap('moon')
     void this.renderer.load('night', EARTH_NIGHT).catch(() => undefined)
     void this.renderer.load('clouds', EARTH_CLOUDS, true).catch(() => undefined)
     void this.renderer.load('rings', SATURN_RING).catch(() => undefined)
