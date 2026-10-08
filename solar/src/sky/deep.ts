@@ -152,6 +152,9 @@ const ASTRAY: Record<Planet, [number, number, number]> = {
 
 /** Years, past the first thousand either side of J2000, in which a moon on an ellipse drifts a radian from it, where not 3000. */
 const DRIFT: Partial<Record<BodyId, number>> = {
+  phobos: 1000,
+  daphnis: 600,
+  atlas: 600,
   prometheus: 600,
   pandora: 600,
   miranda: 10_000,

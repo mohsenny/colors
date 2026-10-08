@@ -1,7 +1,8 @@
 /*
  * WebGL2, directly. Every body is drawn per pixel by a ray meeting a sphere,
  * squashed at the poles where the body is, so a globe stays perfectly round
- * from a thousand km or a billion. Nothing is ever a mesh, and nothing is ever
+ * from a thousand km or a billion; a small moon's ray walks on in until it
+ * meets its real, lumpy ground. Nothing is ever a mesh, and nothing is ever
  * placed in world space on the GPU: each body gets its own frame, centred on
  * the line from the eye to it and measured in its own radii, worked out on
  * the CPU in double precision. That is what lets true scale draw at all.
@@ -31,6 +32,8 @@ export interface BodyDraw {
   /** Centre from the eye, km. */
   rel: Vec3
   radius: number
+  /** For a lumpy moon, where its shape is among theirs, and how far out its highest point is, km. */
+  shape: { at: number; outer: number } | null
   flat: number
   /** Toward its prime meridian, 90 degrees east of that, and its north pole. */
   axes: [Vec3, Vec3, Vec3]
@@ -178,12 +181,50 @@ uniform sampler2D uMap;
 uniform sampler2D uNight;
 uniform sampler2D uClouds;
 uniform sampler2D uRings;
+uniform sampler2D uShapes;
+uniform int uShape;
+uniform vec2 uShapeRows;
 ${COMMON}
 const vec3 DUSK = vec3(1.0, 0.42, 0.16);
 
 // Into the space where the body is a unit sphere, and back.
 vec3 stretch(vec3 x) { return x + (uK - 1.0) * dot(uPole, x) * uPole; }
 vec3 squash(vec3 x) { return x + (1.0 / uK - 1.0) * dot(uPole, x) * uPole; }
+
+// A lumpy moon, in the sphere round its highest point: toward x, how far out
+// its ground is and which way the ground faces, in the moon's own frame.
+vec4 lump(vec3 x) {
+  vec3 n = normalize(x);
+  float lon = atan(dot(n, uAxY), dot(n, uAxX));
+  float lat = asin(clamp(dot(n, uPole), -1.0, 1.0));
+  float row = clamp((0.5 - lat / PI) * uShapeRows.x, 0.5, uShapeRows.x - 0.5);
+  return textureLod(uShapes, vec2(0.5 + lon / TAU, (float(uShape) * uShapeRows.x + row) / uShapeRows.y), 0.0);
+}
+// How far above its ground x is: below 0 inside it.
+float above(vec3 x) {
+  float r = length(x);
+  return r < 0.3 ? -1.0 : r - lump(x).r;
+}
+vec3 facing(vec3 x) {
+  vec3 f = lump(x).gba;
+  return normalize(f.x * uAxX + f.y * uAxY + f.z * uPole);
+}
+
+// How much of the Sun its own hills leave on a point of its ground: looking
+// toward the Sun for ground in the way, closely at first, and softly where
+// the look only just clears it. The look starts a little off the ground and
+// a little along, as the ground is only known to a few degrees.
+float hills(vec3 x, vec3 n, vec3 L) {
+  x += 0.01 * n;
+  float b = dot(x, L);
+  float far = -b + sqrt(max(0.0, b * b - dot(x, x) + 1.0));
+  float lit = 1.0;
+  for (int i = 0; i < 16; i++) {
+    float s = 0.03 + (far - 0.03) * float(i * i) / 225.0;
+    lit = min(lit, clamp(8.0 * above(x + s * L) / s, 0.0, 1.0));
+  }
+  return lit;
+}
 
 float hash(vec3 p) {
   p = fract(p * 0.3183099 + 0.1);
@@ -238,6 +279,45 @@ void main() {
   float ahead = step(0.0, dl.z);
   float cov = clamp((1.0 - p) / max(fwidth(p), 1e-6) + 0.5, 0.0, 1.0) * ahead;
 
+  // A lumpy moon: the ray is walked through the sphere round its highest
+  // point until it is under the ground, then closed in on where it went in. A
+  // ray that misses by less than a pixel still shows a little of the edge.
+  if (uShape >= 0) {
+    float px = uPx * uD;
+    float least = 1.0;
+    float tl = 0.0;
+    bool hit = false;
+    if (p < 1.0 + px) {
+      float t0 = -h;
+      float t1 = h;
+      for (int i = 1; i <= 48; i++) {
+        float t = mix(-h, h, float(i) / 48.0);
+        float a = above(q + t * dn);
+        if (a < 0.0) {
+          t1 = t;
+          hit = true;
+          break;
+        }
+        t0 = t;
+        if (a < least) {
+          least = a;
+          tl = t;
+        }
+      }
+      if (hit) {
+        for (int i = 0; i < 6; i++) {
+          float t = 0.5 * (t0 + t1);
+          if (above(q + t * dn) < 0.0) t1 = t;
+          else t0 = t;
+        }
+        tl = t0;
+      }
+    }
+    P = q + tl * dn;
+    N = facing(P);
+    cov = (hit ? 1.0 : 0.5 * clamp(1.0 - least / px, 0.0, 1.0)) * ahead;
+  }
+
   vec3 nb = normalize(P);
   float lon = atan(dot(nb, uAxY), dot(nb, uAxX));
   float lat = asin(clamp(dot(nb, uPole), -1.0, 1.0));
@@ -261,6 +341,7 @@ void main() {
   for (int i = 0; i < 4; i++) {
     if (i < uOccN) shade *= sunlit(toSun, uSunR, uOcc[i] - P, uOccR[i]);
   }
+  if (uShape >= 0 && cosI > 0.0) shade *= hills(P, N, Ls);
 
   // The rings' shadow on the globe.
   if (uRing.y > 0.0) {
@@ -569,6 +650,8 @@ export class Renderer {
   private maps = new Map<string, WebGLTexture>()
   private dpr = 1
   private aniso = 0
+  private shapeRows = 1
+  private shapeCount = 1
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -665,6 +748,23 @@ export class Renderer {
     gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0)
     gl.bindVertexArray(null)
     this.starCount = stars.count
+  }
+
+  /** The lumpy moons' shapes, each a grid of how far out its ground is and which way it faces, one under the next. */
+  setShapes(data: Float32Array, columns: number, rows: number): void {
+    const gl = this.gl
+    const t = gl.createTexture() as WebGLTexture
+    gl.bindTexture(gl.TEXTURE_2D, t)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, columns, data.length / 4 / columns, 0, gl.RGBA, gl.FLOAT, data)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    const old = this.maps.get('shapes')
+    if (old) gl.deleteTexture(old)
+    this.maps.set('shapes', t)
+    this.shapeRows = rows
+    this.shapeCount = data.length / 4 / columns / rows
   }
 
   resize(width: number, height: number, dpr: number): void {
@@ -808,7 +908,10 @@ export class Renderer {
 
     const drawBody = (b: BodyDraw): void => {
       const f = localOf(b.rel)
-      const R = b.radius
+      // A lumpy moon is drawn in the sphere round its highest point, and as a
+      // ball of its mean size until its shape arrives.
+      const shape = this.maps.has('shapes') ? b.shape : null
+      const R = shape ? shape.outer : b.radius
       if (f.D <= R * 1.001) return
       const u = this.bu
       gl.useProgram(this.body)
@@ -854,10 +957,12 @@ export class Renderer {
       gl.uniform1f(u.uDotR, blur)
       gl.uniform1f(u.uClock, frame.clock)
       gl.uniform1f(u.uFade, b.fade)
+      gl.uniform1i(u.uShape, shape ? shape.at : -1)
       this.bind(0, b.id)
       this.bind(1, b.id === 'earth' ? 'night' : 'dark')
       this.bind(2, b.id === 'earth' ? 'clouds' : 'dark')
       this.bind(3, b.rings ? 'rings' : 'dark')
+      this.bind(4, 'shapes')
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
 
@@ -874,6 +979,8 @@ export class Renderer {
     gl.uniform1i(this.bu.uNight, 1)
     gl.uniform1i(this.bu.uClouds, 2)
     gl.uniform1i(this.bu.uRings, 3)
+    gl.uniform1i(this.bu.uShapes, 4)
+    gl.uniform2f(this.bu.uShapeRows, this.shapeRows, this.shapeRows * this.shapeCount)
     gl.bindVertexArray(this.quadVao)
 
     for (const b of frame.bodies) {

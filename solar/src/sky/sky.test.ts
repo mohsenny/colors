@@ -5,11 +5,13 @@ import type { BodyId } from './bodies'
 import { BLEND, EXACT, J2000_MS, YEAR_MS, presenceOf, smearOf } from './deep'
 import { ECLIPSES_FROM, ECLIPSES_TO, nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
 import type { Eclipse, EclipseType } from './eclipses'
-import { TIME_MAX, TIME_MIN, posesAt, toEcliptic } from './ephemeris'
+import { TIME_MAX, TIME_MIN, posesAt, spins, toEcliptic } from './ephemeris'
 import type { Vec3 } from './ephemeris'
 import { keplerMoon } from './kepler'
 import { DARK, excess, gain, glareOf, limit, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt } from './light'
 import { engulfed, sunAt, widening } from './sun'
+import { SHAPE_COLUMNS, SHAPE_ROWS, shapeOf, unpackShapes } from '../render/shapes'
+import shapesFile from '../assets/shapes.bin?url&inline'
 
 function len(a: Vec3): number {
   return Math.hypot(a[0], a[1], a[2])
@@ -83,6 +85,46 @@ describe('where things are', () => {
   })
 })
 
+describe('the moons of Mars', () => {
+  const fromMars = (ms: number, id: BodyId): Vec3 => {
+    const p = posesAt(ms)
+    return toward(p.mars.at, p[id].at)
+  }
+
+  // Ellipses fitted to JPL Horizons from 1900 to 2100, Phobos falling in, against
+  // it at the three MOMENTS, each bound half as much again as the worst miss
+  // at these moments and the note by it the worst in km over all those years.
+  const HORIZONS: Array<[BodyId, number, Vec3[]]> = [
+    // 20
+    ['phobos', 6, [[-1_989, -9_287.5, 558.2], [8_384.4, -271.2, -4_312.3], [-7_967.7, 2_161.1, 4_218.9]]],
+    // 68
+    ['deimos', 40, [[10_366.4, -19_995.3, -6_530.5], [21_136.2, 4_650.1, -9_057.3], [15_682.3, -15_369.6, -8_256.8]]],
+  ]
+
+  it('puts them where JPL Horizons has them, within tens of km', () => {
+    for (const [id, within, wants] of HORIZONS) {
+      wants.forEach((want, k) => expect(len(toward(want, fromMars(msAt(MOMENTS[k]), id))), id).toBeLessThan(within))
+    }
+  })
+
+  it("keeps them over Mars's equator, turning one face to it and leading with the side at 90 degrees west", () => {
+    for (let day = 0; day < 3; day += 0.05) {
+      const ms = Date.UTC(2026, 9, 5) + day * 86_400_000
+      const p = posesAt(ms)
+      for (const id of ['phobos', 'deimos'] as const) {
+        const m = p[id]
+        const r = toward(p.mars.at, m.at)
+        expect(Math.abs((Math.asin(dot(r, p.mars.z) / len(r)) * 180) / Math.PI), id).toBeLessThan(3)
+        const [lon, lat] = onBody(toward(m.at, p.mars.at), m.x, m.y, m.z)
+        expect(Math.abs(lon)).toBeLessThan(0.01)
+        expect(Math.abs(lat)).toBeLessThan(0.01)
+        const [wLon] = onBody(toward(fromMars(ms - 1000, id), fromMars(ms + 1000, id)), m.x, m.y, m.z)
+        expect(Math.abs(wLon + 90), id).toBeLessThan(2)
+      }
+    }
+  })
+})
+
 describe('the moons of Jupiter and Saturn', () => {
   const MOONS = BODIES.filter((b) => b.parent === 'jupiter' || b.parent === 'saturn')
 
@@ -124,14 +166,15 @@ describe('the moons of Jupiter and Saturn', () => {
     }
   })
 
-  // The rest, on JPL's mean ellipses, against Horizons at the three MOMENTS;
-  // Saturn's small inner ones at the first two only, as Horizons has them from
-  // 1950 to 2050 alone. An ellipse cannot follow everything that pulls these
-  // about: Prometheus and Pandora kick each other chaotically, the Sun drags
-  // Himalia and Phoebe round, and Janus and Epimetheus are only near where
-  // their trading puts them. So each bound is half as much again as the worst
-  // miss at these moments, and the note by it the worst in km over all the
-  // years Horizons covers.
+  // The rest, on JPL's mean ellipses or fitted to Horizons, against it at the
+  // three MOMENTS; Saturn's small inner ones at the first two only, as
+  // Horizons has them from 1950 to 2050 alone, and Daphnis at the first, as
+  // it has it from 1990 to 2018. An ellipse cannot follow everything that
+  // pulls these about: Prometheus and Pandora kick each other and Atlas
+  // chaotically, the Sun drags Himalia and Phoebe round, and Janus and
+  // Epimetheus are only near where their trading puts them. So each bound is
+  // half as much again as the worst miss at these moments, and the note by it
+  // the worst in km over all the years Horizons covers.
   const ELLIPSES: Array<[BodyId, number, Vec3[]]> = [
     // 250, 1610 to 2200
     ['metis', 250, [[-123_250, 34_868.2, -565.6], [-57_059.9, -114_538.7, -4_934.4], [112_658.5, -60_478.1, -512.1]]],
@@ -147,6 +190,12 @@ describe('the moons of Jupiter and Saturn', () => {
       2_000_000,
       [[-4_919_977.6, 8_938_733.5, 4_851_926.1], [3_892_888.4, 8_417_664.1, 2_453_870.9], [11_809_380.7, 2_760_767.7, 5_714_523.8]],
     ],
+    // 11, 1950 to 2050
+    ['pan', 5, [[17_035.4, -118_029.4, 60_195.3], [-125_016.5, 45_576.8, -11_768.9]]],
+    // 2,100, 1990 to 2018
+    ['daphnis', 250, [[33_701.1, -118_481, 58_822.5]]],
+    // 18,000, 1950 to 2050
+    ['atlas', 1_300, [[-110_434.7, 76_655.2, -29_463.5], [-135_515.1, -12_574.7, 19_726.6]]],
     // 37,000, 1950 to 2050
     ['prometheus', 25_000, [[-95_293.3, -86_060.7, 54_337.6], [-48_588.5, -114_001.9, 64_430]]],
     // 62,000, 1950 to 2050
@@ -155,6 +204,12 @@ describe('the moons of Jupiter and Saturn', () => {
     ['epimetheus', 6_000, [[-77_239.7, -114_180.8, 66_249.2], [-124_443, 78_790.3, -29_175.4]]],
     // 10,000, 1950 to 2050, from 100,000 were they not to trade
     ['janus', 4_500, [[86_028.9, 107_414.3, -64_237.8], [-116_205, 90_999.4, -36_666.8]]],
+    // 320, 1900 to 2100
+    ['telesto', 300, [[281_121.5, 65_308.1, -59_451], [241_091.2, 142_554.5, -91_805.7], [280_819.8, -87_277, 19_570.5]]],
+    // 320, 1900 to 2100
+    ['calypso', 500, [[-55_628.2, -253_776.4, 139_252.6], [266.9, -264_519.8, 129_874.8], [-215_889.8, -166_971.5, 111_061.3]]],
+    // 1,600, 1900 to 2100
+    ['helene', 1_100, [[373_716.4, -10_967.3, -29_000], [-314_500.9, -174_332, 121_826.7], [-268_963.2, 242_987, -100_275.2]]],
     // 110,000, 1750 to 2250
     ['hyperion', 150_000, [[171_049.3, 1_274_310.9, -659_385.8], [43_499.2, -1_201_179.8, 599_085.1], [854_580.8, -933_306.3, 394_564.6]]],
     // 530,000, 1750 to 2250
@@ -208,16 +263,15 @@ describe('the moons of Jupiter and Saturn', () => {
   it('turns one face to the planet and leads with the side at 90 degrees west', () => {
     const ms = Date.UTC(2026, 9, 5)
     const p = posesAt(ms)
-    for (const b of MOONS) {
+    for (const b of MOONS.filter((b) => !spins(b.id))) {
       const m = p[b.id]
       const [lon, lat] = onBody(toward(m.at, p[b.parent as BodyId].at), m.x, m.y, m.z)
       expect(Math.abs(lon)).toBeLessThan(0.01)
       expect(Math.abs(lat)).toBeLessThan(0.01)
-      // Off -90 only by as much as the orbit is out of round: under 2 degrees, but up to 10 for Himalia, Hyperion and Phoebe.
+      // Off -90 only by as much as the orbit is out of round.
       const way = toward(fromPlanet(ms - 1000, b.id), fromPlanet(ms + 1000, b.id))
       const [wLon, wLat] = onBody(way, m.x, m.y, m.z)
-      const round = b.id === 'himalia' || b.id === 'hyperion' || b.id === 'phoebe' ? 10 : 2
-      expect(Math.abs(wLon + 90), b.id).toBeLessThan(round)
+      expect(Math.abs(wLon + 90), b.id).toBeLessThan(2)
       expect(Math.abs(wLat)).toBeLessThan(0.01)
     }
   })
@@ -248,8 +302,19 @@ describe('the moons of Uranus and Neptune', () => {
     ['triton', 850, [[-205_696.5, 124_061.5, 261_000.8], [-224_658.5, -268_856.1, -55_816.3], [-105_318.1, 237_326.2, 241_688.3]]],
   ]
 
+  // Their small ones, fitted from 1900 to 2100. The Sun pulls Nereid's long,
+  // steep orbit about, so it is only near.
+  const SMALL: Array<[BodyId, number, Vec3[]]> = [
+    // 97
+    ['puck', 50, [[5_145.6, -12_890.6, -84_126.2], [81_151.2, -13_969.2, 22_059.6], [19_210.4, 8_824.5, 83_586.3]]],
+    // 180
+    ['proteus', 150, [[46_051.8, -94_011.2, -53_714.7], [-38_139.6, -108_744.1, -23_946.4], [54_660.2, 103_293.1, 13_530.9]]],
+    // 77,000
+    ['nereid', 100_000, [[893_764.6, 9_317_777.5, 679_586.8], [-1_417_110.5, -781_791, -133_813.5], [1_401_729.1, -1_183_818.9, 13_392.7]]],
+  ]
+
   it('puts them where JPL Horizons has them, within a few hundred km for the inner ones and a few thousand for the outer', () => {
-    for (const [id, within, wants] of HORIZONS) {
+    for (const [id, within, wants] of [...HORIZONS, ...SMALL]) {
       wants.forEach((want, k) => expect(len(toward(want, fromPlanet(msAt(MOMENTS[k]), id))), id).toBeLessThan(within))
     }
   })
@@ -268,16 +333,17 @@ describe('the moons of Uranus and Neptune', () => {
     for (const [id, lat] of most) expect(Math.abs(lat - (id === 'miranda' ? 4.4 : id === 'triton' ? 23 : 0)), id).toBeLessThan(0.5)
   })
 
-  it('turns one face to the planet, north where the IAU has it, so each leads with the side at 90 degrees east', () => {
+  it('turns one face to the planet, north where the IAU has it, so all but Proteus lead with the side at 90 degrees east', () => {
     const ms = Date.UTC(2026, 9, 5)
     const p = posesAt(ms)
-    for (const [id] of HORIZONS) {
+    for (const id of [...HORIZONS.map(([id]) => id), 'puck', 'proteus'] as BodyId[]) {
       const m = p[id]
       const [lon, lat] = onBody(toward(m.at, p[bodyById(id)?.parent as BodyId].at), m.x, m.y, m.z)
       expect(Math.abs(lon)).toBeLessThan(0.01)
       expect(Math.abs(lat)).toBeLessThan(0.01)
+      // Proteus goes round Neptune forward, so leads with its west.
       const [wLon] = onBody(toward(fromPlanet(ms - 1000, id), fromPlanet(ms + 1000, id)), m.x, m.y, m.z)
-      expect(Math.abs(wLon - 90), id).toBeLessThan(1)
+      expect(Math.abs(wLon - (id === 'proteus' ? -90 : 90)), id).toBeLessThan(1)
     }
   })
 
@@ -345,6 +411,92 @@ describe('Pluto and Charon', () => {
       const [back] = onBody(toward(p.charon.at, p.pluto.at), p.charon.x, p.charon.y, p.charon.z)
       expect(Math.abs(back)).toBeLessThan(0.01)
     }
+  })
+
+  // The four small ones, fitted to Horizons from 1900 to 2100 round the point
+  // Pluto and Charon go round, against it from Pluto at the three MOMENTS,
+  // each bound half as much again as the worst miss at these moments and the
+  // note by it the worst in km over all those years.
+  const SMALL: Array<[BodyId, number, Vec3[]]> = [
+    // 700
+    ['styx', 300, [[30_203.4, 20_646.4, -19_496.5], [-2_171, -23_255.3, -33_543.1], [-24_887.5, -5_163.1, 35_120]]],
+    // 160
+    ['nix', 160, [[-3_191.6, 22_177.4, 41_110.3], [36_758.5, 26_734.4, -21_180.7], [-6_420.9, -29_207.6, -35_612.3]]],
+    // 280
+    ['kerberos', 325, [[5_356.9, -27_520.6, -52_672.6], [-33_840.5, -8_217.9, 45_121.9], [-19_577.2, 13_155, 54_402.1]]],
+    // 57
+    ['hydra', 55, [[31_410.4, -960.2, -57_006.9], [27_585.7, 50_624.9, 33_545.4], [5_964.2, -28_276.2, -55_300]]],
+  ]
+
+  it('puts the four small moons where JPL Horizons has them, within a few hundred km', () => {
+    for (const [id, within, wants] of SMALL) {
+      wants.forEach((want, k) => {
+        const p = posesAt(msAt(MOMENTS[k]))
+        expect(len(toward(want, toward(p.pluto.at, p[id].at))), id).toBeLessThan(within)
+      })
+    }
+  })
+
+  it('tips them over on their sides, Nix and Hydra past them, as New Horizons saw', () => {
+    const ms = Date.UTC(2015, 6, 14)
+    const [a, b] = [posesAt(ms - 60_000), posesAt(ms + 60_000)]
+    const r = toward(a.pluto.at, a.charon.at)
+    const v = toward(toward(a.pluto.at, a.charon.at), toward(b.pluto.at, b.charon.at))
+    const n: Vec3 = [r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]]
+    for (const [id, tilt] of [
+      ['styx', 91],
+      ['nix', 123],
+      ['kerberos', 96],
+      ['hydra', 110],
+    ] as const) {
+      expect((Math.acos(dot(n, a[id].z) / len(n)) * 180) / Math.PI, id).toBeCloseTo(tilt, -0.5)
+    }
+  })
+})
+
+describe('the moons that turn on their own', () => {
+  it('turns each forward about its north, as fast as it was seen to', () => {
+    const ms = Date.UTC(2026, 9, 5)
+    const [a, b] = [posesAt(ms), posesAt(ms + 864_000)]
+    // Degrees in a hundredth of a day: from hours a turn, or days for Hyperion and Pluto's.
+    for (const [id, deg] of [
+      ['himalia', 86.4 / 7.7819],
+      ['hyperion', 0.72],
+      ['phoebe', 86.4 / 9.274],
+      ['nereid', 86.4 / 11.594],
+      ['styx', 3.6 / 3.24],
+      ['nix', 3.6 / 1.829],
+      ['kerberos', 3.6 / 5.31],
+      ['hydra', 3.6 / 0.4295],
+    ] as const) {
+      expect(spins(id), id).toBe(true)
+      expect(len(toward(a[id].z, b[id].z)), id).toBeLessThan(1e-9)
+      expect(onBody(b[id].x, a[id].x, a[id].y, a[id].z)[0], id).toBeCloseTo(deg, 2)
+    }
+  })
+})
+
+describe('the small moons\' shapes', () => {
+  it('has one for every lumpy moon, reaching out to its highest point and nowhere near its middle, facing outward', () => {
+    const bytes = Uint8Array.from(atob(shapesFile.split(',')[1]), (c) => c.charCodeAt(0))
+    const all = unpackShapes(bytes.buffer) as Float32Array
+    const lumpy = BODIES.filter((b) => b.outer)
+    expect(lumpy.length).toBe(24)
+    for (const b of lumpy) {
+      const cells = SHAPE_ROWS * SHAPE_COLUMNS
+      const one = Array.from({ length: cells }, (_, i) => all.subarray((shapeOf(b.id) * cells + i) * 4, (shapeOf(b.id) * cells + i + 1) * 4))
+      expect(Math.max(...one.map((c) => c[0])), b.id).toBe(1)
+      expect(Math.min(...one.map((c) => c[0])), b.id).toBeGreaterThan(0.3)
+      // The ground faces outward, never back toward the middle.
+      const out = one.map((c, i) => {
+        const lat = Math.PI / 2 - (Math.floor(i / SHAPE_COLUMNS) + 0.5) * (Math.PI / SHAPE_ROWS)
+        const lon = -Math.PI + ((i % SHAPE_COLUMNS) + 0.5) * (Math.PI / SHAPE_ROWS)
+        return dot([c[1], c[2], c[3]], [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)])
+      })
+      expect(Math.min(...out), b.id).toBeGreaterThan(0)
+      expect(b.outer, b.id).toBeGreaterThan(b.radius)
+    }
+    expect(shapeOf('puck')).toBe(-1)
   })
 })
 

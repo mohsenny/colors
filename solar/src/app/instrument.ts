@@ -58,6 +58,7 @@ import type { Travel } from '../render/travel'
 import { ORBIT_UNIT, Renderer } from '../render/gl'
 import type { BodyDraw, OrbitDraw, Shade } from '../render/gl'
 import { EARTH_CLOUDS, EARTH_NIGHT, SATURN_RING, STARS, SURFACE } from '../render/maps'
+import { SHAPE_COLUMNS, SHAPE_ROWS, SHAPES, shapeOf, unpackShapes } from '../render/shapes'
 import { png } from '../../../src/photo/save'
 import { isIdle } from '../../../src/ui/idle'
 import { Tape } from './tape'
@@ -434,6 +435,13 @@ export class Instrument {
       .then((r) => r.arrayBuffer())
       .then((buf) => this.renderer.setStars(unpackStars(buf)))
       .catch(() => undefined)
+    fetch(SHAPES)
+      .then((r) => r.arrayBuffer())
+      .then((buf) => {
+        const shapes = unpackShapes(buf)
+        if (shapes) this.renderer.setShapes(shapes, SHAPE_COLUMNS, SHAPE_ROWS)
+      })
+      .catch(() => undefined)
   }
 
   private loadMap(id: BodyId): void {
@@ -590,7 +598,13 @@ export class Instrument {
     return this.poses[id].at
   }
 
+  /** How far out it reaches: for a lumpy moon, its highest point. */
   private radius(id: BodyId): number {
+    return id === 'sun' ? this.sun.radius : ((bodyById(id) as Body).outer ?? (bodyById(id) as Body).radius)
+  }
+
+  /** Its mean radius, for what is measured from it. */
+  private mean(id: BodyId): number {
     return id === 'sun' ? this.sun.radius : (bodyById(id) as Body).radius
   }
 
@@ -1480,7 +1494,8 @@ export class Instrument {
         id: b.id,
         shade: SHADES[b.id] ?? 'moon',
         rel,
-        radius: this.radius(b.id),
+        radius: this.mean(b.id),
+        shape: shapeOf(b.id) < 0 ? null : { at: shapeOf(b.id), outer: this.radius(b.id) },
         flat: b.flat,
         axes: [pose.x, pose.y, pose.z],
         sun,
@@ -1744,7 +1759,7 @@ export class Instrument {
     const eye = this.eye.at
     const rows: Array<[string, string]> = []
     if (this.seat === this.look) {
-      const alt = len(sub(this.at(seat.id), eye)) - this.radius(seat.id)
+      const alt = len(sub(this.at(seat.id), eye)) - this.mean(seat.id)
       const fromSun = len(this.at(seat.id))
       rows.push(['Above', distanceLabel(Math.max(0, alt))])
       if (seat.id !== 'sun') {
@@ -1752,7 +1767,7 @@ export class Instrument {
         rows.push(['Sunlight', lightLabel(fromSun)])
         rows.push(['Noon', luxLabel(noonLux(fromSun / AU_KM, this.sun.luminosity))])
       }
-      rows.push(['Radius', `${Math.round(this.radius(seat.id)).toLocaleString('en-US')} km`])
+      rows.push(['Radius', `${Math.round(this.mean(seat.id)).toLocaleString('en-US')} km`])
     } else if (this.presence(look.id) < 0.5) {
       // Where it is along its path is not known, only how far round what it goes round.
       rows.push(['Orbit', distanceLabel(len(sub(this.at(look.id), this.at(look.parent ?? 'sun'))))])

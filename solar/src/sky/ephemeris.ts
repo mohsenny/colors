@@ -6,8 +6,8 @@
  * to Horizons, for the rest, all checked against JPL Horizons. The turn of
  * each planet, of Pluto and of the Moon is the IAU's, so the right face of
  * the Earth is in daylight and the Moon shows the side it really shows; the
- * other moons keep one face to their planet, as all but Hyperion, Himalia and
- * Phoebe do (those three have no map to show which way they face).
+ * other moons keep one face to their planet, but for the few seen to turn on
+ * their own (SPIN).
  *
  * Past 2000 BC and AD 3000 the theories give way to mean orbits (deep.ts),
  * which the Sun's life widens (sun.ts), and each body's turn goes on as it was
@@ -172,7 +172,13 @@ const MOON_SHARE = 0.0121505856
 /** A moon from its planet's centre, km. `jupiter` is where Jupiter's are, if already known. */
 function localAt(id: BodyId, m: Moment, jupiter?: JupiterMoonsInfo | null): Vec3 {
   const jde = m.tt + J2000
-  if (isKepler(id)) return fromElements(id, jde)
+  if (isKepler(id)) {
+    const l = fromElements(id, jde)
+    if (id === 'charon' || bodyById(id)?.parent !== 'pluto') return l
+    // Pluto's small moons go round the point Pluto and Charon both go round, which Pluto is off, away from Charon.
+    const c = fromElements('charon', jde)
+    return [l[0] + CHARON_SHARE * c[0], l[1] + CHARON_SHARE * c[1], l[2] + CHARON_SHARE * c[2]]
+  }
   const far = (): Vec3 => toEcliptic(...farMoon(id as FarMoon, jde))
   const parent = bodyById(id)?.parent
   if (parent === 'jupiter') return mix(() => km((jupiter ?? JupiterMoons(m.time as AstroTime))[id as Galilean]), far, m.past)
@@ -225,12 +231,16 @@ function centreAt(id: BodyId, m: Moment): Vec3 {
  */
 function axesOf(id: BodyId, time: AstroTime): [Vec3, Vec3, Vec3] {
   const a = RotationAxis(ENGINE[id] as AE, time)
-  const n = a.north
+  return turnedTo(a.north, a.spin)
+}
+
+/** The same from a pole on the J2000 equator and the prime meridian's angle, degrees. */
+function turnedTo(n: { x: number; y: number; z: number }, spin: number): [Vec3, Vec3, Vec3] {
   // The ascending node of the body's equator on the J2000 equator: z cross pole.
   const h = Math.hypot(n.x, n.y) || 1
   const node = [-n.y / h, n.x / h, 0]
   const across = [n.y * node[2] - n.z * node[1], n.z * node[0] - n.x * node[2], n.x * node[1] - n.y * node[0]]
-  const w = ((a.spin % 360) * Math.PI) / 180
+  const w = ((spin % 360) * Math.PI) / 180
   const c = Math.cos(w)
   const s = Math.sin(w)
   const x = [c * node[0] + s * across[0], c * node[1] + s * across[1], c * node[2] + s * across[2]]
@@ -252,14 +262,45 @@ function locked(at: Vec3, way: Vec3): [Vec3, Vec3, Vec3] {
   return [x, [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]], z]
 }
 
+const D = Math.PI / 180
+
 /**
  * Moons whose north, as the IAU has it, is on the other side from the way they
  * go round: Uranus's, round a planet tipped past its side, and Triton, which
  * goes round backward. It is the north their maps have at the top.
  */
-const OVER = new Set<BodyId>(['miranda', 'ariel', 'umbriel', 'titania', 'oberon', 'triton'])
+const OVER = new Set<BodyId>(['puck', 'miranda', 'ariel', 'umbriel', 'titania', 'oberon', 'triton'])
 
-const D = Math.PI / 180
+/**
+ * The moons that turn on their own rather than keep one face to their planet:
+ * the pole's right ascension and declination, and the prime meridian's angle
+ * at J2000 and its degrees a day. Phoebe's are the IAU's. The others are only
+ * how fast each was seen to turn, on a pole tipped as far as it was seen to
+ * be: Hyperion's 60 degrees off its orbit's, as it tumbles, and Pluto's four
+ * as New Horizons saw them, which wobble. Nobody has seen Himalia's or
+ * Nereid's, so theirs are their orbits'. Where each starts is anyone's guess.
+ */
+const SPIN: Partial<Record<BodyId, [ra: number, dec: number, w: number, rate: number]>> = {
+  himalia: [308.66, 46.55, 0, 1110.2687],
+  hyperion: [126.52, 29.79, 0, 72],
+  phoebe: [356.9, 77.8, 178.58, 931.639],
+  nereid: [262.97, 62.52, 0, 745.213],
+  styx: [224, 0.11, 0, 111.1111],
+  nix: [255.85, 3.4, 0, 196.8289],
+  kerberos: [228.97, 0.65, 0, 67.7966],
+  hydra: [242.9, 2.13, 0, 838.1839],
+}
+
+/** Does it turn on its own? */
+export function spins(id: BodyId): boolean {
+  return id in SPIN
+}
+
+function spun(id: BodyId, tt: number): [Vec3, Vec3, Vec3] {
+  const [ra, dec, w, rate] = SPIN[id] as [number, number, number, number]
+  const [a, d] = [ra * D, dec * D]
+  return turnedTo({ x: Math.cos(d) * Math.cos(a), y: Math.cos(d) * Math.sin(a), z: Math.sin(d) }, w + ((rate * tt) % 360))
+}
 
 /** Turns axes `turn` radians about the ecliptic's pole, or about their own when `own`. */
 function turned([x, y, z]: [Vec3, Vec3, Vec3], turn: number, own: boolean): [Vec3, Vec3, Vec3] {
@@ -333,6 +374,7 @@ export function posesAt(ms: number): Poses {
     const l = localAt(b.id, m, jupiter)
     let axes: [Vec3, Vec3, Vec3]
     if (b.id === 'moon' && m.past === 0) axes = axesOf('moon', m.time as AstroTime)
+    else if (spins(b.id)) axes = spun(b.id, m.tt)
     else if (b.parent === 'jupiter' && isFar(b.id) && jupiter && m.past === 0) {
       const v = jupiter[b.id as Galilean]
       axes = locked(l, toEcliptic(v.vx, v.vy, v.vz))
@@ -356,11 +398,9 @@ export const PERIOD: Partial<Record<BodyId, number>> = {
   earth: 365.256,
   moon: 27.3217,
   mars: 686.98,
+  phobos: 0.31891,
+  deimos: 1.262441,
   jupiter: 4332.59,
-  saturn: 10759.22,
-  uranus: 30688.5,
-  neptune: 60182,
-  pluto: 90560,
   metis: 0.294779,
   adrastea: 0.29826,
   amalthea: 0.498179,
@@ -370,6 +410,10 @@ export const PERIOD: Partial<Record<BodyId, number>> = {
   ganymede: 7.154553,
   callisto: 16.689018,
   himalia: 250.56,
+  saturn: 10759.22,
+  pan: 0.575051,
+  daphnis: 0.59408,
+  atlas: 0.60169,
   prometheus: 0.612988,
   pandora: 0.628506,
   epimetheus: 0.694589,
@@ -377,19 +421,32 @@ export const PERIOD: Partial<Record<BodyId, number>> = {
   mimas: 0.942422,
   enceladus: 1.370218,
   tethys: 1.887802,
+  telesto: 1.887803,
+  calypso: 1.887803,
   dione: 2.736915,
+  helene: 2.736916,
   rhea: 4.518212,
   titan: 15.945421,
   hyperion: 21.27666,
   iapetus: 79.3215,
   phoebe: 550.304,
+  uranus: 30688.5,
+  puck: 0.761834,
   miranda: 1.413479,
   ariel: 2.520379,
   umbriel: 4.144177,
   titania: 8.705869,
   oberon: 13.463237,
+  neptune: 60182,
+  proteus: 1.122315,
   triton: 5.876854,
+  nereid: 360.1336,
+  pluto: 90560,
   charon: 6.387222,
+  styx: 20.16189,
+  nix: 24.85472,
+  kerberos: 32.16799,
+  hydra: 38.20202,
 }
 
 /**
