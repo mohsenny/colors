@@ -414,6 +414,8 @@ body > .cv-paper .cv-text {
   background: #fff;
   box-shadow: 0 0 0 1px var(--cv-rule);
   color: var(--cv-ink-1);
+  /* Chrome clips an svg's drawing short of its padding: a pen loses its tip. */
+  overflow: visible;
 }
 
 .cv-head span {
