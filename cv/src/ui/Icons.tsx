@@ -1,15 +1,20 @@
 import type { ReactElement } from 'react'
 
+/*
+ * Lucide's play, pause, file-text and x, in its 24 box and 2 stroke, as in
+ * glyphs.ts (ISC, Copyright (c) 2026 Lucide Icons and Contributors). x comes
+ * from Feather (MIT, Copyright (c) 2013-present Cole Bemis).
+ */
 function Icon({ children }: { children: ReactElement | ReactElement[] }): ReactElement {
   return (
     <svg
       className="lb-icon"
       width="14"
       height="14"
-      viewBox="0 0 14 14"
+      viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -23,7 +28,7 @@ function Icon({ children }: { children: ReactElement | ReactElement[] }): ReactE
 export function PlayIcon(): ReactElement {
   return (
     <Icon>
-      <path d="M4.4 2.6 11 7l-6.6 4.4Z" />
+      <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
     </Icon>
   )
 }
@@ -31,20 +36,21 @@ export function PlayIcon(): ReactElement {
 export function PauseIcon(): ReactElement {
   return (
     <Icon>
-      <path d="M5.1 2.9v8.2" />
-      <path d="M8.9 2.9v8.2" />
+      <rect x="14" y="3" width="5" height="18" rx="1" />
+      <rect x="5" y="3" width="5" height="18" rx="1" />
     </Icon>
   )
 }
 
-/** A page with its corner turned and two lines on it: the CV as text. */
+/** A page of text: the CV as text. */
 export function PageIcon(): ReactElement {
   return (
     <Icon>
-      <path d="M3.2 1.6h5l2.6 2.6v8.2H3.2Z" />
-      <path d="M8.2 1.6v2.6h2.6" />
-      <path d="M5.2 7h3.6" />
-      <path d="M5.2 9.6h3.6" />
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="M10 9H8" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
     </Icon>
   )
 }
@@ -53,8 +59,8 @@ export function PageIcon(): ReactElement {
 export function CloseIcon(): ReactElement {
   return (
     <Icon>
-      <path d="M3.8 3.8l6.4 6.4" />
-      <path d="M10.2 3.8l-6.4 6.4" />
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </Icon>
   )
 }

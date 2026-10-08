@@ -1678,9 +1678,10 @@ body > .cv-paper .cv-text {
   cursor: pointer;
 }
 
+/* Lucide's 24 box has a 2 margin, so 0.86em brings the mark to the cap height. */
 .cv-press .lb-icon {
-  width: 0.72em;
-  height: 0.72em;
+  width: 0.86em;
+  height: 0.86em;
   align-self: center;
 }
 
