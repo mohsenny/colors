@@ -3,10 +3,10 @@
  * moves at twice or a hundred times real speed, so the speed knob rests on
  * real time in the middle and, turned either way, starts at a minute a
  * second (the Moon crosses its own width) and climbs evenly through the
- * units things move in to a billion years a second at the end, which goes
- * through the Sun's whole life in a quarter of a minute. Right runs the clock
+ * units things move in to a year a second at the end. Right runs the clock
  * forward, left back. Within ten thousand years of now the clock reads as a
- * calendar; past that, in years from now, to three figures.
+ * calendar; past that, in years from now, to three figures, and a year is
+ * typed to get there.
  */
 
 import { J2000_MS, YEAR_MS } from '../sky/deep'
@@ -16,7 +16,6 @@ const HOUR = 3600
 const DAY = 86_400
 const MONTH = 30.436875 * DAY
 const YEAR = 365.2425 * DAY
-const TOP = 1e9 * YEAR
 
 /** How far either side of the middle the knob still reads real time. */
 export const DEAD = 0.06
@@ -25,19 +24,19 @@ export const DEAD = 0.06
 export function rateOf(dial: number): number {
   const a = Math.min(1, Math.abs(dial))
   if (a < DEAD) return 1
-  return Math.sign(dial) * MIN * (TOP / MIN) ** ((a - DEAD) / (1 - DEAD))
+  return Math.sign(dial) * MIN * (YEAR / MIN) ** ((a - DEAD) / (1 - DEAD))
 }
 
 /** Where the knob gives a speed: `rateOf` the other way. */
 export function dialOf(rate: number): number {
   const a = Math.abs(rate)
   if (a < MIN) return 0
-  if (a >= TOP) return Math.sign(rate)
-  return Math.sign(rate) * (DEAD + ((1 - DEAD) * Math.log(a / MIN)) / Math.log(TOP / MIN))
+  if (a >= YEAR) return Math.sign(rate)
+  return Math.sign(rate) * (DEAD + ((1 - DEAD) * Math.log(a / MIN)) / Math.log(YEAR / MIN))
 }
 
 /** The round speeds a step of the knob stops at, each way. */
-const ROUND = [MIN, 10 * MIN, HOUR, 6 * HOUR, DAY, 7 * DAY, MONTH, ...[1, 10, 100, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9].map((n) => n * YEAR)]
+const ROUND = [MIN, 10 * MIN, HOUR, 6 * HOUR, DAY, 7 * DAY, MONTH, YEAR]
 const NOTCHES = [...ROUND.map((r) => dialOf(-r)).reverse(), 0, ...ROUND.map(dialOf)]
 
 /** The next round speed from `dial`, up the knob or down it. */
@@ -46,44 +45,40 @@ export function notch(dial: number, way: 1 | -1): number {
   return next ?? way
 }
 
-/** Each unit's size, short name, and long name for one and for more. */
-const UNITS: ReadonlyArray<[number, string, string, string]> = [
-  [1e9 * YEAR, 'Gyr', 'billion years', 'billion years'],
-  [1e6 * YEAR, 'Myr', 'million years', 'million years'],
-  [1e3 * YEAR, 'kyr', 'thousand years', 'thousand years'],
-  [YEAR, 'yr', 'year', 'years'],
-  [MONTH, 'mo', 'month', 'months'],
-  [7 * DAY, 'wk', 'week', 'weeks'],
-  [DAY, 'day', 'day', 'days'],
-  [HOUR, 'hr', 'hour', 'hours'],
-  [MIN, 'min', 'minute', 'minutes'],
+const UNITS: ReadonlyArray<[number, string, string]> = [
+  [YEAR, 'yr', 'year'],
+  [MONTH, 'mo', 'month'],
+  [7 * DAY, 'wk', 'week'],
+  [DAY, 'day', 'day'],
+  [HOUR, 'hr', 'hour'],
+  [MIN, 'min', 'minute'],
 ]
 
 /** The speed in two figures, in the biggest unit it fills, so it never reads 60 min/s. Null at real time. */
 function reading(rate: number): [number, string, string] | null {
   const a = Math.abs(rate)
   if (a < MIN) return null
-  for (const [size, short, one, more] of UNITS) {
+  for (const [size, short, long] of UNITS) {
     const q = a / size
     const n = q < 10 ? Math.round(q * 10) / 10 : Math.round(q)
-    if (n >= 1) return [n, short, n === 1 ? one : more]
+    if (n >= 1) return [n, short, long]
   }
   return null
 }
 
-/** The speed as the knob shows it: "Real time", "+10 min/s", "−2.5 day/s", "+1 Gyr/s". */
+/** The speed as the knob shows it: "Real time", "+10 min/s", "−2.5 day/s". */
 export function speedLabel(dial: number): string {
   const rate = rateOf(dial)
   const r = reading(rate)
   return r ? `${rate < 0 ? '−' : '+'}${r[0]} ${r[1]}/s` : 'Real time'
 }
 
-/** The same in words: "Real time", "10 minutes a second", "1 day a second, backward", "1 billion years a second". */
+/** The same in words: "Real time", "10 minutes a second", "1 day a second, backward". */
 export function speedSaid(dial: number): string {
   const rate = rateOf(dial)
   const r = reading(rate)
   if (!r) return 'Real time'
-  return `${r[0]} ${r[2]} a second${rate < 0 ? ', backward' : ''}`
+  return `${r[0]} ${r[2]}${r[0] === 1 ? '' : 's'} a second${rate < 0 ? ', backward' : ''}`
 }
 
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

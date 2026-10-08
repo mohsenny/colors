@@ -162,7 +162,7 @@ function Field(props: FieldProps): ReactElement {
 interface StepProps {
   label: string
   back?: boolean
-  /** Ten years at a time, with two chevrons. */
+  /** A hundred times as far, with two chevrons. */
   far?: boolean
   ms: number
   to: To
@@ -219,6 +219,11 @@ const years =
   (n: number): To =>
   (ms) =>
     isDeep(ms) ? deepStep(ms, n) : shiftMonths(ms, 12 * n)
+/** A chevron's steps: ten years each by the calendar, its third figure past it. */
+const strides =
+  (n: number): To =>
+  (ms) =>
+    years(isDeep(ms) ? n : 10 * n)(ms)
 const months = (n: number): To => (ms) => shiftMonths(ms, n)
 const days = (n: number): To => (ms) => ms + n * DAY_MS
 const turn =
@@ -228,21 +233,22 @@ const turn =
     return momentOf({ ...p, [part]: p[part] + n, second: 0 })
   }
 
-/** "100 years", "10 million years": a step of the year, in words. */
+/** "1,000 years", "10 million years": a step of the year, in words. */
 function yearsSaid(n: number): string {
   if (n >= 1e9) return `${n / 1e9} billion years`
   if (n >= 1e6) return `${n / 1e6} million years`
-  return n === 1 ? 'A year' : `${n.toLocaleString('en-US')} years`
+  return `${n.toLocaleString('en-US')} years`
 }
 
 /**
  * The drawer behind the clock, for the years a sky is looked at across: the
- * year first and large, ten at a time or one, then the month and the day, and
+ * year first and large, a thousand at a time or ten, then the month and the day, and
  * the time. Each is typed over or stepped, and held a step repeats. Each change
  * goes there at once and the drawer stays, so the sky can be watched while the
  * date is found. A day keeps the time of day, and a time keeps the day. Past
  * the calendar's years the year is years from now, typed as "4.5 billion years
- * ago" or "in 5 Gyr", stepped by its third figure, and the rest has no say.
+ * ago" or "in 5 Gyr", stepped by its third figure or its first, and the rest
+ * has no say.
  */
 export function When({ open, ms, at, onGo }: WhenProps): ReactElement {
   const tab = open ? undefined : -1
@@ -254,11 +260,8 @@ export function When({ open, ms, at, onGo }: WhenProps): ReactElement {
     onGo((now) => momentOf({ ...partsOf(now), ...change }))
   }
   const year = p ? yearLabel(p.year) : deepLabel(ms, true)
-  const unit = deep ? deepUnit(ms) : 1
-  const by = (n: number, back: boolean): string => {
-    const said = yearsSaid(n * unit)
-    return `${n * unit === 1 ? said : said.replace(/^./, (c) => c.toUpperCase())} ${back ? 'back' : 'on'}`
-  }
+  const stride = deep ? deepUnit(ms) : 10
+  const by = (n: number, back: boolean): string => `${yearsSaid(n * stride)} ${back ? 'back' : 'on'}`
 
   return (
     <div
@@ -267,8 +270,8 @@ export function When({ open, ms, at, onGo }: WhenProps): ReactElement {
       aria-hidden={open ? undefined : 'true'}
     >
       <div className="sl-when-year" role="group" aria-label="Year">
-        <Step {...step} label={by(10, true)} back far to={years(-10)} />
-        <Step {...step} label={by(1, true)} back to={years(-1)} />
+        <Step {...step} label={by(100, true)} back far to={strides(-100)} />
+        <Step {...step} label={by(1, true)} back to={strides(-1)} />
         <Field
           text={year}
           read={yearRead}
@@ -283,8 +286,8 @@ export function When({ open, ms, at, onGo }: WhenProps): ReactElement {
           onSet={(y) => onGo((now) => inYear(now, y))}
           onStep={(n) => onGo(years(n))}
         />
-        <Step {...step} label={by(1, false)} to={years(1)} />
-        <Step {...step} label={by(10, false)} far to={years(10)} />
+        <Step {...step} label={by(1, false)} to={strides(1)} />
+        <Step {...step} label={by(100, false)} far to={strides(100)} />
       </div>
 
       <div className={`lb-opt-row${deep ? ' is-off' : ''}`}>

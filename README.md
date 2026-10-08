@@ -83,9 +83,9 @@ Its source is in [gravity/](gravity/) and what it does and why is in
 **[Open Solar](https://mohsenny.github.io/whoami/solar/)**, the third: the Sun, the
 planets and Pluto, the Moon and 44 moons of Mars, the four giants and Pluto where they
 really are, at their true sizes and distances. Become any of them and click the others to
-see them from there, run the clock either way through the Sun's whole life, and step from
-eclipse to eclipse. Same chrome with the lights out. Its source is in [solar/](solar/) and
-the why is in [solar/PRD.md](solar/PRD.md).
+see them from there, run the clock up to a year a second either way, go to any year of the
+Sun's life, and step from eclipse to eclipse. Same chrome with the lights out. Its source
+is in [solar/](solar/) and the why is in [solar/PRD.md](solar/PRD.md).
 
 Its planet and Moon maps are by
 [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0), the round

@@ -27,14 +27,14 @@ import {
 
 describe('the clock', () => {
   const YEAR = 365.2425 * 86_400
-  const ROUND = [60, 600, 3600, 21_600, 86_400, 604_800, 30.436875 * 86_400, ...[1, 10, 100, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9].map((n) => n * YEAR)]
+  const ROUND = [60, 600, 3600, 21_600, 86_400, 604_800, 30.436875 * 86_400, YEAR]
 
-  it('rests on real time in the middle of the knob and climbs either way to a billion years a second', () => {
+  it('rests on real time in the middle of the knob and climbs either way to a year a second', () => {
     expect(rateOf(0)).toBe(1)
     expect(rateOf(DEAD * 0.9)).toBe(1)
     expect(rateOf(-DEAD * 0.9)).toBe(1)
     expect(rateOf(DEAD)).toBeCloseTo(60, 6)
-    expect(rateOf(1) / YEAR / 1e9).toBeCloseTo(1, 9)
+    expect(rateOf(1) / YEAR).toBeCloseTo(1, 9)
     expect(rateOf(5)).toBe(rateOf(1))
     let last = 1
     for (let d = DEAD; d <= 1; d += 0.01) {
@@ -64,14 +64,10 @@ describe('the clock', () => {
     expect(speedLabel(dialOf(-2.5 * 3600))).toBe('\u22122.5 hr/s')
     expect(speedLabel(dialOf(3590))).toBe('+1 hr/s')
     expect(speedLabel(dialOf(23.9 * 3600))).toBe('+1 day/s')
-    expect(speedLabel(dialOf(YEAR))).toBe('+1 yr/s')
-    expect(speedLabel(dialOf(-2500 * YEAR))).toBe('\u22122.5 kyr/s')
-    expect(speedLabel(-1)).toBe('\u22121 Gyr/s')
+    expect(speedLabel(-1)).toBe('\u22121 yr/s')
     expect(speedSaid(0)).toBe('Real time')
     expect(speedSaid(dialOf(-86_400))).toBe('1 day a second, backward')
     expect(speedSaid(dialOf(2.5 * 86_400))).toBe('2.5 days a second')
-    expect(speedSaid(dialOf(1e6 * YEAR))).toBe('1 million years a second')
-    expect(speedSaid(-1)).toBe('1 billion years a second, backward')
   })
 
   it('reads in UTC', () => {
