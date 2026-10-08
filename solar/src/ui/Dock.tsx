@@ -7,7 +7,7 @@ import { dayLabel } from '../app/time'
 import type { BodyId } from '../sky/bodies'
 import type { Eclipse, EclipseType } from '../sky/eclipses'
 import { Bodies } from './Bodies'
-import { PauseIcon, PlayIcon, PlusIcon } from './Icons'
+import { MoonIcon, PauseIcon, PlayIcon } from './Icons'
 import { Knob } from './Knob'
 import { Options } from './Options'
 import { Sphere } from './Sphere'
@@ -164,7 +164,7 @@ export function Dock(props: DockProps): ReactElement {
         aria-expanded={drawer === 'options'}
         onClick={() => toggle('options')}
       >
-        <PlusIcon open={drawer === 'options'} />
+        <MoonIcon open={drawer === 'options'} />
       </button>
 
       <Bodies

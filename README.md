@@ -35,7 +35,7 @@ three seconds and the controls step aside until you move again.
 | Go back a few seconds | Drag the timeline in the dock. It holds the last 15 seconds and replays them exactly |
 | Start over | Press <kbd>R</kbd>, or the refresh icon in the dock. Pinned sheets keep their colour |
 | Change the mixing | <kbd>B</kbd>, or the Paint / Light switch |
-| Save a picture | The arrow in the dock. The film as it is, without the tabs and controls, as a PNG |
+| Save a picture | The camera in the dock. The film as it is, without the tabs and controls, as a PNG |
 
 **Paint vs Light.** Two answers to the same question, and only the crossings change.
 Paint mixes the sheets the way pigment mixes: blue over yellow gives green, and a

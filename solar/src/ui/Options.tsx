@@ -69,7 +69,7 @@ function Row({ type, steps, open, onWatch, onStep }: RowProps): ReactElement {
   )
 }
 
-/** The drawer behind the plus: the solar and the lunar eclipses, to step through. */
+/** The drawer behind the moon: the solar and the lunar eclipses, to step through. */
 export function Options({ open, solar, lunar, onWatch, onStep }: OptionsProps): ReactElement {
   return (
     <div className={`lb-options${open ? ' is-open' : ''}`} aria-hidden={open ? undefined : 'true'}>

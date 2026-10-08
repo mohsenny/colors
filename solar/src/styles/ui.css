@@ -92,7 +92,7 @@
 }
 
 /* Four groups: where you are, when, how time moves, then the picture and the
-   plus. Each ends with a wider gap than the ones inside it. */
+   moon. Each ends with a wider gap than the ones inside it. */
 .lt-chip,
 .sl-now,
 .sl-knob {
@@ -150,12 +150,28 @@
   transform: scaleX(-1);
 }
 
-.lb-plus {
+/* The moon turns into the cross that closes its drawer, as the plus does in the other docks. */
+.sl-moon {
+  display: grid;
   transition: transform var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
-.lb-plus.is-open {
+.sl-moon.is-open {
   transform: rotate(45deg);
+}
+
+.sl-moon > .lb-icon {
+  grid-area: 1 / 1;
+  transition: opacity var(--lb-t-grow, 180ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+.sl-moon > .lb-icon + .lb-icon,
+.sl-moon.is-open > .lb-icon:first-child {
+  opacity: 0;
+}
+
+.sl-moon.is-open > .lb-icon + .lb-icon {
+  opacity: 1;
 }
 
 .lb-btn-more.is-on {

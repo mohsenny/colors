@@ -123,7 +123,7 @@ The same places Lightbox uses, and nothing else. No header, no sidebar, no foote
 2. Play / pause.
 3. Timeline. Widens when paused, the dock pins its left edge, exactly as Lightbox.
 4. **Probe | Photon** segmented control: what moves in the room, and what a double-click releases. Probe is the default and comes first, and deals three probes in orbit. Photon keeps an uneven stream coming, a ray every 0.15 to 0.75 s and at most six in flight, each sent in along a random rope from either end of x, y or z, so it starts on the lattice and leaves it only where the body bends it. The two cells are made equal, since the words are not: the sliding indicator is a 50% pill.
-5. Save, an arrow into a tray: the room as a PNG, as idle leaves it.
+5. Save, a camera: the room as a PNG, as idle leaves it.
 6. Plus, opening the options drawer.
 
 **Drawers, above the dock.** Same panel, same unfold. Lightbox's rule holds: the dock is what you reach for while watching, a drawer is a decision about the instrument. The bodies drawer is a list of the seven presets, each a sphere swatch, a name, its kind in micro-type and its number key. The options drawer has **Mass** and **Size** (logarithmic sliders in the timeline's visual language: 4 px track, the paused timeline's round head; the values themselves are in the readout). Size is labelled Horizon while the body is a black hole. Letting go of a slider re-frames the room if the body has left 0.4 to 2.5 units. One drawer open at a time; pressing anywhere else or <kbd>Esc</kbd> closes it.
