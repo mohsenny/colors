@@ -75,6 +75,8 @@ export function patternOf(
 /**
  * A canvas `width` by `height` device pixels with the stage's surface and
  * grain on it, and a transform of `scale` device pixels to the CSS pixel.
+ * `layers` go over the surface and under the grain, stretched to the stage,
+ * as Lightbox's glass does on screen.
  */
 export function litSurface(
   stage: HTMLElement,
@@ -82,6 +84,7 @@ export function litSurface(
   height: number,
   scale: number,
   grain: HTMLCanvasElement | null,
+  layers: readonly CanvasImageSource[] = [],
 ): CanvasRenderingContext2D {
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -120,6 +123,7 @@ export function litSurface(
   // The halos, then the cores in them, the first tube on top of each.
   for (const t of tubes) ellipse(ctx, w, h, t.at, [0.15, 0.9], t.rgb, Math.min(1, 0.86 * t.gain), 0.74)
   for (const t of tubes) ellipse(ctx, w, h, t.at, [0.022, 0.46], t.rgb, Math.min(1, 0.92 * t.gain), 0.58)
+  for (const layer of layers) ctx.drawImage(layer, 0, 0, w, h)
 
   const pattern = grain && patternOf(ctx, grain, scale)
   if (pattern) {

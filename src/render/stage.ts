@@ -16,6 +16,7 @@ import { clampSide, sideBand, stockSizeFrac } from '../core/size'
 import type { RenderOptions, SimState, SlideState, StageHandlers, Viewport } from '../core/types'
 import { png } from '../photo/save'
 import { grainOf, litSurface, patternOf, tile } from '../photo/surface'
+import { Glass } from './glass'
 import { Painter } from './paint'
 import { drawMount, drawPaper } from './photo'
 import type { Stock } from './photo'
@@ -222,6 +223,7 @@ export class Stage {
   private readonly handlers: StageAllHandlers
   private readonly recs = new Map<number, SlideRec>()
   private readonly painter: Painter
+  private readonly glass: Glass
   private readonly paper: HTMLDivElement
   /** Last paper width written, in whole px. -1 so the first frame writes. */
   private paperPx = -1
@@ -266,6 +268,7 @@ export class Stage {
     this.handlers = handlers
     root.classList.add('lb-stage')
     this.painter = new Painter(root)
+    this.glass = new Glass(root)
 
     this.paper = div('lb-paper')
     this.paper.setAttribute('aria-hidden', 'true')
@@ -430,6 +433,7 @@ export class Stage {
     this.recs.clear()
     this.paper.remove()
     this.painter.destroy()
+    this.glass.destroy()
     this.drag = null
   }
 
@@ -449,7 +453,7 @@ export class Stage {
    * colour only changes a couple of times a second, and a style write on a
    * full-viewport element is not something to do 60 times a second for nothing.
    */
-  private writeLamps(t: number, warmth: number, cast: Cast | undefined): void {
+  private writeLamps(t: number, warmth: number, cast: Cast | undefined): Lamp[] {
     const lamps = lampsAt(t, warmth, cast)
     for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i] as Lamp
@@ -459,6 +463,7 @@ export class Stage {
       this.root.style.setProperty(`--lb-tube-${i + 1}`, `${l.r} ${l.g} ${l.b}`)
       this.root.style.setProperty(`--lb-tube-${i + 1}-i`, l.gain.toFixed(3))
     }
+    return lamps
   }
 
   /**
@@ -510,7 +515,8 @@ export class Stage {
     // The painter first, then the lamps: the cast is the field the painter
     // just measured, so the other order hands the tubes the previous frame.
     this.painter.draw(state, opts)
-    this.writeLamps(state.t, opts.warmth, this.castFor(state.t, opts))
+    const lamps = this.writeLamps(state.t, opts.warmth, this.castFor(state.t, opts))
+    this.glass.draw(vp, lamps, this.painter, opts.reducedMotion)
 
     // Both, and off the state rather than off the viewport: the paper below is
     // drawn from `state.aspect`, so the strip that takes hold of it has to be
@@ -720,7 +726,7 @@ export class Stage {
       grainOf(this.root, dpr),
       tile(css.getPropertyValue('--lb-fibre'), FIBRE_PX, dpr),
     ])
-    const ctx = litSurface(this.root, paint.width, paint.height, dpr, grain)
+    const ctx = litSurface(this.root, paint.width, paint.height, dpr, grain, this.glass.layers)
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.globalCompositeOperation = 'multiply'

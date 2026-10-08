@@ -151,6 +151,28 @@
   background-size: 140px 140px;
 }
 
+/*
+ * The tubes and the glass, drawn by render/glass.ts over the surface above,
+ * which is what shows without WebGL2. The second canvas lays flat light under
+ * every film, between the glass and the grain.
+ */
+.lb-glass,
+.lb-under {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lb-glass {
+  z-index: 0;
+}
+
+.lb-under {
+  z-index: 1;
+}
+
 /* --- the interiors --------------------------------------------------------- */
 
 /*

@@ -629,6 +629,22 @@ export class Painter {
     }
   }
 
+  /**
+   * Every sheet's interior, grown by `pad` px, as subpaths on `ctx`, and the
+   * left edge of the lit area: what glass.ts lays flat light under.
+   */
+  trace(ctx: CanvasRenderingContext2D, pad: number): number {
+    for (let i = 0; i < this.sheets.length; i++) {
+      const s = this.sheets[i] as Sheet
+      ctx.save()
+      ctx.translate(s.cx, s.cy)
+      if (s.rot !== 0) ctx.rotate(s.rot)
+      ctx.rect(-s.hw - pad, -s.hh - pad, 2 * (s.hw + pad), 2 * (s.hh + pad))
+      ctx.restore()
+    }
+    return this.litX0
+  }
+
   /** The mixed colour of a set of sheets, as three bytes. */
   private rgbFor(
     set: readonly number[],
