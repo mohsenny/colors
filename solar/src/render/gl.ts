@@ -15,7 +15,6 @@
 
 import type { Eye } from './camera'
 import { across, circleOf, cross, dot, frameOf, len, magnification, norm, scale, viewRotation } from './camera'
-import type { BodyId } from '../sky/bodies'
 import type { Vec3 } from '../sky/ephemeris'
 import { DARK, LIGHTS } from '../sky/light'
 import type { Glare } from '../sky/light'
@@ -27,7 +26,10 @@ export type Shade = 'rock' | 'moon' | 'earth' | 'gas' | 'sun'
 const SHADE: Record<Shade, number> = { rock: 0, moon: 1, earth: 2, gas: 3, sun: 4 }
 
 export interface BodyDraw {
-  id: BodyId
+  /** The body, or for one of the crowd its name. */
+  id: string
+  /** The map it is painted with, if not its own. */
+  map?: string
   shade: Shade
   /** Centre from the eye, km. */
   rel: Vec3
@@ -181,9 +183,8 @@ uniform sampler2D uMap;
 uniform sampler2D uNight;
 uniform sampler2D uClouds;
 uniform sampler2D uRings;
-uniform sampler2D uShapes;
+uniform highp sampler2DArray uShapes;
 uniform int uShape;
-uniform vec2 uShapeRows;
 ${COMMON}
 const vec3 DUSK = vec3(1.0, 0.42, 0.16);
 
@@ -197,8 +198,7 @@ vec4 lump(vec3 x) {
   vec3 n = normalize(x);
   float lon = atan(dot(n, uAxY), dot(n, uAxX));
   float lat = asin(clamp(dot(n, uPole), -1.0, 1.0));
-  float row = clamp((0.5 - lat / PI) * uShapeRows.x, 0.5, uShapeRows.x - 0.5);
-  return textureLod(uShapes, vec2(0.5 + lon / TAU, (float(uShape) * uShapeRows.x + row) / uShapeRows.y), 0.0);
+  return textureLod(uShapes, vec3(0.5 + lon / TAU, 0.5 - lat / PI, float(uShape)), 0.0);
 }
 // How far above its ground x is: below 0 inside it.
 float above(vec3 x) {
@@ -654,8 +654,8 @@ export class Renderer {
   private maps = new Map<string, WebGLTexture>()
   private dpr = 1
   private aniso = 0
-  private shapeRows = 1
-  private shapeCount = 1
+  private shapes: WebGLTexture
+  private shaped = false
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -697,6 +697,7 @@ export class Renderer {
     // Until a map arrives, a body is its own colour.
     this.solid('blank', [128, 128, 128, 255])
     this.solid('dark', [0, 0, 0, 0])
+    this.shapes = this.layers(new Float32Array(4), 1, 1)
   }
 
   private solid(key: string, rgba: [number, number, number, number]): void {
@@ -754,21 +755,23 @@ export class Renderer {
     this.starCount = stars.count
   }
 
-  /** The lumpy moons' shapes, each a grid of how far out its ground is and which way it faces, one under the next. */
+  /** The lumpy moons' shapes, each a grid of how far out its ground is and which way it faces, one layer each. */
   setShapes(data: Float32Array, columns: number, rows: number): void {
+    this.gl.deleteTexture(this.shapes)
+    this.shapes = this.layers(data, columns, rows)
+    this.shaped = true
+  }
+
+  private layers(data: Float32Array, columns: number, rows: number): WebGLTexture {
     const gl = this.gl
     const t = gl.createTexture() as WebGLTexture
-    gl.bindTexture(gl.TEXTURE_2D, t)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, columns, data.length / 4 / columns, 0, gl.RGBA, gl.FLOAT, data)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    const old = this.maps.get('shapes')
-    if (old) gl.deleteTexture(old)
-    this.maps.set('shapes', t)
-    this.shapeRows = rows
-    this.shapeCount = data.length / 4 / columns / rows
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, t)
+    gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA16F, columns, rows, data.length / 4 / columns / rows, 0, gl.RGBA, gl.FLOAT, data)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    return t
   }
 
   resize(width: number, height: number, dpr: number): void {
@@ -914,7 +917,7 @@ export class Renderer {
       const f = localOf(b.rel)
       // A lumpy moon is drawn in the sphere round its highest point, and as a
       // ball of its mean size until its shape arrives.
-      const shape = this.maps.has('shapes') ? b.shape : null
+      const shape = this.shaped ? b.shape : null
       const R = shape ? shape.outer : b.radius
       if (f.D <= R * 1.001) return
       const u = this.bu
@@ -962,11 +965,10 @@ export class Renderer {
       gl.uniform1f(u.uClock, frame.clock)
       gl.uniform1f(u.uFade, b.fade)
       gl.uniform1i(u.uShape, shape ? shape.at : -1)
-      this.bind(0, b.id)
+      this.bind(0, b.map ?? b.id)
       this.bind(1, b.id === 'earth' ? 'night' : 'dark')
       this.bind(2, b.id === 'earth' ? 'clouds' : 'dark')
       this.bind(3, b.rings ? 'rings' : 'dark')
-      this.bind(4, 'shapes')
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
 
@@ -984,7 +986,8 @@ export class Renderer {
     gl.uniform1i(this.bu.uClouds, 2)
     gl.uniform1i(this.bu.uRings, 3)
     gl.uniform1i(this.bu.uShapes, 4)
-    gl.uniform2f(this.bu.uShapeRows, this.shapeRows, this.shapeRows * this.shapeCount)
+    gl.activeTexture(gl.TEXTURE4)
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.shapes)
     gl.bindVertexArray(this.quadVao)
 
     for (const b of frame.bodies) {

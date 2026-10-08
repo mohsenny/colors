@@ -2,15 +2,17 @@ import { Body as AE, HelioVector, Illumination, MakeTime } from 'astronomy-engin
 import { describe, expect, it } from 'vitest'
 import { AU_KM, BODIES, bodyById } from './bodies'
 import type { BodyId } from './bodies'
+import { CROWD, crowdAt, crowdAxes, crowdPresence } from './crowd'
+import type { CrowdMoon } from './crowd'
 import { BLEND, EXACT, J2000_MS, YEAR_MS, presenceOf, smearOf } from './deep'
 import { ECLIPSES_FROM, ECLIPSES_TO, nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
 import type { Eclipse, EclipseType } from './eclipses'
 import { TIME_MAX, TIME_MIN, posesAt, spins, toEcliptic } from './ephemeris'
 import type { Vec3 } from './ephemeris'
 import { keplerMoon } from './kepler'
-import { DARK, excess, gain, glareOf, limit, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt } from './light'
+import { DARK, bareMagnitude, excess, gain, glareOf, limit, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt } from './light'
 import { engulfed, sunAt, widening } from './sun'
-import { SHAPE_COLUMNS, SHAPE_ROWS, shapeOf, unpackShapes } from '../render/shapes'
+import { SHAPE_COLUMNS, SHAPE_ROWS, crowdShapes, shapeOf, unpackShapes } from '../render/shapes'
 import shapesFile from '../assets/shapes.bin?url&inline'
 
 function len(a: Vec3): number {
@@ -476,27 +478,171 @@ describe('the moons that turn on their own', () => {
   })
 })
 
+describe("the giants' other moons", () => {
+  const moon = (name: string): CrowdMoon => CROWD.find((c) => c.name === name) as CrowdMoon
+
+  it('has 414, none of them one of the named', () => {
+    expect(CROWD.length).toBe(414)
+    expect(new Set(CROWD.map((c) => c.name)).size).toBe(414)
+    for (const c of CROWD) expect(bodyById(c.name.toLowerCase() as BodyId), c.name).toBeUndefined()
+  })
+
+  // Ellipses fitted to JPL Horizons, against it at three moments, each bound
+  // half as much again as the worst miss at them and the note by it the worst
+  // in km over the years fitted. The far ones' are a good share of how far out
+  // they are: the Sun swings them about more than an ellipse can follow.
+  const CHECKS = [2451545, 2460676.5, 2461321.5]
+  const HORIZONS: Array<[string, number, Vec3[]]> = [
+    // 1,700,000
+    ['Elara', 2_100_000, [[-5_889_184.2, -5_740_514.4, 4_227_062.9], [2_548_068.7, -8_759_201.2, -2_023_073], [-4_415_978.7, 13_106_481.1, 3_358_613]]],
+    // 11,000,000
+    ['Pasiphae', 15_000_000, [[1_351_933.4, -21_994_617.8, 12_389_532.3], [7_646_176.3, 14_084_278.6, 882_326], [-12_752_066.4, -5_377_809.4, -5_844_185.2]]],
+    // 5,000,000
+    ['Sinope', 5_500_000, [[-23_997_983.3, 17_315_839.8, 4_355_605.5], [-24_541_092.8, 17_688_717.5, -10_379_780.8], [-27_387_478.7, 403_838.3, -8_169_911.2]]],
+    // 3,000,000
+    ['Themisto', 1_800_000, [[6_456_349.5, -572_451.3, 3_121_862.9], [-1_316_200.8, 3_738_812.8, -3_815_883.4], [957_369.4, 3_861_380.3, -3_674_541.4]]],
+    // 10,000,000
+    ['Carpo', 12_000_000, [[190_063.2, 9_913_327.2, 9_766_733.8], [-16_189_638.3, -3_267_891.8, -9_074_034.2], [-4_018_088.2, -16_786_622.8, -18_335_704.2]]],
+    // 7,400,000
+    ['S/2021 J 8', 6_400_000, [[-7_545_679.6, 15_051_894.8, 3_156_760.8], [7_857_077.8, -22_226_200.6, -13_027_856.3], [2_506_118.4, -22_808_121.5, -10_550_705.7]]],
+    // 6,600,000
+    ['Valetudo', 5_700_000, [[16_643_809.3, -2_702_681.8, 9_107_597], [481_001.2, 13_811_853.9, -6_681_106.4], [-18_353_562.9, -617_122.3, -7_107_518.7]]],
+    // 3,800,000
+    ['Ymir', 3_000_000, [[23_685_188.2, -18_609_439.3, -3_316_004.6], [24_824_404.8, -15_299_291.8, -3_888_750.5], [-11_193_988, 11_430_420.5, 2_032_894]]],
+    // 1,100,000
+    ['Kiviuq', 890_000, [[-2_595_850, -8_289_718.6, -9_759_037.6], [10_415_071.1, -1_143_586.4, 1_794_318.6], [-11_408_555.7, 200_457.8, -3_134_207.5]]],
+    // 7,100,000
+    ['Albiorix', 7_900_000, [[-4_951_933.3, -6_326_367.7, 5_215_645.7], [19_166_483.2, 5_902_570.7, -11_327_012.6], [22_242_749.5, -1_416_609, -14_187_509.8]]],
+    // 7,100,000
+    ['Siarnaq', 4_500_000, [[10_866_422.8, -13_014_939.5, -17_493_316.6], [18_317_446.4, -2_955_239.2, -11_783_126.2], [6_560_040.7, -17_184_397.7, -17_855_475.2]]],
+    // 3,700
+    ['Methone', 3_600, [[150_794.8, -113_668.3, 44_901.5], [74_952.4, -161_741.7, 77_506.7], [-23_286.9, -169_781.8, 91_174.2]]],
+    // 2,100
+    ['Pallene', 2_300, [[6_964.8, -187_549.1, 97_376.3], [-177_646.5, 108_494.6, -39_617.2], [-203_985.8, 57_814.5, -9_869.8]]],
+    // 18,000
+    ['Polydeuces', 25_000, [[-261_376.1, -226_963.9, 144_826.2], [293_748.4, 206_904, -138_122.8], [192_307.9, -288_996, 132_191.2]]],
+    // 2,300,000
+    ['Aegir', 2_600_000, [[-5_861_435.8, -14_628_061.8, -3_099_726.8], [-20_012_503, -743_377.5, 2_615_786.7], [16_199_413.3, 13_662_522, 153_121.6]]],
+    // 5,600
+    ['Anthe', 4_900, [[134_854.7, 122_489, -77_265.7], [62_188.5, -168_463.7, 82_200.9], [108_963.3, 141_220, -84_623.8]]],
+    // 3,100
+    ['Aegaeon', 3_900, [[-94_279.9, -118_647.3, 71_297.1], [-166_760.2, 11_893.5, 9_924.1], [-85_391.9, -124_021.8, 73_257.7]]],
+    // 2,200,000
+    ['S/2023 S 63', 1_500_000, [[16_129_558.2, -15_982_369.6, 2_706_926.1], [16_917_097.8, 10_958_902.2, 4_446_014], [-13_883_324.5, 521_851.4, -2_527_004.8]]],
+    // 160
+    ['Cordelia', 240, [[48_606.8, -10_462.1, 2_248.5], [-3_794.1, -6_138, -49_213.3], [-43_661.6, 6_390.3, -22_969.4]]],
+    // 3,400
+    ['Portia', 4_200, [[-6_433.2, -4_558.4, -65_804.8], [29_675, 306, 58_918.6], [-31_939.5, 13_157.7, 56_623.9]]],
+    // 140,000
+    ['Caliban', 120_000, [[-6_455_421.8, 1_447_022.8, 751_463.3], [-74_256, -5_329_724.6, -4_532_847.3], [-4_736_525.7, -3_427_638.1, -3_221_135.3]]],
+    // 1,700,000
+    ['Sycorax', 1_400_000, [[12_897_984.7, 6_725_699, -5_606_465.4], [11_245_768.4, -142_012.9, -5_342_908.6], [1_079_429.7, 16_042_525.3, 836_138.4]]],
+    // 4,600,000
+    ['Margaret', 3_000_000, [[7_666_134.7, -4_660_435.3, -9_489_936.3], [-3_480_738.8, -18_189_245.4, -19_150_411.6], [5_368_823.6, -10_038_954.1, -13_364_768.8]]],
+    // 1,400
+    ['Mab', 2_100, [[73_718, -26_234.4, -57_630.2], [82_023.8, -12_087.3, 52_175.1], [7_519, 8_704.4, 97_021.1]]],
+    // 310,000
+    ['S/2023 U 1', 160_000, [[-289_271.2, 6_586_687.3, 776_945.2], [4_752_337.1, -7_058_185.5, -4_113_162.2], [5_887_906.4, -5_329_686.8, -4_889_688.5]]],
+    // 500
+    ['Naiad', 470, [[-37_078.7, 16_965.6, 25_738.5], [-43_125.4, -20_527.3, 6_644.1], [-45_810.2, -8_385.2, 12_500.4]]],
+    // 450
+    ['Thalassa', 440, [[32_789.3, -29_368.1, -23_853.3], [46_538.5, 9_576.5, -15_811.3], [-1_103.7, -47_345.7, -16_263.1]]],
+    // 280
+    ['Galatea', 76, [[-14_932.3, 54_413.6, 25_556.5], [-56_459.4, -19_747.5, 16_128.1], [51_865.3, -18_998.4, -28_067.5]]],
+    // 640
+    ['Larissa', 600, [[63_322.7, 35_256.8, -13_020.1], [-68_529.2, -9_491.3, 24_709.8], [-52_844.1, 37_035.6, 35_162]]],
+    // 1,400,000
+    ['Halimede', 760_000, [[-16_279_332.5, -11_118_511.1, 2_679_320.6], [-13_148_545.9, -14_278_162.7, -7_481_019.6], [-6_744_576, 1_805_735.3, 13_291_374.8]]],
+    // 1,400,000
+    ['Sao', 840_000, [[-8_652_269.5, 8_040_624.4, 15_129_781.2], [-15_182_255.5, -10_117_236.3, 10_591_375.3], [-2_959_007.4, -21_800_569, -11_253_233.5]]],
+    // 25,000,000
+    ['Neso', 12_000_000, [[-44_828_533.5, 44_080_237.3, -48_591_037.9], [-54_738_724.4, 43_651_947.8, -49_110_481.8], [-49_911_111.9, 50_198_952.3, -47_199_297.5]]],
+    // 650
+    ['Hippocamp', 190, [[35_934.5, -87_292.4, -46_590.7], [67_880.3, -62_348.8, -50_762.6], [-2_886.4, -99_351.6, -34_846.1]]],
+    // 11,000,000
+    ['S/2021 N 1', 12_000_000, [[57_280_294.4, 8_733_178.3, -45_867_414.1], [40_271_878.4, 26_496_754.9, -37_909_271.7], [47_027_391.1, 14_636_433.3, -45_532_452.6]]],
+  ]
+
+  it('puts each where Horizons has it, near enough', () => {
+    for (const [name, bound, want] of HORIZONS) {
+      want.forEach((p, k) => expect(len(toward(p, crowdAt(moon(name), CHECKS[k] - 2451545))), name).toBeLessThan(bound))
+    }
+  })
+
+  it('turns those measured as fast as they were seen to, and keeps the close ones facing their planet', () => {
+    const tt = 9_600
+    // Degrees in a hundredth of a day, from hours a turn: Ymir's backward.
+    for (const [name, deg] of [
+      ['Sycorax', 86.4 / 6.9162],
+      ['Ymir', -86.4 / 11.9222],
+      ['Elara', 86.4 / 9.596],
+    ] as const) {
+      const c = moon(name)
+      const [a, b] = [crowdAxes(c, tt, crowdAt(c, tt)), crowdAxes(c, tt + 0.01, crowdAt(c, tt + 0.01))]
+      expect(len(toward(a[2], b[2])), name).toBeLessThan(1e-9)
+      expect(onBody(b[0], a[0], a[1], a[2])[0], name).toBeCloseTo(deg, 2)
+    }
+    const close = CROWD.filter((c) => c.locked)
+    expect(close.length).toBe(24)
+    for (const c of close) {
+      const l = crowdAt(c, tt)
+      expect(dot(crowdAxes(c, tt, l)[0], l) / len(l), c.name).toBeCloseTo(-1, 9)
+    }
+  })
+
+  it("loses each from its place as the named moons on ellipses are lost, Uranus's close ones sooner and the two found last within years", () => {
+    const shown = (name: string, years: number): number => crowdPresence(moon(name), J2000_MS + years * YEAR_MS)
+    expect([shown('Elara', 26), shown('Elara', 2100), shown('Elara', 4300)]).toEqual([1, 1, 0])
+    expect([shown('Cordelia', 1200), shown('Cordelia', 1700)]).toEqual([1, 0])
+    expect([shown('S/2023 S 38', 26), shown('S/2023 S 38', 35)]).toEqual([1, 0])
+    expect(shown('S/2025 U 1', 26)).toBeGreaterThan(0.95)
+    expect(shown('S/2025 U 1', 0)).toBe(0)
+  })
+})
+
 describe('the small moons\' shapes', () => {
+  const bytes = Uint8Array.from(atob(shapesFile.split(',')[1]), (c) => c.charCodeAt(0))
+  const file = unpackShapes(bytes.buffer) as Float32Array
+  const cells = SHAPE_ROWS * SHAPE_COLUMNS
+  // A shape's highest point and lowest, and how little its ground faces outward at the worst.
+  const survey = (data: Float32Array, k: number): [number, number, number] => {
+    const one = Array.from({ length: cells }, (_, i) => data.subarray((k * cells + i) * 4, (k * cells + i + 1) * 4))
+    const out = one.map((c, i) => {
+      const lat = Math.PI / 2 - (Math.floor(i / SHAPE_COLUMNS) + 0.5) * (Math.PI / SHAPE_ROWS)
+      const lon = -Math.PI + ((i % SHAPE_COLUMNS) + 0.5) * (Math.PI / SHAPE_ROWS)
+      return dot([c[1], c[2], c[3]], [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)])
+    })
+    return [Math.max(...one.map((c) => c[0])), Math.min(...one.map((c) => c[0])), Math.min(...out)]
+  }
+
   it('has one for every lumpy moon, reaching out to its highest point and nowhere near its middle, facing outward', () => {
-    const bytes = Uint8Array.from(atob(shapesFile.split(',')[1]), (c) => c.charCodeAt(0))
-    const all = unpackShapes(bytes.buffer) as Float32Array
     const lumpy = BODIES.filter((b) => b.outer)
     expect(lumpy.length).toBe(24)
+    // And Larissa's.
+    expect(file.length).toBe(25 * cells * 4)
     for (const b of lumpy) {
-      const cells = SHAPE_ROWS * SHAPE_COLUMNS
-      const one = Array.from({ length: cells }, (_, i) => all.subarray((shapeOf(b.id) * cells + i) * 4, (shapeOf(b.id) * cells + i + 1) * 4))
-      expect(Math.max(...one.map((c) => c[0])), b.id).toBe(1)
-      expect(Math.min(...one.map((c) => c[0])), b.id).toBeGreaterThan(0.3)
+      const [high, low, out] = survey(file, shapeOf(b.id))
+      expect(high, b.id).toBe(1)
+      expect(low, b.id).toBeGreaterThan(0.3)
       // The ground faces outward, never back toward the middle.
-      const out = one.map((c, i) => {
-        const lat = Math.PI / 2 - (Math.floor(i / SHAPE_COLUMNS) + 0.5) * (Math.PI / SHAPE_ROWS)
-        const lon = -Math.PI + ((i % SHAPE_COLUMNS) + 0.5) * (Math.PI / SHAPE_ROWS)
-        return dot([c[1], c[2], c[3]], [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)])
-      })
-      expect(Math.min(...out), b.id).toBeGreaterThan(0)
+      expect(out, b.id).toBeGreaterThan(0)
       expect(b.outer, b.id).toBeGreaterThan(b.radius)
     }
     expect(shapeOf('puck')).toBe(-1)
+  })
+
+  it("makes the crowd's as the file's are: Larissa's from it, one for each measured, and two dozen the rest share", () => {
+    const { data, of } = crowdShapes(file)
+    const layers = data.length / 4 / cells
+    expect(layers).toBe(25 + 16 + 24)
+    expect(of[CROWD.findIndex((c) => c.name === 'Larissa')].at).toBe(24)
+    for (let k = 24; k < layers; k++) {
+      const [high, low, out] = survey(data, k)
+      expect(high, String(k)).toBeCloseTo(1, 6)
+      expect(low, String(k)).toBeGreaterThan(0.3)
+      expect(out, String(k)).toBeGreaterThan(0)
+    }
+    for (const [k, s] of of.entries()) expect(s.ratio, CROWD[k].name).toBeGreaterThan(1)
   })
 })
 
@@ -699,6 +845,13 @@ describe('how bright things are', () => {
     // size stops growing evenly.
     expect(pointLook(-0.25).a).toBe(0)
     expect(pointLook(11 / 1.33 + 1e-6).size).toBeCloseTo(pointLook(11 / 1.33 - 1e-6).size, 4)
+  })
+
+  it('makes a moon known only by its absolute magnitude that bright an AU from both the Sun and the eye, full on', () => {
+    expect(bareMagnitude(10, AU_KM, 1, 0)).toBeCloseTo(10, 1)
+    // Fainter off full, and in a shadow.
+    expect(bareMagnitude(10, AU_KM, 1, 0.5)).toBeGreaterThan(10.5)
+    expect(bareMagnitude(10, AU_KM, 1, 0, 0.5) - bareMagnitude(10, AU_KM, 1, 0)).toBeCloseTo(2.5 * Math.log10(2), 9)
   })
 
   it('lets a lens show fainter, up to a 20 cm telescope', () => {

@@ -143,6 +143,17 @@ export function magnitude(id: Exclude<BodyId, 'sun'>, radius: number, eye: numbe
   return SUN_MAG - 2.5 * Math.log10((ALBEDO[id] * L * (radius / eye) ** 2 * Math.max(lit, 1e-12)) / (sun * sun)) + fade + rings
 }
 
+/**
+ * The same for a bare moon known only by its absolute magnitude `H`: how
+ * bright it is full on, an AU from both the Sun and the eye. A white disc
+ * 1,329 km across is magnitude 0, and each 5 fainter is a tenth as wide.
+ */
+export function bareMagnitude(H: number, eye: number, sun: number, phase: number, lit = 1, L = 1): number {
+  // The radius of a white disc as bright, km.
+  const r = 664.5 * 10 ** (-H / 5)
+  return SUN_MAG - 2.5 * Math.log10((L * (r / eye) ** 2 * Math.max(lit, 1e-12)) / (sun * sun)) + airless((phase * 180) / Math.PI)
+}
+
 /** Saturn's rings in its magnitude: brighter the more open they are both to the Sun and to the eye, nothing when the eye sees their dark face. */
 export function ringsMagnitude(eyeTilt: number, sunTilt: number): number {
   if (eyeTilt * sunTilt <= 0) return 0

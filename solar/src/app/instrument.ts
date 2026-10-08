@@ -7,14 +7,15 @@
 
 import { AU_KM, BODIES, KEYED, LIGHT_KM_S, RINGS, bodyById } from '../sky/bodies'
 import type { Body, BodyId } from '../sky/bodies'
+import { CROWD, CROWD_COLOURS, crowdAt, crowdAxes, crowdPresence } from '../sky/crowd'
 import { NEAR_MS, nearEclipse, stepTo, stepsFrom, withinEclipses } from '../sky/eclipses'
 import type { Eclipse, EclipseSteps, EclipseType } from '../sky/eclipses'
 import { PERIOD, TIME_MAX, TIME_MIN, orbitOf, posesAt } from '../sky/ephemeris'
 import type { Poses, Vec3 } from '../sky/ephemeris'
-import { presenceOf, smearOf } from '../sky/deep'
+import { presenceOf, smearOf, ttOf } from '../sky/deep'
 import { engulfed, sunAt, sunTint } from '../sky/sun'
 import type { SunState } from '../sky/sun'
-import { DARK, LIGHTS, excess, gain, glareOf, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt, sunMagnitude } from '../sky/light'
+import { DARK, LIGHTS, bareMagnitude, excess, gain, glareOf, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt, sunMagnitude } from '../sky/light'
 import type { Glare } from '../sky/light'
 import { unpackStars } from '../sky/stars'
 import {
@@ -58,7 +59,7 @@ import type { Travel } from '../render/travel'
 import { ORBIT_UNIT, Renderer } from '../render/gl'
 import type { BodyDraw, OrbitDraw, Shade } from '../render/gl'
 import { EARTH_CLOUDS, EARTH_NIGHT, SATURN_RING, STARS, SURFACE } from '../render/maps'
-import { SHAPE_COLUMNS, SHAPE_ROWS, SHAPES, shapeOf, unpackShapes } from '../render/shapes'
+import { SHAPE_COLUMNS, SHAPE_ROWS, SHAPES, crowdShapes, shapeOf, unpackShapes } from '../render/shapes'
 import { png } from '../../../src/photo/save'
 import { isIdle } from '../../../src/ui/idle'
 import { Tape } from './tape'
@@ -346,6 +347,8 @@ export class Instrument {
   private paths = 1
   /** How much of each moon shows, 0 to 1. */
   private fades = new Map<BodyId, number>()
+  /** Where each of the crowd's shapes is, and how far out its highest point is against its mean radius, once they are made. */
+  private crowdShaped: Array<{ at: number; ratio: number }> | null = null
   private mapped = new Set<BodyId>()
   private labelEls = new Map<BodyId, HTMLSpanElement>()
   private labelWidths = new Map<BodyId, number>()
@@ -427,6 +430,7 @@ export class Instrument {
    */
   private loadMaps(): void {
     for (const b of BODIES) this.renderer.paint(b.id, b.color)
+    for (const [key, hex] of Object.entries(CROWD_COLOURS)) this.renderer.paint(key, hex)
     for (const b of KEYED) this.loadMap(b.id)
     void this.renderer.load('night', EARTH_NIGHT).catch(() => undefined)
     void this.renderer.load('clouds', EARTH_CLOUDS, true).catch(() => undefined)
@@ -439,7 +443,10 @@ export class Instrument {
       .then((r) => r.arrayBuffer())
       .then((buf) => {
         const shapes = unpackShapes(buf)
-        if (shapes) this.renderer.setShapes(shapes, SHAPE_COLUMNS, SHAPE_ROWS)
+        if (!shapes) return
+        const crowd = crowdShapes(shapes)
+        this.renderer.setShapes(crowd.data, SHAPE_COLUMNS, SHAPE_ROWS)
+        this.crowdShaped = crowd.of
       })
       .catch(() => undefined)
   }
@@ -1340,16 +1347,15 @@ export class Instrument {
       .slice(0, 4)
   }
 
-  /** How much sunlight reaches a moon past its planet: none in the umbra, but for the Moon's copper. */
-  private sunlit(b: Body): number {
-    if (!b.parent) return 1
-    const at = this.at(b.id)
+  /** How much sunlight reaches a moon at `at` past its planet: none in the umbra, but `least`, for the Moon's copper. */
+  private sunlit(at: Vec3, parent?: BodyId, least = 0): number {
+    if (!parent) return 1
     const toSun = sub(this.at('sun'), at)
-    const toPlanet = sub(this.at(b.parent), at)
-    const k = b.parent === 'earth' ? 1.02 : 1
+    const toPlanet = sub(this.at(parent), at)
+    const k = parent === 'earth' ? 1.02 : 1
     const rs = Math.asin(Math.min(1, this.radius('sun') / len(toSun)))
-    const ro = Math.asin(Math.min(1, (this.radius(b.parent) * k) / len(toPlanet)))
-    return Math.max(b.id === 'moon' ? 1e-4 : 0, 1 - covered(rs, ro, angle(toSun, toPlanet)))
+    const ro = Math.asin(Math.min(1, (this.radius(parent) * k) / len(toPlanet)))
+    return Math.max(least, 1 - covered(rs, ro, angle(toSun, toPlanet)))
   }
 
   /** Every body's magnitude from the eye. */
@@ -1371,7 +1377,7 @@ export class Instrument {
         const pole = this.poses.saturn.z
         rings = ringsMagnitude(Math.asin(dot(pole, toEye) / d), Math.asin(dot(pole, toSun) / len(toSun)))
       }
-      out.set(b.id, magnitude(b.id, b.radius, d, len(toSun) / AU_KM, angle(toSun, toEye), this.sunlit(b), rings, this.sun.luminosity))
+      out.set(b.id, magnitude(b.id, b.radius, d, len(toSun) / AU_KM, angle(toSun, toEye), this.sunlit(at, b.parent, b.id === 'moon' ? 1e-4 : 0), rings, this.sun.luminosity))
     }
     return out
   }
@@ -1473,17 +1479,6 @@ export class Instrument {
       const pose = this.poses[b.id]
       const rel = sub(pose.at, eye)
       const sun = scale(pose.at, -1)
-      let shine: BodyDraw['shine'] = null
-      if (b.parent) {
-        // The planet's day side lights the moon's night side: as brightly as
-        // the Moon's earthshine is drawn, or more close under a giant.
-        const p = this.at(b.parent)
-        const d = len(sub(p, pose.at))
-        const toPlanet = scale(sub(p, pose.at), 1 / d)
-        const lit = (1 + dot(norm(scale(p, -1)), scale(toPlanet, -1))) / 2
-        const k = Math.max(0.05, 0.5 * (this.radius(b.parent) / d) ** 2) * lit
-        shine = { dir: toPlanet, k, tint: SHINE[b.parent] ?? [1, 1, 1] }
-      }
       // As a point: a star of its magnitude, against the sky round it, which
       // the lights in view lighten. What you are looking at stays findable.
       let x = excess(mags.get(b.id) as number, skyAt(glare, norm(rel), b.id), lens)
@@ -1501,15 +1496,78 @@ export class Instrument {
         sun,
         occ: this.shadowers(b),
         copper: b.id === 'moon',
-        shine,
+        shine: b.parent ? this.shineOn(pose.at, b.parent) : null,
         air: b.air ?? null,
         rings: b.id === 'saturn' ? RINGS : null,
         dot: { rgb: [c[0] * a, c[1] * a, c[2] * a], a, size },
         fade: this.fades.get(b.id) ?? 1,
       })
     }
+    out.push(...this.crowdDraws(glare, lens))
     out.sort((a, b) => len(b.rel) - len(a.rel))
     return out
+  }
+
+  /**
+   * The giants' other moons (crowd.ts), drawn as the named ones are and
+   * folding into their planet's point as they do, but never picked, named or
+   * traced, and casting no shadows. Those too faint to show and too small to
+   * be seen as more are skipped.
+   */
+  private crowdDraws(glare: readonly Glare[], lens: number): BodyDraw[] {
+    const eye = this.eye.at
+    const tt = ttOf(this.ms)
+    const out: BodyDraw[] = []
+    for (const [k, c] of CROWD.entries()) {
+      let f = crowdPresence(c, this.ms)
+      if (f > 0) f *= this.presence(c.parent)
+      if (f <= 0) continue
+      const p = this.at(c.parent)
+      const local = crowdAt(c, tt)
+      const at = add(p, local)
+      const rel = sub(at, eye)
+      const d = len(rel)
+      const toPlanet = sub(p, eye)
+      const px = this.pixel(toPlanet)
+      const big = Math.asin(Math.min(1, this.radius(c.parent) / len(toPlanet))) / px
+      f *= Math.max(smoothstep(2, 6, big), smoothstep(2.5, 6, angle(toPlanet, rel) / px))
+      if (f <= 0) continue
+      const m = bareMagnitude(c.H, d, len(at) / AU_KM, angle(scale(at, -1), scale(rel, -1)), this.sunlit(at, c.parent), this.sun.luminosity)
+      const { a, size } = pointLook(excess(m, skyAt(glare, scale(rel, 1 / d)), lens))
+      const shape = this.crowdShaped?.[k]
+      const outer = shape ? c.radius * shape.ratio : c.radius
+      if (a <= 0 && Math.asin(Math.min(1, outer / d)) / px < 0.3) continue
+      const col = pale(rgb(c.color))
+      out.push({
+        id: c.name,
+        map: c.map,
+        shade: 'moon',
+        rel,
+        radius: c.radius,
+        shape: shape ? { at: shape.at, outer } : null,
+        flat: 0,
+        axes: crowdAxes(c, tt, local),
+        sun: scale(at, -1),
+        occ: [{ rel: sub(p, at), radius: this.radius(c.parent) }],
+        copper: false,
+        shine: this.shineOn(at, c.parent),
+        air: null,
+        rings: null,
+        dot: { rgb: [col[0] * a, col[1] * a, col[2] * a], a, size },
+        fade: f,
+      })
+    }
+    return out
+  }
+
+  /** The planet's day side lighting a moon's night side: as brightly as the Moon's earthshine is drawn, or more close under a giant. */
+  private shineOn(at: Vec3, parent: BodyId): BodyDraw['shine'] {
+    const p = this.at(parent)
+    const d = len(sub(p, at))
+    const toPlanet = scale(sub(p, at), 1 / d)
+    const lit = (1 + dot(norm(scale(p, -1)), scale(toPlanet, -1))) / 2
+    const k = Math.max(0.05, 0.5 * (this.radius(parent) / d) ** 2) * lit
+    return { dir: toPlanet, k, tint: SHINE[parent] ?? [1, 1, 1] }
   }
 
   /** How much of the Sun the eye sees, and the body covering the most of it. */

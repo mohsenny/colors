@@ -84,8 +84,9 @@ Its source is in [gravity/](gravity/) and what it does and why is in
 planets and Pluto, the Moon and 44 moons of Mars, the four giants and Pluto where they
 really are, at their true sizes and distances. Become any of them and click the others to
 see them from there, run the clock up to a year a second either way, go to any year of the
-Sun's life, and step from eclipse to eclipse. Same chrome with the lights out. Its source
-is in [solar/](solar/) and the why is in [solar/PRD.md](solar/PRD.md).
+Sun's life, and step from eclipse to eclipse. The giants' 414 other moons are there too,
+unnamed. Same chrome with the lights out. Its source is in [solar/](solar/) and the why is
+in [solar/PRD.md](solar/PRD.md).
 
 Its planet and Moon maps are by
 [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0), the round
@@ -93,7 +94,9 @@ moons of the four giants are NASA, JPL and USGS mosaics, Pluto and Charon are Ne
 Horizons mosaics (NASA, JHUAPL, SwRI) and the stars are the Yale Bright Star Catalogue.
 The small moons show as plain colours on their real shapes: P.C. Thomas's (Cassini, PDS)
 for Saturn's, R.W. Gaskell's for Phoebe, C.M. Ernst's (JHU APL) for Phobos and Deimos and
-P.J. Stooke's for Amalthea, Thebe and Proteus.
+P.J. Stooke's for Amalthea, Thebe, Proteus and Larissa. The giants' other moons go round
+ellipses fitted to JPL Horizons, as bright and as big as Wikipedia's lists have them; most
+were only ever points, so their shapes are made up.
 
 ## Mohsen
 

@@ -235,7 +235,7 @@ function axesOf(id: BodyId, time: AstroTime): [Vec3, Vec3, Vec3] {
 }
 
 /** The same from a pole on the J2000 equator and the prime meridian's angle, degrees. */
-function turnedTo(n: { x: number; y: number; z: number }, spin: number): [Vec3, Vec3, Vec3] {
+export function turnedTo(n: { x: number; y: number; z: number }, spin: number): [Vec3, Vec3, Vec3] {
   // The ascending node of the body's equator on the J2000 equator: z cross pole.
   const h = Math.hypot(n.x, n.y) || 1
   const node = [-n.y / h, n.x / h, 0]
@@ -253,7 +253,7 @@ function turnedTo(n: { x: number; y: number; z: number }, spin: number): [Vec3, 
  * under the planet, the pole square to the orbit. `at` is from the planet and
  * `way` the way the moon is going.
  */
-function locked(at: Vec3, way: Vec3): [Vec3, Vec3, Vec3] {
+export function locked(at: Vec3, way: Vec3): [Vec3, Vec3, Vec3] {
   const r = Math.hypot(at[0], at[1], at[2])
   const x: Vec3 = [-at[0] / r, -at[1] / r, -at[2] / r]
   const n: Vec3 = [at[1] * way[2] - at[2] * way[1], at[2] * way[0] - at[0] * way[2], at[0] * way[1] - at[1] * way[0]]

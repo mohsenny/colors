@@ -67,7 +67,7 @@ const J2000 = 2_451_545
  * for Himalia and Nereid, the plane its orbit turns round for Triton, and
  * Pluto's equator for Charon and the four beyond it.
  */
-type Row = [
+export type Row = [
   a: number,
   e: number,
   w: number,
@@ -210,7 +210,7 @@ export function isFar(id: string): id is FarMoon {
 }
 
 /** An orbit's plane on the J2000 equator: to where it rises through it, 90 degrees on, and its pole. */
-function plane(ra: number, dec: number): number[] {
+export function plane(ra: number, dec: number): number[] {
   const [a, d] = [ra * D, dec * D]
   const z = [Math.cos(d) * Math.cos(a), Math.cos(d) * Math.sin(a), Math.sin(d)]
   const x = [-Math.sin(a), Math.cos(a), 0]
@@ -221,16 +221,20 @@ const PLANES = new Map([...Object.entries(ROWS), ...Object.entries(FAR)].map(([i
 
 /** A moon at a Julian ephemeris day: km from its planet's centre, on the J2000 equator. */
 export function keplerMoon(id: KeplerMoon, jde: number): [number, number, number] {
-  return onEllipse(id, ROWS[id], jde)
+  return ellipse(ROWS[id], PLANES.get(id) as number[], jde, SWING[id])
 }
 
 /** One of the round moons of Jupiter and Saturn on its mean orbit, as `keplerMoon`. */
 export function farMoon(id: FarMoon, jde: number): [number, number, number] {
-  return onEllipse(id, FAR[id], jde, true)
+  return ellipse(FAR[id], PLANES.get(id) as number[], jde, undefined, true)
 }
 
-/** With `whole`, P is the period of the whole lap, and M is held back by as much as the periapsis and node turn on. */
-function onEllipse(id: KeplerMoon | FarMoon, row: Row, jde: number, whole = false): [number, number, number] {
+/**
+ * A moon on a row's ellipse, its plane `m` as `plane` gives it and `swing`
+ * added to M. With `whole`, P is the period of the whole lap, and M is held
+ * back by as much as the periapsis and node turn on.
+ */
+export function ellipse(row: Row, m: readonly number[], jde: number, swing?: (t: number) => number, whole = false): [number, number, number] {
   const [a, e, w0, M0, i, node0, P, Pw, Pn] = row
   const t = jde - J2000
   // Each angle less the whole turns it has made, which keeps it fine a billion years out.
@@ -239,7 +243,7 @@ function onEllipse(id: KeplerMoon | FarMoon, row: Row, jde: number, whole = fals
   const dn = Pn ? lap(Pn * 365.25) : 0
   const w = (w0 + dw) * D
   const node = (node0 + dn) * D
-  const M = (M0 + lap(P) - (whole ? dw + dn : 0) + (SWING[id as KeplerMoon]?.(t) ?? 0)) * D
+  const M = (M0 + lap(P) - (whole ? dw + dn : 0) + (swing?.(t) ?? 0)) * D
   let E = M + e * Math.sin(M)
   for (let k = 0; k < 4; k++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E))
   // On the orbit, x toward periapsis.
@@ -251,6 +255,5 @@ function onEllipse(id: KeplerMoon | FarMoon, row: Row, jde: number, whole = fals
   const y = u * (sn * cw + cn * sw * ci) + v * (cn * cw * ci - sn * sw)
   const z = (u * sw + v * cw) * si
   // And off it, onto the equator.
-  const m = PLANES.get(id) as number[]
   return [m[0] * x + m[3] * y + m[6] * z, m[1] * x + m[4] * y + m[7] * z, m[2] * x + m[5] * y + m[8] * z]
 }
