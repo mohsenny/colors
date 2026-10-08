@@ -18,6 +18,7 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
     (day: HTMLElement | null, time: HTMLElement | null) => instrument.attachClock(day, time),
     [instrument],
   )
+  const hold = useCallback((on: boolean) => instrument.hold(on), [instrument])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -70,6 +71,8 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         onWatch={(e) => instrument.watch(e)}
         onStep={(type, way) => instrument.stepEclipse(type, way)}
         onNow={() => instrument.now()}
+        onPick={(ms) => instrument.goTo(ms)}
+        onHold={hold}
         onPhoto={() => {
           void savePhoto('Solar', () => instrument.photo()).then(
             (text) => text && setNote({ text, at: Date.now() }),

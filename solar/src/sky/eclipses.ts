@@ -111,3 +111,12 @@ export function stepTo(type: EclipseType, ms: number, way: 1 | -1): Eclipse | nu
   const [first, last] = rangeOf(type)
   return compare(to.peak, first) >= 0 && compare(to.peak, last) <= 0 ? to : null
 }
+
+/** Every eclipse, of both types, with its peak from `from` up to `to`, in order. */
+export function eclipsesBetween(from: number, to: number): Eclipse[] {
+  const found: Eclipse[] = []
+  for (const type of ['solar', 'lunar'] as const) {
+    for (let e = nextEclipse(type, from - 1); e.peak < to; e = nextEclipse(type, e.peak)) found.push(e)
+  }
+  return found.sort((a, b) => a.peak - b.peak)
+}

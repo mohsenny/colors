@@ -77,9 +77,9 @@ export function speedSaid(dial: number): string {
   return `${r[0]} ${r[2]}${r[0] === 1 ? '' : 's'} a second${rate < 0 ? ', backward' : ''}`
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-function two(n: number): string {
+export function two(n: number): string {
   return n < 10 ? `0${n}` : `${n}`
 }
 
@@ -99,4 +99,55 @@ export function clockLabel(ms: number): string {
 export function minuteLabel(ms: number): string {
   const d = new Date(ms)
   return `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`
+}
+
+/** A moment in calendar parts, UTC. Months count from 0, as Date's do. */
+export interface Parts {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  second: number
+}
+
+export function partsOf(ms: number): Parts {
+  const d = new Date(ms)
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth(),
+    day: d.getUTCDate(),
+    hour: d.getUTCHours(),
+    minute: d.getUTCMinutes(),
+    second: d.getUTCSeconds(),
+  }
+}
+
+/** Days in a month, leap years and all. */
+export function daysIn(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+}
+
+/**
+ * The moment of some parts. A day past the end of its month is its last day,
+ * so the 31st a month on is the 30th rather than the 1st after; hours and
+ * minutes past their ends carry on into the next.
+ */
+export function momentOf(p: Parts): number {
+  const d = new Date(0)
+  d.setUTCFullYear(p.year, p.month, 1)
+  d.setUTCDate(Math.min(p.day, daysIn(d.getUTCFullYear(), d.getUTCMonth())))
+  d.setUTCHours(p.hour, p.minute, p.second, 0)
+  return d.getTime()
+}
+
+/** The same day and time `n` months on, or back. */
+export function shiftMonths(ms: number, n: number): number {
+  const p = partsOf(ms)
+  return momentOf({ ...p, month: p.month + n })
+}
+
+/** How many days of the week before the 1st, for a calendar that starts on Monday. */
+export function leadOf(year: number, month: number): number {
+  return (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7
 }

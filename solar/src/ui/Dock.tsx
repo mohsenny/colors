@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 import { useIdle } from '../../../src/ui/idle'
 import { PhotoButton } from '../../../src/ui/PhotoButton'
 import type { Snapshot } from '../app/instrument'
+import { dayLabel } from '../app/time'
 import type { BodyId } from '../sky/bodies'
 import type { Eclipse, EclipseType } from '../sky/eclipses'
 import { Bodies } from './Bodies'
@@ -12,6 +13,7 @@ import { Options } from './Options'
 import { Sphere } from './Sphere'
 import { Timeline } from './Timeline'
 import type { TimelineProps } from './Timeline'
+import { When } from './When'
 
 export interface DockProps {
   snap: Snapshot
@@ -24,17 +26,23 @@ export interface DockProps {
   onWatch(e: Eclipse): void
   onStep(type: EclipseType, way: 1 | -1): void
   onNow(): void
+  /** To a date picked in the drawer behind the clock. */
+  onPick(ms: number): void
+  /** Whether a date is being picked, for a fast clock to wait. */
+  onHold(on: boolean): void
   onPhoto(): void
 }
 
-type Drawer = 'bodies' | 'options' | null
+type Drawer = 'bodies' | 'when' | 'options' | null
 
 export function Dock(props: DockProps): ReactElement {
-  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onStep, onNow, onPhoto } = props
+  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onStep, onNow, onPick, onHold, onPhoto } = props
   const { playing } = snap
   const [drawer, setDrawer] = useState<Drawer>(null)
+  const [opened, setOpened] = useState({ at: 0, ms: 0 })
   const rootRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLButtonElement | null>(null)
+  const clockRef = useRef<HTMLButtonElement | null>(null)
   const moreRef = useRef<HTMLButtonElement | null>(null)
   const dayRef = useRef<HTMLSpanElement | null>(null)
   const timeRef = useRef<HTMLSpanElement | null>(null)
@@ -45,6 +53,13 @@ export function Dock(props: DockProps): ReactElement {
   }, [attachClock])
 
   useIdle(drawer !== null)
+
+  const picking = drawer === 'when'
+  useEffect(() => {
+    if (!picking) return
+    onHold(true)
+    return () => onHold(false)
+  }, [picking, onHold])
 
   // A drawer is a transient layer: touching anything else, or Escape, puts it away.
   useEffect(() => {
@@ -57,7 +72,7 @@ export function Dock(props: DockProps): ReactElement {
     const escape = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
-      ;({ bodies: bodyRef, options: moreRef })[drawer].current?.focus()
+      ;({ bodies: bodyRef, when: clockRef, options: moreRef })[drawer].current?.focus()
       setDrawer(null)
     }
     window.addEventListener('pointerdown', away)
@@ -90,12 +105,25 @@ export function Dock(props: DockProps): ReactElement {
         </span>
       </button>
 
-      {/* Then when: written by the instrument every frame, not by React. */}
-      <div className="sl-clock" role="timer" aria-label="Date and time, UTC">
+      {/* Then when: written by the instrument every frame, not by React, and the way to another date. */}
+      <button
+        ref={clockRef}
+        type="button"
+        className={`sl-clock${picking ? ' is-on' : ''}`}
+        aria-label={`${dayLabel(snap.ms)}. Go to another date`}
+        aria-expanded={picking}
+        onClick={(e) => {
+          const c = e.currentTarget
+          setOpened({ at: c.offsetLeft + c.offsetWidth / 2, ms: Date.now() })
+          toggle('when')
+        }}
+      >
         <span ref={dayRef} className="sl-clock-day" />
         <span ref={timeRef} className="sl-clock-time" />
         <span className="sl-clock-zone">UTC</span>
-      </div>
+      </button>
+      {/* Next to its opener, so Tab goes from the clock into it. */}
+      <When open={picking} ms={snap.ms} at={opened.at} opened={opened.ms} onPick={onPick} />
 
       {/* As on a live stream: lit while the clock plays the present, and the way back to it once it has left. */}
       <button

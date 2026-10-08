@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { AU_KM, LIGHT_KM_S } from '../sky/bodies'
 import { covered, crossesDisc, distanceLabel, lightLabel, luxLabel, sizeLabel } from './instrument'
 import { TAPE_S, Tape } from './tape'
-import { DEAD, clockLabel, dayLabel, dialOf, minuteLabel, notch, rateOf, speedLabel, speedSaid } from './time'
+import { DEAD, clockLabel, dayLabel, daysIn, dialOf, leadOf, minuteLabel, momentOf, notch, partsOf, rateOf, shiftMonths, speedLabel, speedSaid } from './time'
 
 describe('the clock', () => {
   const YEAR = 365.2425 * 86_400
@@ -54,6 +54,24 @@ describe('the clock', () => {
     expect(dayLabel(ms)).toBe('5 Oct 2026')
     expect(clockLabel(ms)).toBe('08:04:09')
     expect(minuteLabel(ms)).toBe('08:04')
+  })
+
+  it('finds its way round the calendar', () => {
+    const ms = Date.UTC(2024, 0, 31, 22, 15, 40)
+    expect(partsOf(ms)).toEqual({ year: 2024, month: 0, day: 31, hour: 22, minute: 15, second: 40 })
+    expect(momentOf(partsOf(ms))).toBe(ms)
+    expect(daysIn(2024, 1)).toBe(29)
+    expect(daysIn(2100, 1)).toBe(28)
+    // The 31st a month on is the last of February, at the same time.
+    expect(shiftMonths(ms, 1)).toBe(Date.UTC(2024, 1, 29, 22, 15, 40))
+    expect(shiftMonths(ms, -12)).toBe(Date.UTC(2023, 0, 31, 22, 15, 40))
+    expect(shiftMonths(ms, 13)).toBe(Date.UTC(2025, 1, 28, 22, 15, 40))
+    // Minutes past the hour carry into the next day.
+    expect(momentOf({ ...partsOf(ms), hour: 23, minute: 60, second: 0 })).toBe(Date.UTC(2024, 1, 1))
+    // 1 October 2026 is a Thursday, three days into a week that starts on Monday.
+    expect(leadOf(2026, 9)).toBe(3)
+    expect(leadOf(2024, 0)).toBe(0)
+    expect(momentOf({ year: 1000, month: 0, day: 1, hour: 0, minute: 0, second: 0 })).toBe(Date.UTC(1000, 0, 1))
   })
 })
 

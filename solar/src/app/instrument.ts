@@ -83,6 +83,8 @@ export interface Snapshot {
   expanded: boolean
   /** The moment on the clock, in words. */
   moment: string
+  /** The moment on the clock, UTC ms. */
+  ms: number
 }
 
 /** Every moon, and Pluto, is lit as the Moon is, but Titan, which is all haze. */
@@ -335,6 +337,8 @@ export class Instrument {
   private back = 1
   private scrubbing = false
   private resumeAfterScrub = false
+  /** A date is being picked: a clock faster than real time waits for it. */
+  private holding = false
   private announce = ''
   private observer: ResizeObserver
 
@@ -466,7 +470,7 @@ export class Instrument {
     const wall = Date.now()
     const real = wall - this.wall
     this.wall = wall
-    if (this.playing) {
+    if (this.playing && !(this.holding && this.dial !== 0)) {
       const next = this.ms + (this.dial === 0 ? real : dt * 1000 * rateOf(this.dial))
       if (next <= TIME_MIN || next >= TIME_MAX) {
         this.ms = Math.max(TIME_MIN, Math.min(TIME_MAX, next))
@@ -812,6 +816,22 @@ export class Instrument {
     this.playing = true
     this.touch('Now, at real speed')
     this.emit(true)
+  }
+
+  /** To a moment picked on the calendar, the clock going on as it was. */
+  goTo(ms: number): void {
+    const to = Math.max(TIME_MIN, Math.min(TIME_MAX, ms))
+    if (to === this.ms) return
+    this.branch()
+    this.ms = to
+    this.tape.jump(to)
+    this.eclipses.from = NaN
+    this.touch(`${dayLabel(to)}, ${clockLabel(to)} UTC`)
+    this.emit(true)
+  }
+
+  hold(on: boolean): void {
+    this.holding = on
   }
 
   /** Arrive a little before an eclipse, placed to watch it happen. */
@@ -1594,6 +1614,7 @@ export class Instrument {
       marks: this.tape.markings,
       expanded: !this.playing || this.scrubbing,
       moment: `${dayLabel(this.ms)}, ${clockLabel(this.ms)} UTC`,
+      ms: this.ms,
     }
   }
 }
