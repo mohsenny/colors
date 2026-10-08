@@ -106,8 +106,7 @@ export interface FieldRegion {
  * Partitive mixing: what the eye does at a distance, and the honest
  * counterpart to the transmittance product the sheets themselves are built
  * on. It is not a mean of the dyes. Bare lit surface counts as white and
- * counts by its area, so a nearly empty box is nearly white, which is the
- * reason the cast strengthens on its own as the field fills up.
+ * counts by its area, so a nearly empty box is nearly white.
  *
  * The regions the walk produces are NOT disjoint. A region for a set S is the
  * full intersection of S, and every region for a superset of S lies inside
@@ -285,8 +284,8 @@ export class Painter {
   private dpr = 1
   /**
    * The colour of the whole lit surface as of the last draw, linear sRGB, and
-   * how much of it the sheets cover. Read by the Stage, which gels the tubes
-   * with it. Mutated in place: nothing here allocates per frame.
+   * how much of it the sheets cover, worked out alongside the shares. Mutated
+   * in place: nothing here allocates per frame.
    */
   readonly field: [number, number, number] = [1, 1, 1]
   coverage = 0
@@ -513,7 +512,7 @@ export class Painter {
       // crowd 0.80 and then ran away, coverage reading 1.12 against a truth
       // of 0.858 at crowd 0.90 and 7.36 at 0.99, where the field came back
       // 4.9,4.4,4.8. Outside [0,1] entirely, and on the way there the field
-      // goes back UP (0.704 at crowd 0.85, 0.750 at 0.90), so the cast got
+      // goes back UP (0.704 at crowd 0.85, 0.750 at 0.90), so the field read
       // paler as the room closed. A phone at 390x780 with 4 sheets starts
       // diverging at crowd 0.65.
       let poly = [x0, y0, x1, y1, x2, y2, x3, y3]

@@ -170,6 +170,14 @@ export interface Viewport {
   slideCount: number
 }
 
+/** The glass the lamps are seen through, and how evenly they light it. See GLASS_MID. */
+export interface GlassTune {
+  size: number
+  depth: number
+  shape: number
+  glow: number
+}
+
 /** Everything the renderer needs that is not in `SimState`. */
 export interface RenderOptions {
   viewport: Viewport
@@ -181,13 +189,14 @@ export interface RenderOptions {
   reducedMotion: boolean
   /** Lamp colour bias, -1 warm to +1 cool. */
   warmth: number
+  /** GLASS_MID when absent. */
+  glass?: GlassTune
   /**
-   * How much of the field's own colour the tubes take, 0 to 1. At 0 the lamps
-   * are exactly what they have always been. The Instrument drives it off the
-   * packing, as one minus the same damp the sheets are slowed by, so the room
-   * changing colour and the field stopping are one state change.
+   * How packed the field is, 0 to 1: one minus the same damp the sheets are
+   * slowed by, so the tabs turning from hex to share and the field stopping
+   * are one state change.
    */
-  castStrength?: number
+  packing?: number
 }
 
 /** Callbacks the stage raises. All are user intent, never animation. */

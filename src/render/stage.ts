@@ -1,7 +1,7 @@
 import {
-  CAST_TAU,
   CORNER_INNER,
   CORNER_OUTER,
+  GLASS_MID,
   TAB_H,
   TAB_INSET,
   TAB_PROUD,
@@ -9,7 +9,7 @@ import {
   TAB_W,
 } from '../core/constants'
 import { lampsAt } from '../core/lamps'
-import type { Cast, Lamp } from '../core/lamps'
+import type { Lamp } from '../core/lamps'
 import { crowdDragTo, crowdLanded, inPaperGrab, litEdgePx, litRect } from '../core/lit'
 import { filmHex } from '../core/oklab'
 import { clampSide, sideBand, stockSizeFrac } from '../core/size'
@@ -243,9 +243,6 @@ export class Stage {
   private aspectNow = 1
 
   private viewport: Viewport | null = null
-  /** The cast, low-passed, linear sRGB. White until a field says otherwise. */
-  private readonly castHeld: [number, number, number] = [1, 1, 1]
-  private castT = 0
   private drag: DragState | null = null
   private hoveredId: number | null = null
   private framePx = -1
@@ -449,12 +446,12 @@ export class Stage {
 
   /**
    * The three tubes, as custom properties the stylesheet builds its gradients
-   * from. Rounded to bytes before comparison: on a 100 second cycle a tube's
-   * colour only changes a couple of times a second, and a style write on a
-   * full-viewport element is not something to do 60 times a second for nothing.
+   * from. Compared rounded: a tube's brightness only changes a couple of times
+   * a second, and a style write on a full-viewport element is not something to
+   * do 60 times a second for nothing.
    */
-  private writeLamps(t: number, warmth: number, cast: Cast | undefined): Lamp[] {
-    const lamps = lampsAt(t, warmth, cast)
+  private writeLamps(t: number, warmth: number): Lamp[] {
+    const lamps = lampsAt(t, warmth)
     for (let i = 0; i < lamps.length; i++) {
       const l = lamps[i] as Lamp
       const key = `${l.r} ${l.g} ${l.b}|${l.gain.toFixed(3)}`
@@ -464,33 +461,6 @@ export class Stage {
       this.root.style.setProperty(`--lb-tube-${i + 1}-i`, l.gain.toFixed(3))
     }
     return lamps
-  }
-
-  /**
-   * The cast the tubes get this frame. Low-passed, because the field follows
-   * the sheets and the sheets move at sheet speed: the lamps are the slowest
-   * thing on screen by an order of magnitude and the cast must not be what
-   * changes that. Held in linear sRGB, which is where the average was taken.
-   */
-  private castFor(t: number, opts: RenderOptions): Cast | undefined {
-    // Simulation time, so a scrub takes the cast with it. It stands still
-    // while paused, which would strand the cast if a sheet were dragged then,
-    // so a stalled clock still gets one frame's worth of settling.
-    const raw = t - this.castT
-    this.castT = t
-    const dt = raw > 0 && raw < 0.25 ? raw : 1 / 60
-
-    const f = this.painter.field
-    const a = this.castHeld
-    const k = 1 - Math.exp(-dt / CAST_TAU)
-    a[0] += ((f[0] as number) - a[0]) * k
-    a[1] += ((f[1] as number) - a[1]) * k
-    a[2] += ((f[2] as number) - a[2]) * k
-
-    // Tracked even at zero so turning the cast on picks up the field that is
-    // already there instead of swinging in from white.
-    const strength = opts.castStrength ?? 0
-    return strength > 0 ? { linear: a, strength } : undefined
   }
 
   private write(state: SimState, opts: RenderOptions): void {
@@ -512,11 +482,10 @@ export class Stage {
       this.root.classList.toggle('is-reduced', opts.reducedMotion)
     }
 
-    // The painter first, then the lamps: the cast is the field the painter
-    // just measured, so the other order hands the tubes the previous frame.
+    // The painter first: the glass lays its light under the sheets it just placed.
     this.painter.draw(state, opts)
-    const lamps = this.writeLamps(state.t, opts.warmth, this.castFor(state.t, opts))
-    this.glass.draw(vp, lamps, this.painter, opts.reducedMotion)
+    const lamps = this.writeLamps(state.t, opts.warmth)
+    this.glass.draw(vp, lamps, this.painter, state.modeMix, opts.reducedMotion, opts.glass ?? GLASS_MID)
 
     // Both, and off the state rather than off the viewport: the paper below is
     // drawn from `state.aspect`, so the strip that takes hold of it has to be
@@ -538,14 +507,12 @@ export class Stage {
     }
 
     /*
-     * How far the tabs have crossed from the hex to the share. The packing,
-     * exactly: the same number the tubes take their cast from, so the room
-     * changing colour and the tabs changing what they measure are one state
-     * change rather than two that nearly agree. It is a function of phi and
-     * of nothing else, so it is the same for every sheet and is written once
-     * on the root for all of them to inherit.
+     * How far the tabs have crossed from the hex to the share: the packing,
+     * exactly. It is a function of phi and of nothing else, so it is the same
+     * for every sheet and is written once on the root for all of them to
+     * inherit.
      */
-    const packed = clamp(opts.castStrength ?? 0, 0, 1)
+    const packed = clamp(opts.packing ?? 0, 0, 1)
     const fade = Math.round(packed * SHARE_FADE_STEPS) / SHARE_FADE_STEPS
     if (fade !== this.shareFade) {
       this.shareFade = fade

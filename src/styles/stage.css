@@ -48,11 +48,11 @@
   /* The three tubes. render/stage.ts rewrites these from the simulation clock,
      slowly: each is an sRGB triple plus a brightness scalar around 1. The
      values here are the neutral state the box is in before the first frame. */
-  --lb-tube-1: 255 250 240;
+  --lb-tube-1: 255 255 255;
   --lb-tube-1-i: 1;
-  --lb-tube-2: 248 250 253;
+  --lb-tube-2: 255 255 255;
   --lb-tube-2-i: 1;
-  --lb-tube-3: 255 251 243;
+  --lb-tube-3: 255 255 255;
   --lb-tube-3-i: 1;
 
   position: fixed;
@@ -86,10 +86,11 @@
    * were tried first: their halos met, the trough filled in and the box read as
    * an even white again.
    *
-   * Each tube's colour and brightness come from the simulation clock and drift
-   * over a minute and a half (core/lamps.ts), one warming while another cools.
-   * With the trough underneath, that warm-to-cool difference finally has
-   * something to be a difference FROM.
+   * Each tube's brightness breathes on the simulation clock (core/lamps.ts).
+   * Its colour is white unless the Light option says warm or cool.
+   *
+   * This is the surface without WebGL2. With it, render/glass.ts draws the
+   * box over this.
    */
   background-image:
     radial-gradient(

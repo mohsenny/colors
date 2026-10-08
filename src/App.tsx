@@ -102,11 +102,13 @@ export default function App() {
             }}
             slideCount={snapshot.slideCount}
             warmth={snapshot.warmth}
+            glass={snapshot.glass}
             onTogglePlay={() => instrument.togglePlay()}
             onRegenerate={() => instrument.regenerate()}
             onBlendChange={(mode) => instrument.setBlend(mode)}
             onSlideCountChange={(n) => instrument.setSlideCount(n)}
             onWarmthChange={(w) => instrument.setWarmth(w)}
+            onGlassChange={(g) => instrument.setGlass(g)}
             onPhoto={() => {
               void savePhoto('Lightbox', () => instrument.photo()).then(
                 (text) => text && setNote({ text, at: Date.now() }),

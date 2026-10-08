@@ -3,8 +3,9 @@ import { crowdCap, crowdInside, widestSpan } from '../core/lit'
 import { filmHex } from '../core/oklab'
 import { Rng, randomSeed } from '../core/rng'
 import { stockSizeFrac } from '../core/size'
-import type { BlendMode, Dye, SlideState, Viewport } from '../core/types'
+import type { BlendMode, Dye, GlassTune, SlideState, Viewport } from '../core/types'
 import { generatePalette } from '../palette/palette'
+import { glassAt } from '../render/glass'
 import { Stage } from '../render/stage'
 import { History } from '../sim/history'
 import { Simulation, crowdDamp } from '../sim/simulation'
@@ -42,6 +43,8 @@ export interface InstrumentSnapshot {
   slideCount: number
   /** Lamp colour bias, -1 warm to +1 cool. */
   warmth: number
+  /** The Glass dial, 0 to 1. It opens halfway, on GLASS_MID. */
+  glass: number
   /** Text for the polite live region. Purely for screen readers. */
   announcement: string
   /** Up to three colours off the glass, most colourful first, as hex. */
@@ -122,6 +125,8 @@ export class Instrument {
    */
   private countOverride: number | null = null
   private warmth = 0
+  private glass = 0.5
+  private glassTune: GlassTune = glassAt(this.glass)
   /**
    * How far the paper has come in, 0 to 1, as the pointer last left it.
    *
@@ -264,25 +269,10 @@ export class Instrument {
       hoveredId: this.hoveredId,
       reducedMotion: this.reducedMotion,
       warmth: this.warmth,
-      /*
-       * The cast is the packing, exactly: one minus the same damp the sheets
-       * are slowed by, off the same function. The room takes the field's
-       * colour at the rate the field stops moving, so there is one state
-       * change to read rather than two that nearly agree.
-       *
-       * It has to be the packing and not the field's own chroma. A real field
-       * is far less colourful than it looks (mean chroma 0.0047 at 35%
-       * covered, 0.0141 at 85%, over 40 eight-sheet rolls) and CAST_GAIN of 6
-       * against a CAST_C_MAX of 0.05 means the gel is already at its cap at
-       * any of those, so the sheets decide the hue and can never decide the
-       * strength. That is the behaviour worth having: a crowded field of pale
-       * sheets should still cast, and a deliberately monochrome roll should
-       * not blow the room out just for being saturated.
-       *
-       * Read off the state and not off the pointer field, so a scrub takes
-       * the cast back with the room.
-       */
-      castStrength:
+      glass: this.glassTune,
+      // One minus the same damp the sheets are slowed by. Read off the state
+      // and not off the pointer field, so a scrub takes the tabs back with it.
+      packing:
         1 - crowdDamp(this.sim.state.slides, this.sim.state.aspect, this.sim.state.crowd),
     })
   }
@@ -758,6 +748,16 @@ export class Instrument {
     this.notify()
   }
 
+  /** The Glass dial, 0 to 1. Takes effect on the next frame. */
+  setGlass(t: number): void {
+    if (!Number.isFinite(t)) return
+    const glass = Math.min(1, Math.max(0, t))
+    if (glass === this.glass) return
+    this.glass = glass
+    this.glassTune = glassAt(glass)
+    this.notify()
+  }
+
   private onReduceChange = (e: MediaQueryListEvent): void => {
     this.reducedMotion = e.matches
     this.notify()
@@ -791,6 +791,7 @@ export class Instrument {
       expanded: !this.isPlaying() || this.playback === 'scrubbing',
       slideCount: this.viewport.slideCount,
       warmth: this.warmth,
+      glass: this.glass,
       announcement: this.announcement,
       swatches: this.swatches(),
       rolls: this.rolls,

@@ -383,6 +383,97 @@
   color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
 }
 
+/* ----------------------------------------------------------------- glass */
+
+/* Light and the glass together, a hairline under the sheet count. */
+.lb-opt-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--lb-hairline, rgba(30, 34, 48, 0.1));
+}
+
+/* The same track and handle as the paused timeline, so the drawer reads as part
+   of the dock. */
+.lb-opt-range {
+  /* The dot is 10px, its box bigger so a finger can catch it: iOS only starts
+     a drag on the thumb itself. */
+  --lb-thumb: 20px;
+  --lb-thumb-shade: 0.16;
+  flex: 1 1 auto;
+  width: 120px;
+  height: var(--lb-thumb);
+  margin: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  touch-action: none;
+}
+
+.lb-opt-range:hover {
+  --lb-thumb-shade: 0.24;
+}
+
+@media (pointer: coarse) {
+  .lb-opt-range {
+    --lb-thumb: 28px;
+  }
+}
+
+.lb-opt-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(30, 34, 48, 0.09);
+}
+
+.lb-opt-range::-moz-range-track {
+  height: 4px;
+  border-radius: var(--lb-r-pill, 999px);
+  background: rgba(30, 34, 48, 0.09);
+}
+
+.lb-opt-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--lb-thumb);
+  height: var(--lb-thumb);
+  margin-top: calc((4px - var(--lb-thumb)) / 2);
+  border: 0;
+  background:
+    radial-gradient(circle, var(--lb-panel-hover, rgba(255, 255, 255, 0.99)) 4.5px, transparent 5px),
+    radial-gradient(circle, transparent 4.5px, rgba(30, 34, 48, var(--lb-thumb-shade)) 5px, transparent 5.6px),
+    radial-gradient(circle at 50% calc(50% + 1px), rgba(30, 34, 48, var(--lb-thumb-shade)) 4.5px, transparent 7px);
+}
+
+.lb-opt-range::-moz-range-thumb {
+  width: var(--lb-thumb);
+  height: var(--lb-thumb);
+  border: 0;
+  background:
+    radial-gradient(circle, var(--lb-panel-hover, rgba(255, 255, 255, 0.99)) 4.5px, transparent 5px),
+    radial-gradient(circle, transparent 4.5px, rgba(30, 34, 48, var(--lb-thumb-shade)) 5px, transparent 5.6px),
+    radial-gradient(circle at 50% calc(50% + 1px), rgba(30, 34, 48, var(--lb-thumb-shade)) 4.5px, transparent 7px);
+}
+
+.lb-opt-range:focus-visible {
+  outline: 2px solid var(--lb-focus, rgba(26, 30, 44, 0.55));
+  outline-offset: 2px;
+  border-radius: var(--lb-r-pill, 999px);
+}
+
+/* Tabular, so the row does not jog as a value goes from 0.95 to 1.00. */
+.lb-opt-value {
+  flex: 0 0 auto;
+  min-width: 34px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--lb-ink-faint, rgba(26, 26, 30, 0.34));
+}
+
 /* --------------------------------------------------------------- stepper */
 
 .lb-stepper {

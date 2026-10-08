@@ -317,84 +317,29 @@ export const DRIFT_KEEP_DEG = 16
 export const DRIFT_MIN_DEG = 5
 
 // --- the lamps ----------------------------------------------------------------
-/**
- * Three tubes behind the diffuser, each with its own colour temperature, each
- * drifting. Two periods per tube, deliberately not harmonics, so the three never
- * line up twice: one warms while another cools and the pattern never repeats
- * inside a sitting. An order of magnitude slower than the slide colours, which
- * is the point. You should notice the room has changed, not watch it change.
- */
+/** Three tubes behind the diffuser. White unless the temperature option says otherwise. */
 export const TUBE_COUNT = 3
-export const TUBE_SLOW_S = 104
-export const TUBE_FAST_S = 47
+/** Seconds for one tube's brightness to breathe in and out, before each tube's own spread. */
+export const TUBE_PERIOD_S = 64
 /**
- * Warm and cool ends of the drift, as sRGB byte triples. Both ends peak at 255
- * and `lampsAt` renormalises everything between them to do the same, because a
- * straight interpolation between two tints passes through a dull grey at the
- * midpoint: the first version spent most of its time near (246, 247, 244) and
- * the whole box looked switched off. A lamp is always at full brightness. What
+ * Warm and cool, as sRGB byte triples, both peaking at 255: what the Warm and
+ * Cool options turn the tubes to. A lamp is always at full brightness. What
  * changes is its colour.
  */
 export const TUBE_WARM = [255, 246, 226] as const
 export const TUBE_COOL = [231, 243, 255] as const
 /** Brightness wobble, a fraction of full. Under 8% or it reads as a flicker. */
 export const TUBE_GAIN = 0.075
-/**
- * How far the warmth control can push the centre of the drift, on the same
- * 0-to-1 axis `lampsAt` interpolates along. Not a bulb colour picker: the tubes
- * keep drifting either way, and all this does is decide which end they spend
- * more of their time near. A picker would freeze them, and the one thing worth
- * keeping about this lightbox is that it is never quite the same twice.
- */
-export const TUBE_WARMTH_BIAS = 0.34
 
+// --- the glass ----------------------------------------------------------------
 /**
- * The cast: the tubes taking their colour from the field the sheets are making.
- *
- * Built as a GEL, not as a tint. The obvious construction is to nudge the
- * tube's own colour toward the field's hue and renormalise, and it does
- * nothing at all: a tube sits at L 0.986, where sRGB holds a maximum chroma of
- * 0.0069 at red and 0.0066 at blue, so a cap of 0.02 and a cap of 0.09 both
- * come back 255,248,247. Identical bytes. Renormalising to full brightness is
- * exactly the step that kills it.
- *
- * So the cast is built at a lightness where the gamut has room, normalised to
- * peak 1, and multiplied into the tube channel-wise. That is what laying a gel
- * over a fluorescent tube is, and the existing `k = 255 / max` carries the
- * brightness back afterwards, so every tube is still at full brightness and
- * `gain` is still the only thing that says otherwise.
- *
- * The gel's construction lightness is the strength control, and it is the one
- * number here worth looking at rather than deriving. Measured channel spreads
- * at cast chroma 0.06: L 0.999 gives 19 to 21, which is today to the byte.
- * L 0.97 gives 6 to 56. L 0.90 gives 34 to 80. L 0.78 gives 53 to 89, which is
- * a nightclub. Today's entire warm-to-cool range is 29, so 0.90 is about two
- * and a half times the whole existing warmth control.
+ * The glass, on one dial from 0 to 1: flat glass in an even glow at 0, deep
+ * glass over a dimmer box at 1, and GLASS_MID halfway, where the box opens.
+ * Size and depth multiply the base cell and bend, shape runs 2 for a round cell
+ * to 12 for a square one, glow is how far the dimmer parts are lifted to white.
  */
-export const CAST_GEL_L = 0.9
-/**
- * Where the gel is built, sRGB holds at most 0.052 of chroma at hue 30 and
- * 0.049 at hue 260, so this sits right at the wall for the two weakest hues
- * and is about as hue-fair as one absolute number gets. It is a safety rail
- * for a deliberately monochrome roll, not the strength control.
- */
-export const CAST_C_MAX = 0.05
-/**
- * A real field is far less colourful than it looks. Area-weighted against the
- * bare lit surface over 40 eight-sheet rolls: mean chroma 0.0047 at a third
- * covered, 0.0088 at 60%, 0.0141 at 85%. Against a cap of 0.05 that is nothing,
- * so the field's chroma is amplified before it is capped. The hue is never
- * touched: this decides how much of the field's colour reaches the tube, not
- * which colour it is.
- */
-export const CAST_GAIN = 6
-/**
- * Seconds for the cast to follow the field. The lamps are the slowest thing on
- * screen on purpose and the cast must not make them the fastest, but it also
- * cannot lag a deliberate drag so far that the room is answering the previous
- * question. It also keeps the byte-quantised style write off the 60Hz path.
- */
-export const CAST_TAU = 1.2
+export const GLASS_MID = { size: 2.7, depth: 1.1, shape: 2, glow: 0.15 } as const
+export const GLASS_DEPTH_MAX = 2.5
 
 // --- crowding -----------------------------------------------------------------
 /**

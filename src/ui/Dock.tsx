@@ -19,11 +19,13 @@ export interface DockProps {
   /** Passed straight through to Options. */
   slideCount: number
   warmth: number
+  glass: number
   onTogglePlay(): void
   onRegenerate(): void
   onBlendChange(mode: BlendMode): void
   onSlideCountChange(count: number): void
   onWarmthChange(warmth: number): void
+  onGlassChange(glass: number): void
   onPhoto(): void
 }
 
@@ -141,11 +143,13 @@ export function Dock(props: DockProps): ReactElement {
     timeline,
     slideCount,
     warmth,
+    glass,
     onTogglePlay,
     onRegenerate,
     onBlendChange,
     onSlideCountChange,
     onWarmthChange,
+    onGlassChange,
     onPhoto,
   } = props
   const [optionsOpen, setOptionsOpen] = useState(false)
@@ -275,8 +279,10 @@ export function Dock(props: DockProps): ReactElement {
         open={optionsOpen}
         slideCount={slideCount}
         warmth={warmth}
+        glass={glass}
         onSlideCountChange={onSlideCountChange}
         onWarmthChange={onWarmthChange}
+        onGlassChange={onGlassChange}
       />
     </div>
   )

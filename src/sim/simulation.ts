@@ -157,7 +157,7 @@ export function packDamp(phi: number, phiOpen: number): number {
 
 /**
  * Both of the above, from exactly the three things the history ring restores.
- * One entry point, so the renderer's cast and the simulation's motion can never
+ * One entry point, so the tabs' packing and the simulation's motion can never
  * disagree about how packed the field is: they are the same number.
  */
 export function crowdDamp(slides: readonly Packable[], aspect: number, crowd: number): number {
@@ -646,7 +646,7 @@ export class Simulation {
      * one number that says how much this field is moving.
      *
      * Reduced motion does not cap the gesture and the three states do exist
-     * there, but they are read almost entirely through the cast: REDUCED_SPEED
+     * there, but they are read almost entirely through the tabs: REDUCED_SPEED
      * has already taken 84% of the travel, so the difference between Loose and
      * Packed is a sixth of a difference that was small to begin with. That is
      * the right way round. The gesture is direct manipulation and answering it

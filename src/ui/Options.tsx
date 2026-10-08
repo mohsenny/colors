@@ -8,8 +8,11 @@ export interface OptionsProps {
   slideCount: number
   /** Lamp colour bias, -1 warm to +1 cool. */
   warmth: number
+  /** The glass, 0 flat in an even glow to 1 deep over a dimmer box. */
+  glass: number
   onSlideCountChange(count: number): void
   onWarmthChange(warmth: number): void
+  onGlassChange(glass: number): void
 }
 
 const WARMTHS: ReadonlyArray<{ label: string; value: number }> = [
@@ -32,7 +35,7 @@ const WARMTHS: ReadonlyArray<{ label: string; value: number }> = [
  * keep their identity across an open and close.
  */
 export function Options(props: OptionsProps): ReactElement {
-  const { open, slideCount, warmth, onSlideCountChange, onWarmthChange } = props
+  const { open, slideCount, warmth, glass, onSlideCountChange, onWarmthChange, onGlassChange } = props
   const atMin = slideCount <= SLIDE_COUNT_MIN
   const atMax = slideCount >= SLIDE_COUNT_MAX
 
@@ -73,30 +76,50 @@ export function Options(props: OptionsProps): ReactElement {
         </div>
       </div>
 
-      <div className="lb-opt-row">
-        <span className="lb-opt-label" id="lb-opt-light">
-          Light
-        </span>
-        <div
-          className="lb-seg lb-seg-3"
-          role="group"
-          aria-labelledby="lb-opt-light"
-          data-index={WARMTHS.findIndex((w) => w.value === warmth)}
-        >
-          <span className="lb-seg-indicator" aria-hidden="true" />
-          {WARMTHS.map((w) => (
-            <button
-              key={w.label}
-              type="button"
-              className="lb-seg-btn"
-              aria-pressed={warmth === w.value}
-              tabIndex={open ? undefined : -1}
-              onClick={() => onWarmthChange(w.value)}
-            >
-              {w.label}
-            </button>
-          ))}
+      <div className="lb-opt-group">
+        <div className="lb-opt-row">
+          <span className="lb-opt-label" id="lb-opt-light">
+            Light
+          </span>
+          <div
+            className="lb-seg lb-seg-3"
+            role="group"
+            aria-labelledby="lb-opt-light"
+            data-index={WARMTHS.findIndex((w) => w.value === warmth)}
+          >
+            <span className="lb-seg-indicator" aria-hidden="true" />
+            {WARMTHS.map((w) => (
+              <button
+                key={w.label}
+                type="button"
+                className="lb-seg-btn"
+                aria-pressed={warmth === w.value}
+                tabIndex={open ? undefined : -1}
+                onClick={() => onWarmthChange(w.value)}
+              >
+                {w.label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        <label className="lb-opt-row">
+          <span className="lb-opt-label">Glass</span>
+          <input
+            type="range"
+            className="lb-opt-range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={glass}
+            aria-valuetext={`${Math.round(glass * 100)}%`}
+            tabIndex={open ? undefined : -1}
+            onChange={(e) => onGlassChange(Number(e.target.value))}
+          />
+          <span className="lb-opt-value" aria-hidden="true">
+            {Math.round(glass * 100)}%
+          </span>
+        </label>
       </div>
     </div>
   )
