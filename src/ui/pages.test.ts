@@ -21,12 +21,17 @@ describe('hrefOf', () => {
 })
 
 describe('the lines under the title', () => {
-  for (const app of APPS) {
+  it('leave the CV to its name', () => {
+    expect(APPS.find((app) => app.id === 'mohsen')?.line).toBeUndefined()
+  })
+
+  for (const app of APPS.filter((a) => a.id !== 'mohsen')) {
     it(`say what ${app.id} is, short and without a dash`, () => {
-      expect(app.line.trim()).not.toBe('')
-      expect(app.line.length).toBeLessThanOrEqual(60)
+      const line = app.line ?? ''
+      expect(line.trim()).not.toBe('')
+      expect(line.length).toBeLessThanOrEqual(60)
       // The en and the em dash, and a hyphen spaced out to stand in for one.
-      expect(app.line).not.toMatch(/[\u2013\u2014]| - /)
+      expect(line).not.toMatch(/[\u2013\u2014]| - /)
     })
   }
 })

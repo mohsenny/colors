@@ -43,7 +43,7 @@ function lineOf(app: App): string {
  *
  * A mouse resting on a name, or the keys tabbing to it, brings up a line under
  * the row saying what that page is, the one you are in too, so it can be
- * reached by Tab. Along the row the line changes with the name, and only
+ * reached by Tab. The CV has none: its name says it. Along the row the line changes with the name, and only
  * leaving the row takes it away. A finger taps and goes there, and brings up
  * nothing. Each name is described by its line, and the lines are hidden from
  * a screen reader otherwise, so it hears each one once.
@@ -77,15 +77,17 @@ export function Title({ active }: { active: App }): ReactElement {
       }}
     >
       {APPS.map((app) => {
+        // A name with no line takes the last one away rather than leaving it up.
+        const say = (): void => (app.line ? tell(app.id) : setTelling(false))
         const name = {
           className: 'lb-title-name',
-          'aria-describedby': lineOf(app.id),
+          'aria-describedby': app.line ? lineOf(app.id) : undefined,
           onPointerEnter: (e: PointerEvent<HTMLElement>) => {
-            if (e.pointerType === 'mouse') tell(app.id)
+            if (e.pointerType === 'mouse') say()
           },
           // A click can leave focus on a name too, and that tells nothing.
           onFocus: (e: FocusEvent<HTMLElement>) => {
-            if (e.currentTarget.matches(':focus-visible')) tell(app.id)
+            if (e.currentTarget.matches(':focus-visible')) say()
           },
         }
         return app.id === active ? (
@@ -99,11 +101,13 @@ export function Title({ active }: { active: App }): ReactElement {
         )
       })}
       <span className="lb-title-lines" aria-hidden="true">
-        {APPS.map((app) => (
-          <span key={app.id} id={lineOf(app.id)} hidden={app.id !== said}>
-            {app.line}
-          </span>
-        ))}
+        {APPS.map((app) =>
+          app.line ? (
+            <span key={app.id} id={lineOf(app.id)} hidden={app.id !== said}>
+              {app.line}
+            </span>
+          ) : null,
+        )}
       </span>
     </nav>
   )

@@ -1,9 +1,9 @@
 /** The four pages, in the order the title row names them. */
 export type App = 'mohsen' | 'solar' | 'gravity' | 'lightbox'
 
-/** Each with the line that says what it is, shown under the row while its name is pointed at. */
-export const APPS: ReadonlyArray<{ id: App; name: string; line: string }> = [
-  { id: 'mohsen', name: 'Mohsen', line: 'My CV, told in six chapters' },
+/** Each instrument with the line that says what it is, shown under the row while its name is pointed at. The CV needs none. */
+export const APPS: ReadonlyArray<{ id: App; name: string; line?: string }> = [
+  { id: 'mohsen', name: 'Mohsen' },
   { id: 'solar', name: 'Solar', line: 'The solar system at true scale, seen from any planet or moon' },
   { id: 'gravity', name: 'Gravity', line: 'A simulation of gravity: a mass bending space in 3D' },
   { id: 'lightbox', name: 'Lightbox', line: 'Coloured film on a light table, mixing colours nobody chose' },
