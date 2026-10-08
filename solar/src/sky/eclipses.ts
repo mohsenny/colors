@@ -1,11 +1,11 @@
 /*
  * The eclipses either side of a moment, from Astronomy Engine's searches. A
  * solar eclipse is the Moon's shadow on the Earth; a lunar one is the Earth's
- * shadow on the Moon.
+ * shadow on the Moon. They are found over the years the Moon's theory holds,
+ * 2000 BC to AD 3000; past those the Moon's place is too rough to say.
  */
 
 import { EclipseKind, NextGlobalSolarEclipse, NextLunarEclipse, SearchGlobalSolarEclipse, SearchLunarEclipse } from 'astronomy-engine'
-import { TIME_MAX, TIME_MIN } from './ephemeris'
 
 export type EclipseType = 'solar' | 'lunar'
 
@@ -27,6 +27,10 @@ const KIND: Record<EclipseKind, string> = {
 }
 
 const DAY_MS = 86_400_000
+
+/** The years eclipses are found over, as UTC ms. */
+export const ECLIPSES_FROM = Date.UTC(-1999, 0, 1)
+export const ECLIPSES_TO = Date.UTC(3000, 0, 1)
 
 /** Within three hours of its peak the clock is at an eclipse, rather than between two. */
 export const NEAR_MS = 3 * 3_600_000
@@ -72,22 +76,27 @@ export function previousEclipse(type: EclipseType, ms: number): Eclipse {
 
 const ends: Partial<Record<EclipseType, [number, number]>> = {}
 
-/** The peaks of the first and the last eclipse of a type in the clock's range, found the first time they are asked for. */
+/** The peaks of the first and the last eclipse of a type in their years, found the first time they are asked for. */
 function rangeOf(type: EclipseType): [number, number] {
-  return (ends[type] ??= [nextEclipse(type, TIME_MIN).peak, previousEclipse(type, TIME_MAX).peak])
+  return (ends[type] ??= [nextEclipse(type, ECLIPSES_FROM).peak, previousEclipse(type, ECLIPSES_TO).peak])
 }
 
-/** The eclipse of a type the clock is at, or else the next to come. */
+/** `ms`, or the nearer end of the years eclipses are found over. */
+export function withinEclipses(ms: number): number {
+  return Math.max(ECLIPSES_FROM, Math.min(ECLIPSES_TO, ms))
+}
+
+/** The eclipse of a type the clock is at, or else the next to come. Before their years, the first; after, one past the last. */
 export function nearEclipse(type: EclipseType, ms: number): Eclipse {
-  return nextEclipse(type, ms - NEAR_MS)
+  return nextEclipse(type, withinEclipses(ms) - NEAR_MS)
 }
 
 /** One type of eclipse as the clock stands among them. */
 export interface EclipseSteps {
-  /** The one it is at or coming to. Null past the end of the clock's range, or if the search failed. */
+  /** The one it is at or coming to. Null past the last, or if the search failed. */
   e: Eclipse | null
   at: boolean
-  /** Whether there is one in the clock's range to step back to, and one to step on to. */
+  /** Whether there is one to step back to, and one to step on to. */
   back: boolean
   on: boolean
 }
@@ -103,7 +112,7 @@ export function stepsFrom(e: Eclipse, ms: number): EclipseSteps {
 /**
  * Where a step goes from `ms`: from an eclipse the clock is at, the one
  * before or after it; from between two, the one before or the next. Null
- * past either end of the clock's range.
+ * past the first or the last.
  */
 export function stepTo(type: EclipseType, ms: number, way: 1 | -1): Eclipse | null {
   const e = nearEclipse(type, ms)

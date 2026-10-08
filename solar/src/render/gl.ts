@@ -56,6 +56,10 @@ export interface OrbitDraw {
   alpha: Float32Array
   count: number
   ink: number
+  /** Its colour, white if none. */
+  color?: readonly [number, number, number]
+  /** Drawn soft and wide, a glow along the path rather than a line. */
+  glow?: boolean
 }
 
 export interface FrameDraw {
@@ -71,6 +75,12 @@ export interface FrameDraw {
   lens: number
   /** Real seconds, for the Sun's surface to boil on. */
   clock: number
+  /**
+   * The Sun as it is at the time: its colour as a share of today's, how many
+   * of its granules go round it, and how far it has settled, 0 to 1, into a
+   * white dwarf's even glow.
+   */
+  sun: { tint: readonly [number, number, number]; cells: number; calm: number }
 }
 
 /*
@@ -88,6 +98,15 @@ void main() {
   vPlane = uBox.xy + aCorner * uBox.zw;
   gl_Position = vec4(vPlane / uScale, 0.0, 1.0);
 }`
+
+// The Sun's own colours are drawn warm for the white of it now, and no tint
+// of them reaches the white of a hotter star: by 7,000 K they are taken all
+// the way to white before they are tinted.
+const HOTTER = `
+vec3 hotter(vec3 c, vec3 tint) {
+  return mix(c, vec3(max(c.r, max(c.g, c.b))), clamp(4.0 * (1.0 - tint.r), 0.0, 1.0)) * tint;
+}
+`
 
 const COMMON = `
 const float PI = 3.14159265;
@@ -120,7 +139,7 @@ vec3 encode(vec3 c) {
   vec3 s = mix(c, 1.0 - 0.2 * exp(-(c - 0.8) / 0.2), step(0.8, c));
   return pow(max(s, 0.0), vec3(1.0 / 2.2));
 }
-`
+${HOTTER}`
 
 const BODY_FS = `#version 300 es
 precision highp float;
@@ -151,12 +170,15 @@ uniform float uDotA;
 uniform float uDotMix;
 uniform float uDotR;
 uniform float uClock;
+uniform vec3 uSunlight;
+uniform vec3 uTint;
+uniform float uCells;
+uniform float uCalm;
 uniform sampler2D uMap;
 uniform sampler2D uNight;
 uniform sampler2D uClouds;
 uniform sampler2D uRings;
 ${COMMON}
-const vec3 SUNLIGHT = vec3(1.0, 0.97, 0.92);
 const vec3 DUSK = vec3(1.0, 0.42, 0.16);
 
 // Into the space where the body is a unit sphere, and back.
@@ -261,23 +283,27 @@ void main() {
     // middle, darker and redder toward the limb, where the eye only reaches
     // the cooler gas higher up.
     float mu = cosE;
+    // A white dwarf has no fire left to boil: the map evens out to its mean.
+    albedo = mix(albedo, textureLod(uMap, vec2(0.5), 12.0).rgb, uCalm);
     float n = noise(nb * 26.0 + vec3(uClock * 0.05)) * 0.6 + noise(nb * 70.0 - vec3(uClock * 0.09)) * 0.4;
-    vec3 gp = nb * 900.0;
+    vec3 gp = nb * uCells;
     float close = 1.0 - smoothstep(0.25, 0.8, length(fwidth(gp)));
     float gran = close > 0.0 ? (0.5 - cells(gp, uClock * 0.25)) * close : 0.0;
-    vec3 c = albedo * (0.82 + 0.36 * n) * (1.0 + 0.9 * gran);
+    vec3 c = albedo * mix((0.82 + 0.36 * n) * (1.0 + 0.9 * gran), 1.0, uCalm);
     c *= (0.34 + 0.66 * sqrt(mu)) * vec3(1.0, 0.86 + 0.14 * mu, 0.7 + 0.3 * mu);
     // Toward yellow in the middle, by shifting the hue rather than adding
     // white, so it never goes pink.
     float heat = smoothstep(0.45, 1.0, mu);
     c.g += c.r * 0.18 * heat;
     c.b += c.r * 0.03 * heat;
-    disc = encode(c * 1.3);
+    // In the Sun's colour at the time, as bright as it is now.
+    vec3 t = hotter(c, uTint);
+    disc = encode(t * (max(c.r, max(c.g, c.b)) / max(max(t.r, t.g), max(t.b, 1e-4))) * 1.3);
   } else if (uShade == 1) {
     // A moon: dust and frost, which throw light straight back, so a full
     // Moon is a flat disc rather than a ball.
     float mu0 = max(cosI, 0.0);
-    lin = albedo * (2.0 * mu0 / (mu0 + cosE + 1e-4)) * shade * SUNLIGHT * 1.1;
+    lin = albedo * (2.0 * mu0 / (mu0 + cosE + 1e-4)) * shade * uSunlight * 1.1;
     // Inside the Earth's shadow, only light bent through the Earth's air
     // arrives, and every sunset on the Earth at once turns it copper.
     float umbra = pow(1.0 - shade, 3.0) * uCopper;
@@ -294,15 +320,15 @@ void main() {
     float glint = pow(max(dot(N, H), 0.0), 90.0) * sea * (1.0 - cloud) * 0.9 * smoothstep(0.0, 0.1, cosI);
     vec3 ground = albedo * lit + vec3(1.0, 0.9, 0.75) * glint;
     ground = mix(ground, vec3(0.9) * lit, cloud * 0.9);
-    lin = ground * shade * SUNLIGHT;
+    lin = ground * shade * uSunlight;
     float dark = 1.0 - smoothstep(-0.14, 0.04, cosI);
     lin += lights * vec3(1.0, 0.76, 0.46) * 1.5 * dark * (1.0 - 0.75 * cloud);
   } else if (uShade == 3) {
     // Gas and cloud tops: darker toward the limb.
     float mu0 = max(cosI, 0.0);
-    lin = albedo * mu0 * (0.68 + 0.32 * cosE) * shade * SUNLIGHT;
+    lin = albedo * mu0 * (0.68 + 0.32 * cosE) * shade * uSunlight;
   } else {
-    lin = albedo * max(cosI, 0.0) * shade * SUNLIGHT;
+    lin = albedo * max(cosI, 0.0) * shade * uSunlight;
   }
 
   // Air. Looking down through it a little of the ground is lost and the
@@ -342,7 +368,7 @@ void main() {
       bool litFace = sunUp * -uPole.z > 0.0;
       float elev = abs(dot(uPole, Lr));
       float lit = litFace ? 0.5 + 0.5 * sqrt(elev) : 0.06 + 0.4 * (1.0 - rs.a);
-      vec3 rc = encode(rs.rgb * lit * shadow * SUNLIGHT);
+      vec3 rc = encode(rs.rgb * lit * shadow * uSunlight);
       float ra = rs.a * 0.95;
       res = vec4(rc * ra, ra) + res * (1.0 - ra);
     }
@@ -374,6 +400,8 @@ uniform float uSeen;
 uniform float uCorona;
 uniform vec3 uCover;
 uniform float uCoverAng;
+uniform vec3 uTint;
+${HOTTER}
 void main() {
   vec3 dl = normalize(uToLocal * vec3(2.0 * vPlane, dot(vPlane, vPlane) - 1.0));
   float th = atan(length(dl.xy), dl.z);
@@ -392,7 +420,7 @@ void main() {
   float near = 1.0 - smoothstep(0.3, 0.7, uAng);
   float halo = pow(rh / (th + rh), 2.3) * off * near;
   float rim = exp(-max(th - uAng, 0.0) / min(0.1 * uAng, 36.0 * uPx)) * off * (1.0 - small);
-  vec3 c = (vec3(1.0, 0.9, 0.7) * core * 1.3 + vec3(1.0, 0.7, 0.36) * halo * 0.5 + vec3(1.0, 0.6, 0.2) * rim * 0.4) * uSeen;
+  vec3 c = (hotter(vec3(1.0, 0.9, 0.7), uTint) * core * 1.3 + hotter(vec3(1.0, 0.7, 0.36), uTint) * halo * 0.5 + hotter(vec3(1.0, 0.6, 0.2), uTint) * rim * 0.4) * uSeen;
   // A faint glow spread over hundreds of pixels steps visibly in eight bits: dither it.
   c += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0 * step(0.002, c.r);
   float cover = atan(length(cross(dl, uCover)), dot(dl, uCover));
@@ -456,10 +484,12 @@ layout(location = 3) in vec3 aPos;
 layout(location = 4) in float aAlpha;
 uniform mat3 uView;
 uniform vec2 uScale;
+uniform vec2 uOffset;
 out float vAlpha;
 void main() {
   vec3 v = uView * aPos;
-  gl_Position = vec4(v.xy / uScale, 0.0, length(v) - v.z);
+  float w = length(v) - v.z;
+  gl_Position = vec4(v.xy / uScale + uOffset * w, 0.0, w);
   vAlpha = aAlpha;
 }`
 
@@ -467,10 +497,11 @@ const ORBIT_FS = `#version 300 es
 precision mediump float;
 in float vAlpha;
 uniform float uInk;
+uniform vec3 uColor;
 out vec4 o;
 void main() {
   float a = vAlpha * uInk;
-  o = vec4(vec3(a), a);
+  o = vec4(uColor * a, a);
 }`
 
 function compile(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
@@ -507,6 +538,16 @@ const SPRITE = Math.sqrt(12.8)
 const HALO = (0.3 * Math.PI) / 180
 /** Thousands of km: the unit orbit lines are handed over in. */
 export const ORBIT_UNIT = 1000
+/** Where a line is drawn, CSS px off, and how strongly. */
+const LINE_PASS: ReadonlyArray<readonly [number, number, number]> = [[0, 0, 1]]
+const GLOW_PASSES: ReadonlyArray<readonly [number, number, number]> = [
+  [0, 0, 0.6],
+  ...[1.5, 3].flatMap((r, i) =>
+    Array.from({ length: 8 }, (_, k) => [r * Math.cos((k * Math.PI) / 4), r * Math.sin((k * Math.PI) / 4), i ? 0.15 : 0.35] as const),
+  ),
+]
+/** Today's sunlight, a little warm of white. */
+const SUNLIGHT = [1, 0.97, 0.92] as const
 
 export class Renderer {
   private gl: WebGL2RenderingContext
@@ -689,8 +730,14 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, alpha, gl.STREAM_DRAW)
       at = 0
       for (const o of frame.orbits) {
-        gl.uniform1f(this.ou.uInk, o.ink)
-        gl.drawArrays(gl.LINE_STRIP, at, o.count)
+        const c = o.color ?? [1, 1, 1]
+        gl.uniform3f(this.ou.uColor, c[0], c[1], c[2])
+        // A glow is the line drawn again round itself, a pixel and a half off and three, fainter.
+        for (const [dx, dy, k] of o.glow ? GLOW_PASSES : LINE_PASS) {
+          gl.uniform2f(this.ou.uOffset, (dx * 2 * this.dpr) / w, (dy * 2 * this.dpr) / h)
+          gl.uniform1f(this.ou.uInk, o.ink * k)
+          gl.drawArrays(gl.LINE_STRIP, at, o.count)
+        }
         at += o.count
       }
     }
@@ -747,6 +794,7 @@ export class Renderer {
       gl.uniform1f(this.gu.uHalo, halo)
       gl.uniform1f(this.gu.uSeen, seen)
       gl.uniform1f(this.gu.uCorona, corona)
+      gl.uniform3f(this.gu.uTint, frame.sun.tint[0], frame.sun.tint[1], frame.sun.tint[2])
       const c = frame.cover
       if (c) {
         gl.uniform3fv(this.gu.uCover, inLocal(norm(c.rel), f))
@@ -781,7 +829,7 @@ export class Renderer {
       gl.uniform3fv(u.uAxY, inLocal(b.axes[1], f))
       gl.uniform1f(u.uK, 1 / (1 - b.flat))
       gl.uniform3fv(u.uSun, inLocal(b.sun, f, 1 / R))
-      gl.uniform1f(u.uSunR, 695_700 / R)
+      gl.uniform1f(u.uSunR, (sunBody?.radius ?? 695_700) / R)
       const occ = b.occ.slice(0, 4)
       gl.uniform1i(u.uOccN, occ.length)
       if (occ.length) {
@@ -814,6 +862,14 @@ export class Renderer {
     }
 
     gl.useProgram(this.body)
+    // Lit by the Sun at the time: the eye takes to its colour, but not all the way.
+    const { tint, cells, calm } = frame.sun
+    const light = SUNLIGHT.map((c, i) => c * Math.sqrt(tint[i]))
+    const top = Math.max(...light) / SUNLIGHT[0]
+    gl.uniform3f(this.bu.uSunlight, light[0] / top, light[1] / top, light[2] / top)
+    gl.uniform3f(this.bu.uTint, tint[0], tint[1], tint[2])
+    gl.uniform1f(this.bu.uCells, cells)
+    gl.uniform1f(this.bu.uCalm, calm)
     gl.uniform1i(this.bu.uMap, 0)
     gl.uniform1i(this.bu.uNight, 1)
     gl.uniform1i(this.bu.uClouds, 2)

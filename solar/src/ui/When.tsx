@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
-import { daysIn, momentOf, partsOf, shiftMonths } from '../app/time'
+import { daysIn, deepLabel, deepStep, deepUnit, inYear, isDeep, momentOf, partsOf, readYear, shiftMonths, yearLabel } from '../app/time'
 import type { Parts } from '../app/time'
 import { TIME_MAX, TIME_MIN } from '../sky/ephemeris'
 import { DoubleStepIcon, StepIcon } from './Icons'
 
 const DAY_MS = 86_400_000
-const YEAR_MIN = new Date(TIME_MIN).getUTCFullYear()
-const YEAR_MAX = new Date(TIME_MAX).getUTCFullYear()
 const NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 /** How long a step is held before it repeats, then how often it does, ms. */
 const HOLD_MS = 400
@@ -44,7 +42,15 @@ function numberRead(min: number, max: number, digits: number): Read {
   }
 }
 
-const yearRead = numberRead(YEAR_MIN, YEAR_MAX, 4)
+/** A year in any of the ways `readYear` takes, never complete: it could always go on, "1969" to "1969 BC". */
+const yearRead: Read = (text) => {
+  const year = readYear(text)
+  return year === null ? null : { n: year, full: false }
+}
+
+/** Only a year of four figures is gone to while typed: on the way to "4.5 billion years ago" are years the Sun has swallowed the Earth by. */
+const calendarYear = (text: string): boolean => /^\d{4}$/.test(text.trim())
+
 const hourRead = numberRead(0, 23, 2)
 const minuteRead = numberRead(0, 59, 2)
 const monthNumber = numberRead(1, 12, 2)
@@ -69,8 +75,10 @@ interface FieldProps {
   tab: number | undefined
   className?: string
   numeric?: boolean
-  /** Goes there while still being typed, as soon as it means anything. */
-  live?: boolean
+  /** Goes there while still being typed, as soon as it means anything, or once it is typed as this says. */
+  live?: boolean | ((text: string) => boolean)
+  disabled?: boolean
+  style?: CSSProperties
   onSet(n: number): void
   onStep(n: number): void
 }
@@ -80,7 +88,8 @@ interface FieldProps {
  * takes as soon as it is complete, and otherwise when it is left, if it means
  * anything by then.
  */
-function Field({ text, read, size, label, tab, className = '', numeric = true, live = false, onSet, onStep }: FieldProps): ReactElement {
+function Field(props: FieldProps): ReactElement {
+  const { text, read, size, label, tab, className = '', numeric = true, live = false, disabled = false, style, onSet, onStep } = props
   const [draft, setDraft] = useState<string | null>(null)
   const ref = useRef<HTMLInputElement | null>(null)
   const fresh = useRef(false)
@@ -111,6 +120,8 @@ function Field({ text, read, size, label, tab, className = '', numeric = true, l
       maxLength={size}
       aria-label={label}
       tabIndex={tab}
+      disabled={disabled}
+      style={style}
       value={draft ?? text}
       onFocus={(e) => e.target.select()}
       // Safari puts the caret where it was clicked, after the focus.
@@ -126,7 +137,7 @@ function Field({ text, read, size, label, tab, className = '', numeric = true, l
         const r = read(typed)
         if (!r?.full) {
           setDraft(typed)
-          if (live && r) onSet(r.n)
+          if (r && (live === true || (live && live(typed)))) onSet(r.n)
           return
         }
         setDraft(null)
@@ -156,11 +167,12 @@ interface StepProps {
   ms: number
   to: To
   tab: number | undefined
+  disabled?: boolean
   onGo(to: To): boolean
 }
 
 /** A step one way, taken again and again while it is held down. */
-function Step({ label, back = false, far = false, ms, to, tab, onGo }: StepProps): ReactElement {
+function Step({ label, back = false, far = false, ms, to, tab, disabled = false, onGo }: StepProps): ReactElement {
   const timer = useRef(0)
   const pressed = useRef(false)
   useEffect(() => () => clearTimeout(timer.current), [])
@@ -170,7 +182,7 @@ function Step({ label, back = false, far = false, ms, to, tab, onGo }: StepProps
       type="button"
       className="lb-step-btn"
       aria-label={label}
-      disabled={clamp(to(ms)) === ms}
+      disabled={disabled || clamp(to(ms)) === ms}
       tabIndex={tab}
       onPointerDown={(e) => {
         if (e.button !== 0) return
@@ -202,7 +214,11 @@ function Step({ label, back = false, far = false, ms, to, tab, onGo }: StepProps
   )
 }
 
-const years = (n: number): To => (ms) => shiftMonths(ms, 12 * n)
+/** Years by the calendar; past its years, by the third figure of the years from now. */
+const years =
+  (n: number): To =>
+  (ms) =>
+    isDeep(ms) ? deepStep(ms, n) : shiftMonths(ms, 12 * n)
 const months = (n: number): To => (ms) => shiftMonths(ms, n)
 const days = (n: number): To => (ms) => ms + n * DAY_MS
 const turn =
@@ -212,19 +228,36 @@ const turn =
     return momentOf({ ...p, [part]: p[part] + n, second: 0 })
   }
 
+/** "100 years", "10 million years": a step of the year, in words. */
+function yearsSaid(n: number): string {
+  if (n >= 1e9) return `${n / 1e9} billion years`
+  if (n >= 1e6) return `${n / 1e6} million years`
+  return n === 1 ? 'A year' : `${n.toLocaleString('en-US')} years`
+}
+
 /**
  * The drawer behind the clock, for the years a sky is looked at across: the
  * year first and large, ten at a time or one, then the month and the day, and
  * the time. Each is typed over or stepped, and held a step repeats. Each change
  * goes there at once and the drawer stays, so the sky can be watched while the
- * date is found. A day keeps the time of day, and a time keeps the day.
+ * date is found. A day keeps the time of day, and a time keeps the day. Past
+ * the calendar's years the year is years from now, typed as "4.5 billion years
+ * ago" or "in 5 Gyr", stepped by its third figure, and the rest has no say.
  */
 export function When({ open, ms, at, onGo }: WhenProps): ReactElement {
   const tab = open ? undefined : -1
-  const p = partsOf(ms)
+  const deep = isDeep(ms)
+  const p = deep ? null : partsOf(ms)
   const step = { ms, tab, onGo }
+  const off = { ...step, disabled: deep }
   const set = (change: Partial<Parts>): void => {
     onGo((now) => momentOf({ ...partsOf(now), ...change }))
+  }
+  const year = p ? yearLabel(p.year) : deepLabel(ms, true)
+  const unit = deep ? deepUnit(ms) : 1
+  const by = (n: number, back: boolean): string => {
+    const said = yearsSaid(n * unit)
+    return `${n * unit === 1 ? said : said.replace(/^./, (c) => c.toUpperCase())} ${back ? 'back' : 'on'}`
   }
 
   return (
@@ -234,72 +267,79 @@ export function When({ open, ms, at, onGo }: WhenProps): ReactElement {
       aria-hidden={open ? undefined : 'true'}
     >
       <div className="sl-when-year" role="group" aria-label="Year">
-        <Step {...step} label="Ten years back" back far to={years(-10)} />
-        <Step {...step} label="A year back" back to={years(-1)} />
+        <Step {...step} label={by(10, true)} back far to={years(-10)} />
+        <Step {...step} label={by(1, true)} back to={years(-1)} />
         <Field
-          text={String(p.year)}
+          text={year}
           read={yearRead}
-          size={4}
+          size={24}
           label="Year"
           tab={tab}
-          className="is-year"
-          onSet={(year) => set({ year })}
+          className={`is-year${year.length > 4 ? ' is-long' : ''}`}
+          numeric={false}
+          live={calendarYear}
+          // Smaller as it is longer, to keep in its place.
+          style={{ fontSize: `${Math.min(26, 165 / year.length)}px` }}
+          onSet={(y) => onGo((now) => inYear(now, y))}
           onStep={(n) => onGo(years(n))}
         />
-        <Step {...step} label="A year on" to={years(1)} />
-        <Step {...step} label="Ten years on" far to={years(10)} />
+        <Step {...step} label={by(1, false)} to={years(1)} />
+        <Step {...step} label={by(10, false)} far to={years(10)} />
       </div>
 
-      <div className="lb-opt-row">
+      <div className={`lb-opt-row${deep ? ' is-off' : ''}`}>
         <span className="lb-opt-label" id="sl-when-month">
           Month
         </span>
         <div className="lb-stepper" role="group" aria-labelledby="sl-when-month">
-          <Step {...step} label="A month back" back to={months(-1)} />
+          <Step {...off} label="A month back" back to={months(-1)} />
           <Field
-            text={NAMES[p.month] as string}
+            text={p ? (NAMES[p.month] as string) : ''}
             read={monthRead}
             size={9}
             label="Month"
             tab={tab}
             numeric={false}
             live
+            disabled={deep}
             onSet={(month) => set({ month })}
             onStep={(n) => onGo(months(n))}
           />
-          <Step {...step} label="A month on" to={months(1)} />
+          <Step {...off} label="A month on" to={months(1)} />
         </div>
       </div>
 
-      <div className="lb-opt-row">
+      <div className={`lb-opt-row${deep ? ' is-off' : ''}`}>
         <span className="lb-opt-label" id="sl-when-day">
           Day
         </span>
         <div className="lb-stepper" role="group" aria-labelledby="sl-when-day">
-          <Step {...step} label="A day back" back to={days(-1)} />
+          <Step {...off} label="A day back" back to={days(-1)} />
           <Field
-            text={String(p.day)}
-            read={numberRead(1, daysIn(p.year, p.month), 2)}
+            text={p ? String(p.day) : ''}
+            read={numberRead(1, p ? daysIn(p.year, p.month) : 31, 2)}
             size={2}
             label="Day"
             tab={tab}
+            disabled={deep}
             onSet={(day) => set({ day })}
             onStep={(n) => onGo(days(n))}
           />
-          <Step {...step} label="A day on" to={days(1)} />
+          <Step {...off} label="A day on" to={days(1)} />
         </div>
       </div>
 
-      <div className="lb-opt-row">
+      <div className={`lb-opt-row${deep ? ' is-off' : ''}`}>
         <span className="lb-opt-label">Time</span>
         <div className="sl-when-hm">
           <Field
-            text={String(p.hour).padStart(2, '0')}
+            text={p ? String(p.hour).padStart(2, '0') : ''}
             read={hourRead}
             size={2}
             label="Hour, UTC"
             tab={tab}
             className="is-time"
+            disabled={deep}
             onSet={(hour) => set({ hour, second: 0 })}
             onStep={(n) => onGo(turn('hour', n))}
           />
@@ -307,12 +347,13 @@ export function When({ open, ms, at, onGo }: WhenProps): ReactElement {
             :
           </span>
           <Field
-            text={String(p.minute).padStart(2, '0')}
+            text={p ? String(p.minute).padStart(2, '0') : ''}
             read={minuteRead}
             size={2}
             label="Minute"
             tab={tab}
             className="is-time"
+            disabled={deep}
             onSet={(minute) => set({ minute, second: 0 })}
             onStep={(n) => onGo(turn('minute', n))}
           />

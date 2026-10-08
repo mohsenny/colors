@@ -122,6 +122,35 @@ export function isKepler(id: string): id is KeplerMoon {
   return id in ROWS
 }
 
+/** The round moons of Jupiter and Saturn, which have theories of their own. */
+export type FarMoon = 'io' | 'europa' | 'ganymede' | 'callisto' | 'mimas' | 'enceladus' | 'tethys' | 'dione' | 'rhea' | 'titan' | 'iapetus'
+
+/**
+ * Their mean orbits, from the same JPL table, for the years past their
+ * theories. The table gives its turning periods unsigned: here the nodes go
+ * back, as Io's and Europa's periapses do. Where each moon is along its orbit,
+ * and P, here the days of a whole lap, are fitted to its theory at either end
+ * of the years it holds, so that one hands it on to the other where it is.
+ */
+const FAR: Record<FarMoon, Row> = {
+  io: [421_800, 0.004, 49.1, 330.7, 0, 0, 1.769137775, -1.333, 0, 268.1, 64.5],
+  europa: [671_100, 0.009, 45, 346.5, 0.5, 184, 3.5511810583, -1.394, -30.202, 268.1, 64.5],
+  ganymede: [1_070_400, 0.001, 198.3, 324.93, 0.2, 58.5, 7.1545531832, 68.301, -137.812, 268.2, 64.6],
+  callisto: [1_882_700, 0.007, 43.8, 87.49, 0.3, 309.1, 16.6890174471, 277.921, -577.264, 268.7, 64.8],
+  mimas: [186_000, 0.02, 160.4, 275.62, 1.6, 66.2, 0.9424219139, 0.493, -0.986, 40.6, 83.5],
+  enceladus: [238_400, 0.005, 119.5, 63.46, 0, 0, 1.3702180816, 2.916, 0, 40.6, 83.5],
+  tethys: [295_000, 0.001, 335.3, 300.92, 1.1, 273, 1.8878025308, 0.005, -4.982, 40.6, 83.5],
+  dione: [377_700, 0.002, 116, 61.12, 0, 0, 2.7369155441, 11.698, 0, 40.6, 83.5],
+  rhea: [527_200, 0.001, 44.3, 234.11, 0.3, 133.7, 4.5175026552, 33.939, -35.775, 40.6, 83.5],
+  titan: [1_221_900, 0.029, 78.3, 216.67, 0.3, 78.6, 15.9454466608, 346.68, -687.37, 36.4, 84],
+  iapetus: [3_561_700, 0.028, 254.5, 147.1, 7.6, 86.5, 79.3274327941, 1662.9, -3130.302, 288.7, 78.9],
+}
+
+
+export function isFar(id: string): id is FarMoon {
+  return id in FAR
+}
+
 /** An orbit's plane on the J2000 equator: to where it rises through it, 90 degrees on, and its pole. */
 function plane(ra: number, dec: number): number[] {
   const [a, d] = [ra * D, dec * D]
@@ -130,15 +159,29 @@ function plane(ra: number, dec: number): number[] {
   return [...x, z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0], ...z]
 }
 
-const PLANES = new Map(Object.entries(ROWS).map(([id, r]) => [id, plane(r[9], r[10])]))
+const PLANES = new Map([...Object.entries(ROWS), ...Object.entries(FAR)].map(([id, r]) => [id, plane(r[9], r[10])]))
 
 /** A moon at a Julian ephemeris day: km from its planet's centre, on the J2000 equator. */
 export function keplerMoon(id: KeplerMoon, jde: number): [number, number, number] {
-  const [a, e, w0, M0, i, node0, P, Pw, Pn] = ROWS[id]
+  return onEllipse(id, ROWS[id], jde)
+}
+
+/** One of the round moons of Jupiter and Saturn on its mean orbit, as `keplerMoon`. */
+export function farMoon(id: FarMoon, jde: number): [number, number, number] {
+  return onEllipse(id, FAR[id], jde, true)
+}
+
+/** With `whole`, P is the period of the whole lap, and M is held back by as much as the periapsis and node turn on. */
+function onEllipse(id: KeplerMoon | FarMoon, row: Row, jde: number, whole = false): [number, number, number] {
+  const [a, e, w0, M0, i, node0, P, Pw, Pn] = row
   const t = jde - J2000
-  const w = (w0 + (Pw ? (360 * t) / (Pw * 365.25) : 0)) * D
-  const node = (node0 + (Pn ? (360 * t) / (Pn * 365.25) : 0)) * D
-  const M = (M0 + (360 * t) / P + (SWING[id]?.(t) ?? 0)) * D
+  // Each angle less the whole turns it has made, which keeps it fine a billion years out.
+  const lap = (period: number): number => (360 * (t % period)) / period
+  const dw = Pw ? lap(Pw * 365.25) : 0
+  const dn = Pn ? lap(Pn * 365.25) : 0
+  const w = (w0 + dw) * D
+  const node = (node0 + dn) * D
+  const M = (M0 + lap(P) - (whole ? dw + dn : 0) + (SWING[id as KeplerMoon]?.(t) ?? 0)) * D
   let E = M + e * Math.sin(M)
   for (let k = 0; k < 4; k++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E))
   // On the orbit, x toward periapsis.

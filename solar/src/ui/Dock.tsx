@@ -18,8 +18,8 @@ import type { To } from './When'
 
 export interface DockProps {
   snap: Snapshot
-  /** Hands the instrument the two spans it writes the date and time into every frame. */
-  attachClock(day: HTMLElement | null, time: HTMLElement | null): void
+  /** Hands the instrument the clock, and the two spans it writes the date and time into every frame. */
+  attachClock(clock: HTMLElement | null, day: HTMLElement | null, time: HTMLElement | null): void
   timeline: TimelineProps
   onTogglePlay(): void
   onDial(dial: number): void
@@ -49,8 +49,8 @@ export function Dock(props: DockProps): ReactElement {
   const timeRef = useRef<HTMLSpanElement | null>(null)
 
   useEffect(() => {
-    attachClock(dayRef.current, timeRef.current)
-    return () => attachClock(null, null)
+    attachClock(clockRef.current, dayRef.current, timeRef.current)
+    return () => attachClock(null, null, null)
   }, [attachClock])
 
   useIdle(drawer !== null)
@@ -170,6 +170,7 @@ export function Dock(props: DockProps): ReactElement {
       <Bodies
         open={drawer === 'bodies'}
         seat={snap.seat.id}
+        gone={snap.gone}
         onSelect={(id) => {
           onBecome(id)
           setDrawer(null)

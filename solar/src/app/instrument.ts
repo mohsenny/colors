@@ -7,10 +7,13 @@
 
 import { AU_KM, BODIES, KEYED, LIGHT_KM_S, RINGS, bodyById } from '../sky/bodies'
 import type { Body, BodyId } from '../sky/bodies'
-import { NEAR_MS, nearEclipse, stepTo, stepsFrom } from '../sky/eclipses'
+import { NEAR_MS, nearEclipse, stepTo, stepsFrom, withinEclipses } from '../sky/eclipses'
 import type { Eclipse, EclipseSteps, EclipseType } from '../sky/eclipses'
 import { PERIOD, TIME_MAX, TIME_MIN, orbitOf, posesAt } from '../sky/ephemeris'
 import type { Poses, Vec3 } from '../sky/ephemeris'
+import { presenceOf, smearOf } from '../sky/deep'
+import { engulfed, sunAt, sunTint } from '../sky/sun'
+import type { SunState } from '../sky/sun'
 import { DARK, LIGHTS, excess, gain, glareOf, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt, sunMagnitude } from '../sky/light'
 import type { Glare } from '../sky/light'
 import { unpackStars } from '../sky/stars'
@@ -59,7 +62,7 @@ import { png } from '../../../src/photo/save'
 import { isIdle } from '../../../src/ui/idle'
 import { Tape } from './tape'
 import type { Mark } from './tape'
-import { DEAD, clockLabel, dayLabel, dialOf, notch, rateOf, speedSaid } from './time'
+import { DEAD, clockLabel, dayLabel, deepLabel, deepParts, dialOf, isDeep, momentLabel, notch, rateOf, speedSaid } from './time'
 
 export interface Snapshot {
   playing: boolean
@@ -85,6 +88,8 @@ export interface Snapshot {
   moment: string
   /** The moment on the clock, UTC ms. */
   ms: number
+  /** The bodies the Sun has taken by then. */
+  gone: ReadonlySet<BodyId>
 }
 
 /** Every moon, and Pluto, is lit as the Moon is, but Titan, which is all haze. */
@@ -115,7 +120,8 @@ const SHINE: Partial<Record<BodyId, readonly [number, number, number]>> = {
 const MOONS = new Map<BodyId, Body[]>()
 for (const b of BODIES) if (b.parent) MOONS.set(b.parent, [...(MOONS.get(b.parent) ?? []), b])
 
-const YEAR_MS = 365.2425 * 86_400_000
+const DAY_MS = 86_400_000
+const YEAR_MS = 365.2425 * DAY_MS
 const ORIGIN: Vec3 = [0, 0, 0]
 
 /** Points a lap. */
@@ -151,6 +157,8 @@ const HAZE = (0.5 * Math.PI) / 180
 /** Points a lit disc is sampled at, for how much of it is on screen. */
 const SAMPLES = 64
 const GOLDEN = Math.PI * (3 - Math.sqrt(5))
+/** How strongly where a body may be along its path glows, at its most. */
+const ARC = 0.5
 /** Whose name stays when two would run into each other, after the one you are looking at. */
 const BY_SIZE: BodyId[] = [...BODIES].sort((a, b) => b.radius - a.radius).map((b) => b.id)
 
@@ -227,6 +235,23 @@ function angle(a: Vec3, b: Vec3): number {
   return Math.atan2(Math.hypot(c[0], c[1], c[2]), dot(a, b))
 }
 
+/**
+ * How likely a body is to be `x` radians along its orbit from where it would
+ * be, a share a radian, its place known to `s` radians: a bell that wraps
+ * round the orbit and, once wider than it, is even all the way round.
+ */
+export function spread(x: number, s: number): number {
+  const t = x - 2 * Math.PI * Math.round(x / (2 * Math.PI))
+  if (s > 1) {
+    let d = 1
+    for (let n = 1; n <= 4; n++) d += 2 * Math.exp((-n * n * s * s) / 2) * Math.cos(n * t)
+    return d / (2 * Math.PI)
+  }
+  let d = 0
+  for (let k = -1; k <= 1; k++) d += Math.exp(-(((t + 2 * Math.PI * k) / s) ** 2) / 2)
+  return d / (s * Math.sqrt(2 * Math.PI))
+}
+
 /** "384,400 km", or AU once that reads better. */
 export function distanceLabel(km: number): string {
   if (km >= 0.05 * AU_KM) return `${(km / AU_KM).toFixed(km >= 10 * AU_KM ? 1 : 3)} AU`
@@ -275,6 +300,12 @@ export class Instrument {
   private dirty = true
 
   private ms = Date.now()
+  /** What adding a frame's time to the clock lost to rounding, put back the next: a billion years out a ms is far below what it can hold. */
+  private carry = 0
+  /** The Sun at the time, the bodies it has taken, and how far off along its orbit each body may be, radians. */
+  private sun: SunState = sunAt(this.ms)
+  private gone = new Set<BodyId>()
+  private smears = new Map<BodyId, number>()
   /** The wall clock at the last frame. */
   private wall = Date.now()
   private dial = 0
@@ -289,6 +320,8 @@ export class Instrument {
   private side = 0
   private low = LOW
   private zg = 0
+  /** How far past where it was kept a swelling Sun has pushed the eye, and the distance it left the eye at. */
+  private pushed = { by: 0, at: 0 }
   private yaw = 0
   private pitch = 0.3
   private flight: Flight | null = null
@@ -297,6 +330,8 @@ export class Instrument {
   private drawnAt = -Infinity
   /** Travel arrives at once for anyone who has asked for less motion. */
   private still = window.matchMedia('(prefers-reduced-motion: reduce)')
+  /** A dock this narrow has the clock's short reading far from now (ui.css). */
+  private narrow = window.matchMedia('(max-width: 759px)')
   private poses: Poses
   private eye: Eye
   private frame: Frame | null = null
@@ -314,7 +349,7 @@ export class Instrument {
   private labelEls = new Map<BodyId, HTMLSpanElement>()
   private labelWidths = new Map<BodyId, number>()
   private placed = new Map<BodyId, { dir: Vec3; ang: number; d: number; x: number; y: number; r: number; shown: boolean }>()
-  private clockEls: { day: HTMLElement; time: HTMLElement } | null = null
+  private clockEls: { clock: HTMLElement; day: HTMLElement; time: HTMLElement } | null = null
   private eclipses: { solar: Eclipse | null; lunar: Eclipse | null; from: number; at: number } = {
     solar: null,
     lunar: null,
@@ -347,6 +382,7 @@ export class Instrument {
     this.labels = labels
     this.renderer = new Renderer(canvas)
     this.poses = posesAt(this.ms)
+    this.reckon()
     this.tape.jump(this.ms)
     this.z = this.zoomFor(this.seat, this.look)
     this.eye = this.restingEye()
@@ -431,8 +467,8 @@ export class Instrument {
     this.dirty = true
   }
 
-  attachClock(day: HTMLElement | null, time: HTMLElement | null): void {
-    this.clockEls = day && time ? { day, time } : null
+  attachClock(clock: HTMLElement | null, day: HTMLElement | null, time: HTMLElement | null): void {
+    this.clockEls = clock && day && time ? { clock, day, time } : null
     this.writeClock()
   }
 
@@ -471,20 +507,24 @@ export class Instrument {
     const real = wall - this.wall
     this.wall = wall
     if (this.playing && !(this.holding && this.dial !== 0)) {
-      const next = this.ms + (this.dial === 0 ? real : dt * 1000 * rateOf(this.dial))
+      const add = (this.dial === 0 ? real : dt * 1000 * rateOf(this.dial)) - this.carry
+      const next = this.ms + add
+      this.carry = next - this.ms - add
       if (next <= TIME_MIN || next >= TIME_MAX) {
         this.ms = Math.max(TIME_MIN, Math.min(TIME_MAX, next))
+        this.carry = 0
         this.playing = false
         this.touch('The clock has reached the end of its range')
       } else this.ms = next
       this.tape.record(dt, this.ms)
     }
     this.poses = posesAt(this.ms)
+    this.reckon()
     this.before = { forward: this.eye.forward, at: this.drawnAt }
     this.eye = this.flownEye(now)
     this.drawnAt = now
     this.frame = frameOf(this.eye, this.width / this.height)
-    this.mergeMoons()
+    this.fade()
     this.refreshOrbits(now)
     this.paths = Math.min(1, Math.max(0, this.paths + (isIdle() ? -dt / PATHS_OUT : dt / PATHS_IN)))
     this.draw(now, smoothstep(0, 1, this.paths))
@@ -503,29 +543,45 @@ export class Instrument {
       eye: this.eye,
       bodies: this.bodyDraws(mags, glare, gain(power)),
       ...cover,
-      orbits: paths > 0 ? this.orbitDraws(paths) : [],
+      orbits: this.orbitDraws(paths),
       glare,
       lens: gain(power),
       clock: now / 1000,
+      // A white dwarf is a twentieth of the Sun's size and less.
+      sun: { tint: sunTint(this.sun.temperature), cells: this.cells(), calm: 1 - smoothstep(0.025, 0.1, this.sun.radius / 695_700) },
     })
   }
 
   /**
+   * How many of the Sun's granules go round it. They are as wide as its gas
+   * is deep, which goes as its warmth over the pull at its surface: a few
+   * hundred thousand now, a few dozen on a red giant, as Betelgeuse has.
+   */
+  private cells(): number {
+    const { radius, temperature, mass } = this.sun
+    return 900 * mass * (695_700 / radius) * (5772 / temperature)
+  }
+
+  /**
    * The sky as it is, without the names on it, which live in the page, or the
-   * paths. The last frame is drawn again so the picture is taken before it is
-   * shown.
+   * paths, though it keeps the glow where a body may be. The last frame is
+   * drawn again so the picture is taken before it is shown.
    */
   photo(): Promise<Blob> {
     this.draw(this.last, 0)
     return png(this.canvas)
   }
 
+  /** The date and time; far from now, the years from now, in full or, on a narrow dock, short and in two. */
   private writeClock(): void {
     if (!this.clockEls) return
-    const day = dayLabel(this.ms)
-    const time = clockLabel(this.ms)
-    if (this.clockEls.day.textContent !== day) this.clockEls.day.textContent = day
-    if (this.clockEls.time.textContent !== time) this.clockEls.time.textContent = time
+    const { clock, day, time } = this.clockEls
+    const deep = isDeep(this.ms)
+    const [a, b] = !deep ? [dayLabel(this.ms), clockLabel(this.ms)] : this.narrow.matches ? deepParts(this.ms) : [deepLabel(this.ms), '']
+    // Not a class, which the dock sets its own.
+    clock.toggleAttribute('data-deep', deep)
+    if (day.textContent !== a) day.textContent = a
+    if (time.textContent !== b) time.textContent = b
   }
 
   // ------------------------------------------------------------ eye
@@ -535,7 +591,7 @@ export class Instrument {
   }
 
   private radius(id: BodyId): number {
-    return (bodyById(id) as Body).radius
+    return id === 'sun' ? this.sun.radius : (bodyById(id) as Body).radius
   }
 
   /** How much sky a pixel covers toward `to`, from the eye. */
@@ -652,6 +708,7 @@ export class Instrument {
 
   /** Turn to look at a body from where you sit. Looking at the seat itself circles it. */
   lookAt(id: BodyId): void {
+    if (this.gone.has(id)) return this.touch(`The Sun has taken ${(bodyById(id) as Body).name}`)
     if (id === this.look) {
       // Looking at it again, after swinging away, brings it back to the middle.
       if (id !== this.seat && (this.swing !== 0 || this.rise !== 0)) {
@@ -681,6 +738,7 @@ export class Instrument {
    * frame. Picking the body you are on brings its globe back to that view.
    */
   become(id: BodyId): void {
+    if (this.gone.has(id)) return this.touch(`The Sun has taken ${(bodyById(id) as Body).name}`)
     if (id === this.seat) {
       // Already on the way there.
       if (this.flight?.travel) return
@@ -811,6 +869,7 @@ export class Instrument {
   now(): void {
     this.branch()
     this.ms = Date.now()
+    this.carry = 0
     this.tape.jump(this.ms)
     this.dial = 0
     this.playing = true
@@ -824,9 +883,10 @@ export class Instrument {
     if (to === this.ms) return false
     this.branch()
     this.ms = to
+    this.carry = 0
     this.tape.jump(to)
     this.eclipses.from = NaN
-    this.touch(`${dayLabel(to)}, ${clockLabel(to)} UTC`)
+    this.touch(momentLabel(to))
     this.emit(true)
     return true
   }
@@ -840,6 +900,7 @@ export class Instrument {
     const solar = e.type === 'solar'
     this.branch()
     this.ms = e.peak - (solar ? 90 : 120) * 60_000
+    this.carry = 0
     this.tape.jump(this.ms)
     this.tape.know(e)
     this.dial = dialOf(10 * 60)
@@ -879,6 +940,7 @@ export class Instrument {
     if (!this.scrubbing) return
     this.back = Math.max(0, Math.min(1, position))
     this.ms = this.tape.at(this.back)
+    this.carry = 0
     this.dirty = true
   }
 
@@ -1174,17 +1236,67 @@ export class Instrument {
 
   // ------------------------------------------------------------ drawing
 
-  /** Moons too near their planet on screen to tell apart from it fold into its point. Never the seat or the target. */
-  private mergeMoons(): void {
+  /**
+   * The Sun at the time, the bodies it has taken, and how well each body's
+   * place along its orbit is known. Should it take the body you are on, you
+   * go to it, and if the one you are looking at, you look at it instead.
+   */
+  private reckon(): void {
+    const was = this.sun.radius
+    this.sun = sunAt(this.ms)
+    // Over the Sun, the eye keeps its distance as it swells or shrinks: pushed
+    // out ahead of it as it swells, and back to where it was as it shrinks.
+    // Moving the eye, or leaving the Sun, keeps it where it now is.
+    if (this.seat !== 'sun' || this.zg !== this.pushed.at) this.pushed.by = 0
+    if (this.seat === 'sun' && this.sun.radius !== was) {
+      const want = this.zg + Math.log(was / this.sun.radius) - this.pushed.by
+      this.zg = Math.max(ZG_MIN, Math.min(zgMax(this.sun.radius), want))
+      this.pushed = { by: this.zg - want, at: this.zg }
+    }
+    this.gone.clear()
+    for (const b of BODIES) {
+      if (engulfed(b.id, this.ms)) this.gone.add(b.id)
+      this.smears.set(b.id, smearOf(b.id, this.ms))
+    }
+    const taken = this.gone.has(this.seat) ? this.seat : this.gone.has(this.look) ? this.look : null
+    if (!taken) return
+    if (taken === this.seat) this.travel('sun')
+    else this.lookAt('sun')
+    this.touch(`The Sun has taken ${(bodyById(taken) as Body).name}`)
+    this.emit(true)
+  }
+
+  /**
+   * How much of a body is at its place, 0 to 1: none once it could be
+   * anywhere along its orbit, or a moon's planet could. The sky is seen from
+   * where the seat is taken to be, so the seat, and the planet it goes round,
+   * are always there.
+   */
+  private presence(id: BodyId): number {
+    const parent = bodyById(id)?.parent
+    const seatParent = bodyById(this.seat)?.parent
+    if (this.gone.has(id)) return 0
+    if (id === this.seat || id === seatParent) return 1
+    const own = presenceOf(this.smears.get(id) ?? 0)
+    return parent && parent !== this.seat && parent !== seatParent ? own * this.presence(parent) : own
+  }
+
+  /**
+   * How much of each body shows. Moons too near their planet on screen to
+   * tell apart from it fold into its point, never the seat or the target.
+   */
+  private fade(): void {
     const eye = this.eye.at
     for (const b of BODIES) {
-      if (!b.parent) continue
-      const p = sub(this.at(b.parent), eye)
-      const px = this.pixel(p)
-      const big = Math.asin(Math.min(1, this.radius(b.parent) / len(p))) / px
-      const apart = angle(p, sub(this.at(b.id), eye)) / px
-      const keep = b.id === this.seat || b.id === this.look
-      this.fades.set(b.id, keep ? 1 : Math.max(smoothstep(2, 6, big), smoothstep(2.5, 6, apart)))
+      let f = this.presence(b.id)
+      if (b.parent && b.id !== this.seat && b.id !== this.look) {
+        const p = sub(this.at(b.parent), eye)
+        const px = this.pixel(p)
+        const big = Math.asin(Math.min(1, this.radius(b.parent) / len(p))) / px
+        const apart = angle(p, sub(this.at(b.id), eye)) / px
+        f *= Math.max(smoothstep(2, 6, big), smoothstep(2.5, 6, apart))
+      }
+      this.fades.set(b.id, f)
     }
   }
 
@@ -1204,6 +1316,7 @@ export class Instrument {
     // A shadow's edge spreads by the Sun's width as seen from here.
     const spread = this.radius('sun') / len(at)
     return (MOONS.get(b.id) ?? [])
+      .filter((m) => this.presence(m.id) >= 0.5)
       .map((m) => ({ rel: sub(this.at(m.id), at), radius: m.radius }))
       .filter((o) => {
         const along = dot(o.rel, toSun)
@@ -1235,7 +1348,7 @@ export class Instrument {
       const toEye = sub(eye, at)
       const d = len(toEye)
       if (b.id === 'sun') {
-        out.set(b.id, sunMagnitude(d / AU_KM))
+        out.set(b.id, sunMagnitude(d / AU_KM, this.sun.luminosity))
         continue
       }
       const toSun = sub(sunAt, at)
@@ -1244,7 +1357,7 @@ export class Instrument {
         const pole = this.poses.saturn.z
         rings = ringsMagnitude(Math.asin(dot(pole, toEye) / d), Math.asin(dot(pole, toSun) / len(toSun)))
       }
-      out.set(b.id, magnitude(b.id, b.radius, d, len(toSun) / AU_KM, angle(toSun, toEye), this.sunlit(b), rings))
+      out.set(b.id, magnitude(b.id, b.radius, d, len(toSun) / AU_KM, angle(toSun, toEye), this.sunlit(b), rings, this.sun.luminosity))
     }
     return out
   }
@@ -1261,10 +1374,11 @@ export class Instrument {
     const eye = this.eye.at
     const sunAt = this.at('sun')
     const near = HAZE / power
+    // What is not at its place blocks no light.
     const discs = BODIES.map((b) => {
       const rel = sub(this.at(b.id), eye)
       const d = len(rel)
-      return { dir: scale(rel, 1 / d), d, cos: Math.cos(Math.asin(Math.min(1, b.radius / d))) }
+      return { dir: scale(rel, 1 / d), d, cos: this.presence(b.id) < 0.5 ? 2 : Math.cos(Math.asin(Math.min(1, this.radius(b.id) / d))) }
     })
     const hidden = (r: Vec3, far: number): boolean => discs.some((o) => o.d < far && dot(r, o.dir) > o.cos)
     const edge = 0.1 * this.height
@@ -1276,13 +1390,14 @@ export class Instrument {
     const out: Glare[] = []
     for (const b of BODIES) {
       const isSun = b.id === 'sun'
-      const k = glareOf(luxOf(mags.get(b.id) as number) * (isSun ? seen : 1), power)
+      const k = glareOf(luxOf(mags.get(b.id) as number) * (isSun ? seen : this.presence(b.id)), power)
       if (k < 0.3 * DARK * near * near) continue
       const at = this.at(b.id)
       const rel = sub(at, eye)
       const d = len(rel)
       const dir = scale(rel, 1 / d)
-      const ang = Math.asin(Math.min(1, b.radius / d))
+      const R = this.radius(b.id)
+      const ang = Math.asin(Math.min(1, R / d))
       let share = 0
       let spread = 0
       let centre = dir
@@ -1308,8 +1423,8 @@ export class Instrument {
           const r = add(add(scale(dir, c), scale(u, s * Math.cos(ph))), scale(v, s * Math.sin(ph)))
           let g = 1
           if (!isSun) {
-            const t = d * c - Math.sqrt(Math.max(0, b.radius * b.radius - d * d * s * s))
-            const n = scale(sub(scale(r, t), rel), 1 / b.radius)
+            const t = d * c - Math.sqrt(Math.max(0, R * R - d * d * s * s))
+            const n = scale(sub(scale(r, t), rel), 1 / R)
             const mu0 = dot(n, toSun)
             const mu = Math.max(0, -dot(n, r))
             g = mu0 <= 0 ? 0 : dusty ? (2 * mu0) / (mu0 + mu + 1e-4) : mu0
@@ -1338,7 +1453,9 @@ export class Instrument {
   private bodyDraws(mags: Map<BodyId, number>, glare: readonly Glare[], lens: number): BodyDraw[] {
     const eye = this.eye.at
     const out: BodyDraw[] = []
+    const tint = sunTint(this.sun.temperature)
     for (const b of BODIES) {
+      if (this.gone.has(b.id)) continue
       const pose = this.poses[b.id]
       const rel = sub(pose.at, eye)
       const sun = scale(pose.at, -1)
@@ -1358,12 +1475,12 @@ export class Instrument {
       let x = excess(mags.get(b.id) as number, skyAt(glare, norm(rel), b.id), lens)
       if (b.id === this.look) x = Math.max(x, FINDABLE)
       const { a, size } = pointLook(x)
-      const c = b.id === 'sun' ? [1, 0.92, 0.78] : pale(rgb(b.color))
+      const c = b.id === 'sun' ? [tint[0], 0.92 * tint[1], 0.78 * tint[2]] : pale(rgb(b.color))
       out.push({
         id: b.id,
         shade: SHADES[b.id] ?? 'moon',
         rel,
-        radius: b.radius,
+        radius: this.radius(b.id),
         flat: b.flat,
         axes: [pose.x, pose.y, pose.z],
         sun,
@@ -1390,7 +1507,7 @@ export class Instrument {
     let cover: { rel: Vec3; radius: number } | null = null
     let most = 0
     for (const b of BODIES) {
-      if (b.id === 'sun') continue
+      if (b.id === 'sun' || this.presence(b.id) < 0.5) continue
       const rel = sub(this.at(b.id), eye)
       const d = len(rel)
       if (d >= ds) continue
@@ -1415,14 +1532,14 @@ export class Instrument {
         o.points = orbitOf(o.id, this.ms, LAP)
       }
     }
-    // A moon's is worked out once there is a line to draw, and again a few
-    // laps on. The Moon's is pulled about by the Sun, so it is redone every
-    // few hours of the clock. One a frame, ten a second at most.
+    // A moon's is worked out once there is a line or a glow to draw, and
+    // again a few laps on. The Moon's is pulled about by the Sun, so it is
+    // redone every few hours of the clock. One a frame, ten a second at most.
     if (now - this.localAt < 100) return
     for (const b of BODIES) {
-      if (!b.parent || this.localInk(b) <= 0) continue
+      if (!b.parent || (this.localInk(b) <= 0 && this.localGlow(b) <= 0)) continue
       const o = this.locals.get(b.id)
-      const life = b.id === 'moon' ? 6 * 3.6e6 : 4 * (PERIOD[b.id] ?? 0) * 86_400_000
+      const life = b.id === 'moon' ? 6 * 3.6e6 : 4 * (PERIOD[b.id] ?? 0) * DAY_MS
       if (o && Math.abs(this.ms - o.centre) <= life) continue
       this.locals.set(b.id, { id: b.id, centre: this.ms, points: orbitOf(b.id, this.ms, LAP) })
       this.localAt = now
@@ -1430,33 +1547,69 @@ export class Instrument {
     }
   }
 
+  /** How wide a moon's path is on screen, px from its planet. */
+  private localSize(b: Body): number {
+    const planet = this.at(b.parent as BodyId)
+    const px = this.pixel(sub(planet, this.eye.at))
+    return len(sub(this.at(b.id), planet)) / (len(sub(planet, this.eye.at)) * px)
+  }
+
   /**
    * How strongly a moon's path is drawn: once it is big enough on screen to
    * be a path, and like the planets' faded through a narrow lens, unless the
-   * whole of it is in view.
+   * whole of it is in view. Not round a planet whose own place is lost.
    */
   private localInk(b: Body): number {
-    const planet = this.at(b.parent as BodyId)
-    const px = this.pixel(sub(planet, this.eye.at))
-    const r = len(sub(this.at(b.id), planet)) / (len(sub(planet, this.eye.at)) * px)
+    const r = this.localSize(b)
     const look = b.id === this.look
     const wide = smoothstep(0.15, 0.7, this.eye.fov)
     const whole = 1 - smoothstep(1, 3, r / (Math.max(this.width, this.height) / 2))
-    return (look ? 0.26 : 0.14) * smoothstep(8, 24, r) * Math.max(look ? 0.35 + 0.65 * wide : wide, whole)
+    const there = this.presence(b.parent as BodyId) * (this.gone.has(b.id) ? 0 : 1)
+    return (look ? 0.26 : 0.14) * smoothstep(8, 24, r) * Math.max(look ? 0.35 + 0.65 * wide : wide, whole) * there
+  }
+
+  /**
+   * How strongly the glow of where a body may be along its path shows: from
+   * when that is known only to a few degrees, at full by the time the body
+   * itself starts to go.
+   */
+  private glowOf(id: BodyId): number {
+    const b = bodyById(id) as Body
+    // Not for where the sky is seen from, which is taken to be where it is.
+    if (this.gone.has(id) || id === this.seat || id === bodyById(this.seat)?.parent) return 0
+    const ink = ARC * smoothstep(0.02, 0.06, this.smears.get(id) ?? 0)
+    return b.parent ? ink * this.presence(b.parent) : ink
+  }
+
+  /** A moon's, once its path is wide enough on screen. */
+  private localGlow(b: Body): number {
+    const g = this.glowOf(b.id)
+    return g > 0 ? g * smoothstep(4, 12, this.localSize(b)) : 0
   }
 
   private orbitDraws(shown: number): OrbitDraw[] {
     const eye = this.eye.at
     const out: OrbitDraw[] = []
     const wide = smoothstep(0.15, 0.7, this.eye.fov)
-    const line = (o: Orbit, base: Vec3, ink: number): void => {
+    // The path at `ink`, and over it, at `glow`, how likely the body is to be
+    // at each point: a bell round where it would be, wider as its place is
+    // less well known, until it is a ring.
+    const line = (o: Orbit, base: Vec3, ink: number, glow: number): void => {
+      if (ink <= 0 && glow <= 0) return
       // Fade where the line passes close by the eye: up close it is no longer a path, just a stroke.
       const near = base === ORIGIN ? 4e6 : 0.065 * Math.hypot(o.points[0], o.points[1], o.points[2])
+      const smear = this.smears.get(o.id) ?? 0
+      const lap = (PERIOD[o.id] ?? 1) * DAY_MS
+      // Where the body is along the lap, in its points: the middle one when it was worked out.
+      const now = (LAP - 1) / 2 + (((this.ms - o.centre) / lap) % 1) * (LAP - 1)
       const points: number[] = []
       const alpha: number[] = []
-      const put = (p: Vec3): void => {
+      const likely: number[] = []
+      const put = (p: Vec3, i: number): void => {
+        const a = smoothstep(near, 4 * near, len(p))
         points.push(p[0] / ORBIT_UNIT, p[1] / ORBIT_UNIT, p[2] / ORBIT_UNIT)
-        alpha.push(smoothstep(near, 4 * near, len(p)))
+        alpha.push(a)
+        if (glow > 0) likely.push(a * Math.min(1, 2.2 * spread(((i - now) / (LAP - 1)) * 2 * Math.PI, smear)))
       }
       let last: Vec3 | null = null
       for (let i = 0; i < LAP; i++) {
@@ -1466,20 +1619,27 @@ export class Instrument {
         // of the sky, as one passing near the eye does, is broken up.
         if (last && Math.max(len(last), len(p)) > near) {
           const steps = Math.ceil(angle(last, p) / STEP)
-          for (let k = 1; k < steps; k++) put(add(last, scale(sub(p, last), k / steps)))
+          for (let k = 1; k < steps; k++) put(add(last, scale(sub(p, last), k / steps)), i - 1 + k / steps)
         }
-        put(p)
+        put(p, i)
         last = p
       }
-      out.push({ points: new Float32Array(points), alpha: new Float32Array(alpha), count: alpha.length, ink: ink * shown })
+      const xyz = new Float32Array(points)
+      const count = alpha.length
+      if (ink > 0) out.push({ points: xyz, alpha: new Float32Array(alpha), count, ink })
+      if (glow > 0) out.push({ points: xyz, alpha: new Float32Array(likely), count, ink: glow, color: pale(rgb((bodyById(o.id) as Body).color)), glow: true })
     }
     // Paths are a map: through a narrow lens they are clutter, so only the
-    // one through what you are looking at stays, and that faintly.
-    for (const o of this.orbits) line(o, ORIGIN, o.id === this.look ? 0.26 * (0.35 + 0.65 * wide) : 0.14 * wide)
+    // one through what you are looking at stays, and that faintly. The glows
+    // are where the bodies are, so they stay whatever the lens, and in a picture.
+    for (const o of this.orbits) {
+      if (this.gone.has(o.id)) continue
+      const ink = o.id === this.look ? 0.26 * (0.35 + 0.65 * wide) : 0.14 * wide
+      line(o, ORIGIN, ink * shown, this.glowOf(o.id))
+    }
     for (const o of this.locals.values()) {
       const b = bodyById(o.id) as Body
-      const ink = this.localInk(b)
-      if (ink > 0) line(o, this.at(b.parent as BodyId), ink)
+      line(o, this.at(b.parent as BodyId), this.localInk(b) * shown, this.localGlow(b))
     }
     return out
   }
@@ -1492,13 +1652,17 @@ export class Instrument {
     for (const b of BODIES) {
       const rel = sub(this.at(b.id), eye)
       const d = len(rel)
-      discs.push({ id: b.id, dir: scale(rel, 1 / d), ang: Math.asin(Math.min(1, b.radius / d)), d })
+      // A body that is not at its place, or no more, hides nothing.
+      const there = !this.gone.has(b.id) && (this.fades.get(b.id) ?? 1) >= 0.5
+      discs.push({ id: b.id, dir: scale(rel, 1 / d), ang: there ? Math.asin(Math.min(1, this.radius(b.id) / d)) : 0, d })
     }
     for (const disc of discs) {
       const at = project(fr, disc.dir, this.width, this.height)
       const r = disc.ang / pixelAngle(fr, disc.dir, this.height)
       if (r > 1.5 || disc.id === this.seat || disc.id === this.look) this.loadMap(disc.id)
-      let shown = at !== null && disc.id !== this.seat && r < 26 && (this.fades.get(disc.id) ?? 1) >= 0.5
+      // What you are looking at keeps its name while it is only a glow along its path.
+      const seen = disc.id === this.look || (this.fades.get(disc.id) ?? 1) >= 0.5
+      let shown = at !== null && disc.id !== this.seat && r < 26 && seen && !this.gone.has(disc.id)
       if (shown && at) {
         if (at[0] < -40 || at[0] > this.width + 40 || at[1] < -20 || at[1] > this.height + 20) shown = false
         // Hidden behind a nearer body.
@@ -1555,17 +1719,19 @@ export class Instrument {
   private upcoming(): { solar: EclipseSteps; lunar: EclipseSteps } {
     const e = this.eclipses
     const now = performance.now()
+    // Past their years, the clock is held at the nearer end, so they are not looked for again and again.
+    const ms = withinEclipses(this.ms)
     const stale =
       Number.isNaN(e.from) ||
-      this.ms < e.from ||
-      (e.solar !== null && this.ms >= e.solar.peak + NEAR_MS) ||
-      (e.lunar !== null && this.ms >= e.lunar.peak + NEAR_MS)
+      ms < e.from ||
+      (e.solar !== null && ms >= e.solar.peak + NEAR_MS) ||
+      (e.lunar !== null && ms >= e.lunar.peak + NEAR_MS)
     if (stale && (Number.isNaN(e.from) || now - e.at > 500)) {
       try {
-        this.eclipses = { solar: nearEclipse('solar', this.ms), lunar: nearEclipse('lunar', this.ms), from: this.ms, at: now }
+        this.eclipses = { solar: nearEclipse('solar', ms), lunar: nearEclipse('lunar', ms), from: ms, at: now }
         for (const next of [this.eclipses.solar, this.eclipses.lunar]) if (next) this.tape.know(next)
       } catch {
-        this.eclipses = { solar: null, lunar: null, from: this.ms, at: now }
+        this.eclipses = { solar: null, lunar: null, from: ms, at: now }
       }
     }
     const steps = (x: Eclipse | null): EclipseSteps => (x ? stepsFrom(x, this.ms) : { e: null, at: false, back: false, on: false })
@@ -1578,19 +1744,22 @@ export class Instrument {
     const eye = this.eye.at
     const rows: Array<[string, string]> = []
     if (this.seat === this.look) {
-      const alt = len(sub(this.at(seat.id), eye)) - seat.radius
+      const alt = len(sub(this.at(seat.id), eye)) - this.radius(seat.id)
       const fromSun = len(this.at(seat.id))
       rows.push(['Above', distanceLabel(Math.max(0, alt))])
       if (seat.id !== 'sun') {
         rows.push(['Sun', distanceLabel(fromSun)])
         rows.push(['Sunlight', lightLabel(fromSun)])
-        rows.push(['Noon', luxLabel(noonLux(fromSun / AU_KM))])
+        rows.push(['Noon', luxLabel(noonLux(fromSun / AU_KM, this.sun.luminosity))])
       }
-      rows.push(['Radius', `${Math.round(seat.radius).toLocaleString('en-US')} km`])
+      rows.push(['Radius', `${Math.round(this.radius(seat.id)).toLocaleString('en-US')} km`])
+    } else if (this.presence(look.id) < 0.5) {
+      // Where it is along its path is not known, only how far round what it goes round.
+      rows.push(['Orbit', distanceLabel(len(sub(this.at(look.id), this.at(look.parent ?? 'sun'))))])
     } else {
       const d = len(sub(this.at(look.id), this.at(seat.id)))
       const rel = sub(this.at(look.id), eye)
-      const across = 2 * Math.asin(Math.min(1, look.radius / len(rel)))
+      const across = 2 * Math.asin(Math.min(1, this.radius(look.id) / len(rel)))
       rows.push(['Distance', distanceLabel(d)])
       rows.push(['Light', lightLabel(d)])
       rows.push(['Size', sizeLabel(across)])
@@ -1614,8 +1783,9 @@ export class Instrument {
       filled: this.tape.filled,
       marks: this.tape.markings,
       expanded: !this.playing || this.scrubbing,
-      moment: `${dayLabel(this.ms)}, ${clockLabel(this.ms)} UTC`,
+      moment: momentLabel(this.ms),
       ms: this.ms,
+      gone: new Set(this.gone),
     }
   }
 }

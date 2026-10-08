@@ -497,7 +497,7 @@
     background-color var(--lb-t-quick, 120ms) ease;
 }
 
-.lt-body-row:hover {
+.lt-body-row:hover:not(:disabled) {
   color: var(--lb-ink, rgba(255, 255, 255, 0.86));
   background: var(--sl-hover, rgba(255, 255, 255, 0.07));
 }
@@ -552,7 +552,7 @@
     background-color var(--lb-t-quick, 120ms) ease;
 }
 
-.lt-moon:hover {
+.lt-moon:hover:not(:disabled) {
   color: var(--lb-ink, rgba(255, 255, 255, 0.86));
   background: var(--sl-hover, rgba(255, 255, 255, 0.07));
 }
@@ -560,6 +560,13 @@
 .lt-moon[aria-pressed='true'] {
   color: var(--lb-ink-strong, #fff);
   background: var(--sl-on, rgba(255, 255, 255, 0.1));
+}
+
+/* Taken by the Sun. */
+.lt-body-row:disabled,
+.lt-moon:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* --------------------------------------------------------------- readout */
@@ -670,6 +677,18 @@
   font-weight: 500;
   letter-spacing: 0.11em;
   color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
+}
+
+/* Past the calendar's years, years from now in the room the date, the time
+   and UTC take, so the dock keeps its width. */
+.sl-clock[data-deep] .sl-clock-day {
+  min-width: calc(19ch + 36px);
+  text-align: center;
+}
+
+.sl-clock[data-deep] .sl-clock-time,
+.sl-clock[data-deep] .sl-clock-zone {
+  display: none;
 }
 
 /* Back to the present, as a live stream has it: the dot is lit while the
@@ -1034,6 +1053,11 @@
   color: var(--lb-ink-strong, #fff);
 }
 
+/* "44 BC", "4.50 Gyr ago": into the room between the steps. */
+.sl-field.is-year.is-long {
+  width: 104px;
+}
+
 .sl-field.is-time {
   width: 3.4ch;
   font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
@@ -1042,8 +1066,19 @@
   font-variant-numeric: slashed-zero tabular-nums;
 }
 
-.sl-field:hover {
+.sl-field:hover:not(:disabled) {
   background: var(--sl-hover, rgba(255, 255, 255, 0.07));
+}
+
+/* Past the calendar's years only the year has a say. */
+.sl-field:disabled {
+  cursor: default;
+}
+
+.sl-when .is-off > .lb-opt-label,
+.sl-when .is-off .sl-when-colon,
+.sl-when .is-off .sl-when-zone {
+  opacity: 0.4;
 }
 
 .sl-field:focus {
@@ -1101,6 +1136,16 @@
   .sl-now-label,
   .sl-clock-zone {
     display: none;
+  }
+
+  /* Years from now in two, as the date and the time were: "4.50 Gyr", "ago". */
+  .sl-clock[data-deep] .sl-clock-day {
+    min-width: 11ch;
+    text-align: right;
+  }
+
+  .sl-clock[data-deep] .sl-clock-time {
+    display: inline;
   }
 }
 

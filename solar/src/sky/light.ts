@@ -96,9 +96,9 @@ const MEASURED: Partial<Record<BodyId, (deg: number) => number>> = {
   },
 }
 
-/** Noon light at `au` from the Sun, lux. */
-export function noonLux(au: number): number {
-  return SUN_LUX / (au * au)
+/** Noon light at `au` from the Sun, lux, the Sun `L` times as bright as now. */
+export function noonLux(au: number, L = 1): number {
+  return (SUN_LUX * L) / (au * au)
 }
 
 /** The light from something of magnitude `m`, lux. */
@@ -106,18 +106,18 @@ export function luxOf(m: number): number {
   return SUN_LUX * 10 ** (-0.4 * (m - SUN_MAG))
 }
 
-/** The Sun's magnitude at `au`. */
-export function sunMagnitude(au: number): number {
-  return SUN_MAG + 5 * Math.log10(au)
+/** The Sun's magnitude at `au`, it `L` times as bright as now. */
+export function sunMagnitude(au: number, L = 1): number {
+  return SUN_MAG + 5 * Math.log10(au) - 2.5 * Math.log10(L)
 }
 
 /**
  * A sunlit body's magnitude: its radius and distance from the eye in km, from
  * the Sun in AU, and the angle at it between the Sun and the eye, radians.
  * `lit` is how much sunlight reaches it, under 1 in a shadow; `rings` adds
- * Saturn's, in magnitudes.
+ * Saturn's, in magnitudes; and the Sun is `L` times as bright as now.
  */
-export function magnitude(id: Exclude<BodyId, 'sun'>, radius: number, eye: number, sun: number, phase: number, lit = 1, rings = 0): number {
+export function magnitude(id: Exclude<BodyId, 'sun'>, radius: number, eye: number, sun: number, phase: number, lit = 1, rings = 0, L = 1): number {
   const deg = (phase * 180) / Math.PI
   const measured = MEASURED[id]
   const fade = measured
@@ -125,7 +125,7 @@ export function magnitude(id: Exclude<BodyId, 'sun'>, radius: number, eye: numbe
     : CLOUDED.has(id)
       ? -2.5 * Math.log10(Math.max(1e-12, (Math.sin(phase) + (Math.PI - phase) * Math.cos(phase)) / Math.PI))
       : airless(deg)
-  return SUN_MAG - 2.5 * Math.log10((ALBEDO[id] * (radius / eye) ** 2 * Math.max(lit, 1e-12)) / (sun * sun)) + fade + rings
+  return SUN_MAG - 2.5 * Math.log10((ALBEDO[id] * L * (radius / eye) ** 2 * Math.max(lit, 1e-12)) / (sun * sun)) + fade + rings
 }
 
 /** Saturn's rings in its magnitude: brighter the more open they are both to the Sun and to the eye, nothing when the eye sees their dark face. */

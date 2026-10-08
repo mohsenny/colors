@@ -14,6 +14,8 @@ const MOONS = new Map<BodyId, Body[]>(
 export interface BodiesProps {
   open: boolean
   seat: BodyId
+  /** The bodies the Sun has taken by the time, which are not there to go to. */
+  gone: ReadonlySet<BodyId>
   onSelect(id: BodyId): void
 }
 
@@ -22,7 +24,7 @@ export interface BodiesProps {
  * outward, each with its key, and the moons of the four giants and Pluto
  * under what they go round.
  */
-export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {
+export function Bodies({ open, seat, gone, onSelect }: BodiesProps): ReactElement {
   const tab = open ? undefined : -1
   return (
     <div className={`lb-options lt-bodies${open ? ' is-open' : ''}`} aria-hidden={open ? undefined : 'true'}>
@@ -32,12 +34,13 @@ export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {
             type="button"
             className="lt-body-row"
             aria-pressed={seat === b.id}
+            disabled={gone.has(b.id)}
             tabIndex={tab}
             onClick={() => onSelect(b.id)}
           >
             <Sphere color={b.color} star={b.kind === 'star'} />
             <span className="lt-body-name">{b.name}</span>
-            <span className="lt-body-kind">{KIND[b.kind]}</span>
+            <span className="lt-body-kind">{gone.has(b.id) ? 'Taken' : KIND[b.kind]}</span>
             <span className="lt-body-key" aria-hidden="true">
               {i === 0 ? 'S' : i % 10}
             </span>
@@ -50,6 +53,7 @@ export function Bodies({ open, seat, onSelect }: BodiesProps): ReactElement {
                   type="button"
                   className="lt-moon"
                   aria-pressed={seat === m.id}
+                  disabled={gone.has(m.id)}
                   tabIndex={tab}
                   onClick={() => onSelect(m.id)}
                 >

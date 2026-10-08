@@ -2,12 +2,14 @@ import { Body as AE, HelioVector, Illumination, MakeTime } from 'astronomy-engin
 import { describe, expect, it } from 'vitest'
 import { AU_KM, BODIES, bodyById } from './bodies'
 import type { BodyId } from './bodies'
-import { nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
+import { BLEND, EXACT, J2000_MS, YEAR_MS, presenceOf, smearOf } from './deep'
+import { ECLIPSES_FROM, ECLIPSES_TO, nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
 import type { Eclipse, EclipseType } from './eclipses'
 import { TIME_MAX, TIME_MIN, posesAt, toEcliptic } from './ephemeris'
 import type { Vec3 } from './ephemeris'
 import { keplerMoon } from './kepler'
 import { DARK, excess, gain, glareOf, limit, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt } from './light'
+import { engulfed, sunAt, widening } from './sun'
 
 function len(a: Vec3): number {
   return Math.hypot(a[0], a[1], a[2])
@@ -347,7 +349,11 @@ describe('Pluto and Charon', () => {
 })
 
 describe('eclipses', () => {
-  const say = (e: Eclipse | null): string => (e ? `${new Date(e.peak).toISOString().slice(0, 10)} ${e.kind}` : 'none')
+  const say = (e: Eclipse | null): string => {
+    if (!e) return 'none'
+    const d = new Date(e.peak)
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')} ${e.kind}`
+  }
 
   function run(type: EclipseType, from: number, n: number, way: 1 | -1 = 1): string[] {
     const out: string[] = []
@@ -404,22 +410,26 @@ describe('eclipses', () => {
     }
   })
 
-  it("stops at either end of the clock's range", () => {
-    const end = TIME_MAX - 86_400_000
+  it('stops at either end of the years they are found over, 2000 BC and AD 3000', () => {
     for (const [type, first, last] of [
-      ['solar', '1000-04-13 Total', '2999-10-30 Partial'],
-      ['lunar', '1000-03-28 Penumbral', '2999-11-14 Total'],
+      ['solar', '-1999-05-25 Total', '2999-10-30 Partial'],
+      ['lunar', '-1999-06-08 Penumbral', '2999-11-14 Total'],
     ] as const) {
-      expect(say(stepTo(type, TIME_MIN, -1))).toBe('none')
-      expect(say(stepTo(type, TIME_MIN, 1))).toBe(first)
-      expect(stepsFrom(nearEclipse(type, TIME_MIN), TIME_MIN)).toMatchObject({ at: false, back: false, on: true })
-      expect(say(stepTo(type, end, 1))).toBe('none')
-      expect(say(stepTo(type, end, -1))).toBe(last)
-      expect(stepsFrom(nearEclipse(type, end), end)).toMatchObject({ e: null, back: true, on: false })
+      // From their ends, and from the ends of the clock, billions of years past them.
+      for (const start of [ECLIPSES_FROM, TIME_MIN]) {
+        expect(say(stepTo(type, start, -1))).toBe('none')
+        expect(say(stepTo(type, start, 1))).toBe(first)
+        expect(stepsFrom(nearEclipse(type, start), start)).toMatchObject({ at: false, back: false, on: true })
+      }
+      for (const end of [ECLIPSES_TO - 86_400_000, TIME_MAX]) {
+        expect(say(stepTo(type, end, 1))).toBe('none')
+        expect(say(stepTo(type, end, -1))).toBe(last)
+        expect(stepsFrom(nearEclipse(type, end), end)).toMatchObject({ e: null, back: true, on: false })
+      }
       // At the first and the last themselves.
       for (const [e, back, on] of [
-        [nextEclipse(type, TIME_MIN), false, true],
-        [previousEclipse(type, TIME_MAX), true, false],
+        [nextEclipse(type, ECLIPSES_FROM), false, true],
+        [previousEclipse(type, ECLIPSES_TO), true, false],
       ] as const) {
         expect(stepsFrom(nearEclipse(type, e.peak), e.peak)).toMatchObject({ at: true, back, on })
       }
@@ -431,6 +441,59 @@ describe('eclipses', () => {
     // Greatest eclipse was over Nazas, Mexico.
     expect(e.where?.lat).toBeCloseTo(25.3, 0)
     expect(e.where?.lon).toBeCloseTo(-104.1, 0)
+  })
+})
+
+describe('deep time', () => {
+  const at = (years: number): number => J2000_MS + years * YEAR_MS
+  const gyr = (g: number): number => at(g * 1e9)
+
+  it('keeps the Sun as it is now, and makes it a red giant 256 times as wide 7.59 billion years on, then a white dwarf the size of the Earth', () => {
+    expect(sunAt(J2000_MS)).toEqual({ radius: 695_700, temperature: 5772, luminosity: 1, mass: 1 })
+    // Seven tenths as bright as it began.
+    expect(sunAt(TIME_MIN).luminosity).toBeCloseTo(0.69, 2)
+    expect(sunAt(gyr(7.59)).radius / 695_700).toBeCloseTo(256, 0)
+    const dwarf = sunAt(gyr(9))
+    expect(dwarf.radius).toBeGreaterThan(6_000)
+    expect(dwarf.radius).toBeLessThan(12_000)
+    expect(dwarf.temperature).toBeGreaterThan(6_000)
+  })
+
+  it('takes Mercury, Venus, the Earth and the Moon as it swells, and widens the orbits of the rest as it loses mass', () => {
+    for (const id of ['mercury', 'venus', 'earth', 'moon'] as const) expect([engulfed(id, gyr(7.5)), engulfed(id, gyr(7.6))]).toEqual([false, true])
+    expect(engulfed('mars', TIME_MAX)).toBe(false)
+    expect(widening('mars', J2000_MS)).toBe(1)
+    expect(widening('mars', gyr(9))).toBeCloseTo(1 / 0.54, 6)
+    // The Earth is dragged in to the Sun's edge.
+    expect((widening('earth', gyr(7.5895)) * AU_KM) / sunAt(gyr(7.5895)).radius).toBeCloseTo(1, 6)
+  })
+
+  it('moves everything as smoothly where the theories give way to the mean orbits as it does now', () => {
+    // How far each body is off the middle of where it was a minute before and will be a minute after, km: how much its path bends.
+    const bend = (ms: number): Map<string, number> => {
+      const [a, m, b] = [posesAt(ms - 60_000), posesAt(ms), posesAt(ms + 60_000)]
+      return new Map(BODIES.map(({ id }) => [id, len([0, 1, 2].map((k) => (a[id].at[k] + b[id].at[k]) / 2 - m[id].at[k]) as Vec3)]))
+    }
+    const now = bend(Date.UTC(2026, 0, 1))
+    for (const y of [EXACT[0] - BLEND, EXACT[0], EXACT[1], EXACT[1] + BLEND]) {
+      for (const [id, km] of bend(at(y))) expect(km, `${id} ${y} years on`).toBeLessThan((now.get(id) as number) * 1.1 + 1)
+    }
+  })
+
+  it('places every body as far back and on as the clock goes', () => {
+    for (const ms of [TIME_MIN, TIME_MAX]) {
+      for (const [id, p] of Object.entries(posesAt(ms))) expect([...p.at, ...p.x, ...p.y, ...p.z].every(Number.isFinite), id).toBe(true)
+    }
+  })
+
+  it("loses a body's place along its orbit bit by bit: the Moon's over a few hundred thousand years, the Earth's over tens of millions", () => {
+    const shown = (id: BodyId, years: number): number => presenceOf(smearOf(id, at(years)))
+    for (const id of ['earth', 'moon', 'io', 'neptune'] as const) expect(shown(id, 26)).toBe(1)
+    expect([shown('moon', 1e4), shown('moon', 1e6)]).toEqual([1, 0])
+    expect([shown('earth', 1e6), shown('earth', 1e8)]).toEqual([1, 0])
+    expect(shown('earth', 1e7)).toBeGreaterThan(0.2)
+    expect(shown('earth', 1e7)).toBeLessThan(0.8)
+    expect(shown('earth', -1e7)).toBeCloseTo(shown('earth', 1e7), 2)
   })
 })
 

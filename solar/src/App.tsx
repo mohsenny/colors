@@ -15,7 +15,7 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
   const snap: Snapshot = useSyncExternalStore(instrument.subscribe, instrument.getSnapshot)
   const [note, setNote] = useState<Note | null>(null)
   const attachClock = useCallback(
-    (day: HTMLElement | null, time: HTMLElement | null) => instrument.attachClock(day, time),
+    (clock: HTMLElement | null, day: HTMLElement | null, time: HTMLElement | null) => instrument.attachClock(clock, day, time),
     [instrument],
   )
   const hold = useCallback((on: boolean) => instrument.hold(on), [instrument])

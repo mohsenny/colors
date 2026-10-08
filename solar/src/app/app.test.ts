@@ -1,19 +1,40 @@
 import { describe, expect, it } from 'vitest'
 import { AU_KM, LIGHT_KM_S } from '../sky/bodies'
-import { covered, crossesDisc, distanceLabel, lightLabel, luxLabel, sizeLabel } from './instrument'
+import { covered, crossesDisc, distanceLabel, lightLabel, luxLabel, sizeLabel, spread } from './instrument'
 import { TAPE_S, Tape } from './tape'
-import { DEAD, clockLabel, dayLabel, daysIn, dialOf, minuteLabel, momentOf, notch, partsOf, rateOf, shiftMonths, speedLabel, speedSaid } from './time'
+import { YEAR_MS } from '../sky/deep'
+import {
+  DEAD,
+  clockLabel,
+  dayLabel,
+  deepLabel,
+  deepParts,
+  daysIn,
+  deepStep,
+  dialOf,
+  inYear,
+  minuteLabel,
+  momentLabel,
+  momentOf,
+  notch,
+  partsOf,
+  rateOf,
+  readYear,
+  shiftMonths,
+  speedLabel,
+  speedSaid,
+} from './time'
 
 describe('the clock', () => {
   const YEAR = 365.2425 * 86_400
-  const ROUND = [60, 600, 3600, 21_600, 86_400, 604_800, 30.436875 * 86_400, YEAR]
+  const ROUND = [60, 600, 3600, 21_600, 86_400, 604_800, 30.436875 * 86_400, ...[1, 10, 100, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9].map((n) => n * YEAR)]
 
-  it('rests on real time in the middle of the knob and climbs either way to a year a second', () => {
+  it('rests on real time in the middle of the knob and climbs either way to a billion years a second', () => {
     expect(rateOf(0)).toBe(1)
     expect(rateOf(DEAD * 0.9)).toBe(1)
     expect(rateOf(-DEAD * 0.9)).toBe(1)
     expect(rateOf(DEAD)).toBeCloseTo(60, 6)
-    expect(rateOf(1) / YEAR).toBeCloseTo(1, 9)
+    expect(rateOf(1) / YEAR / 1e9).toBeCloseTo(1, 9)
     expect(rateOf(5)).toBe(rateOf(1))
     let last = 1
     for (let d = DEAD; d <= 1; d += 0.01) {
@@ -43,10 +64,14 @@ describe('the clock', () => {
     expect(speedLabel(dialOf(-2.5 * 3600))).toBe('\u22122.5 hr/s')
     expect(speedLabel(dialOf(3590))).toBe('+1 hr/s')
     expect(speedLabel(dialOf(23.9 * 3600))).toBe('+1 day/s')
-    expect(speedLabel(-1)).toBe('\u22121 yr/s')
+    expect(speedLabel(dialOf(YEAR))).toBe('+1 yr/s')
+    expect(speedLabel(dialOf(-2500 * YEAR))).toBe('\u22122.5 kyr/s')
+    expect(speedLabel(-1)).toBe('\u22121 Gyr/s')
     expect(speedSaid(0)).toBe('Real time')
     expect(speedSaid(dialOf(-86_400))).toBe('1 day a second, backward')
     expect(speedSaid(dialOf(2.5 * 86_400))).toBe('2.5 days a second')
+    expect(speedSaid(dialOf(1e6 * YEAR))).toBe('1 million years a second')
+    expect(speedSaid(-1)).toBe('1 billion years a second, backward')
   })
 
   it('reads in UTC', () => {
@@ -54,6 +79,62 @@ describe('the clock', () => {
     expect(dayLabel(ms)).toBe('5 Oct 2026')
     expect(clockLabel(ms)).toBe('08:04:09')
     expect(minuteLabel(ms)).toBe('08:04')
+    expect(momentLabel(ms)).toBe('5 Oct 2026, 08:04:09 UTC')
+  })
+
+  it('reads by the calendar within ten thousand years of now, and in years from now past that', () => {
+    const now = Date.UTC(2026, 9, 5)
+    const at = (year: number): number => {
+      const d = new Date(Date.UTC(2000, 2, 15))
+      d.setUTCFullYear(year)
+      return d.getTime()
+    }
+    expect(dayLabel(at(-43), now)).toBe('15 Mar 44 BC')
+    expect(dayLabel(at(0), now)).toBe('15 Mar 1 BC')
+    expect(dayLabel(at(12_000), now)).toBe('15 Mar 12,000')
+    expect(dayLabel(at(-7900), now)).toBe('15 Mar 7901 BC')
+    const ago = (years: number): number => now - years * YEAR_MS
+    expect(dayLabel(ago(12_437), now)).toBe('12,400 years ago')
+    expect(momentLabel(ago(12_437), now)).toBe('12,400 years ago')
+    expect(dayLabel(ago(999_700), now)).toBe('1.00 million years ago')
+    expect(dayLabel(ago(4.5e9), now)).toBe('4.50 billion years ago')
+    expect(dayLabel(now + 5e9 * YEAR_MS, now)).toBe('in 5.00 billion years')
+    expect(dayLabel(now + 12.5e6 * YEAR_MS, now)).toBe('in 12.5 million years')
+    expect(deepLabel(ago(12_437), true, now)).toBe('12.4 kyr ago')
+    expect(deepLabel(ago(345_678), true, now)).toBe('346 kyr ago')
+    expect(deepParts(now + 5e9 * YEAR_MS, now)).toEqual(['5.00 Gyr', 'ahead'])
+    expect(deepParts(ago(1.25e6), now)).toEqual(['1.25 Myr', 'ago'])
+  })
+
+  it('reads a year however it is typed', () => {
+    const now = Date.UTC(2026, 9, 5)
+    expect(readYear('1969', now)).toBe(1969)
+    expect(readYear('44 BC', now)).toBe(-43)
+    expect(readYear('-44', now)).toBe(-43)
+    expect(readYear('12,000', now)).toBe(12_000)
+    expect(readYear('12k ago', now)).toBe(2026 - 12_000)
+    expect(readYear('1.5 million years ago', now)).toBe(2026 - 1.5e6)
+    expect(readYear('in 5b', now)).toBe(2026 + 5e9)
+    expect(readYear('+3 Gyr', now)).toBe(2026 + 3e9)
+    expect(readYear('4.5 bya', now)).toBeNull()
+    expect(readYear('in 3k ago', now)).toBeNull()
+    expect(readYear('', now)).toBeNull()
+  })
+
+  it('goes to another year at the same time of year, and steps far from now by its third figure', () => {
+    const now = Date.UTC(2026, 9, 5)
+    const ms = Date.UTC(2026, 2, 15, 6, 30)
+    expect(dayLabel(inYear(ms, -43, now), now)).toBe('15 Mar 44 BC')
+    expect(partsOf(inYear(ms, -43, now))).toMatchObject({ month: 2, day: 15, hour: 6, minute: 30 })
+    const far = inYear(ms, 2026 - 1.25e6, now)
+    expect(dayLabel(far, now)).toBe('1.25 million years ago')
+    // And back into the calendar from there, in the same season: Julian years are not quite the calendar's.
+    expect(dayLabel(inYear(far, 1969, now), now)).toMatch(/^1[45] Mar 1969$/)
+    expect(dayLabel(deepStep(far, 1, now), now)).toBe('1.24 million years ago')
+    expect(dayLabel(deepStep(far, -10, now), now)).toBe('1.35 million years ago')
+    const odd = now - 12_437 * YEAR_MS
+    expect(dayLabel(deepStep(odd, 1, now), now)).toBe('12,300 years ago')
+    expect(dayLabel(deepStep(odd, -1, now), now)).toBe('12,500 years ago')
   })
 
   it('finds its way round the calendar', () => {
@@ -198,6 +279,18 @@ describe('names in the sky', () => {
     expect(crossesDisc(name(-60, 40), -60, 40, jupiter)).toBe(false)
     expect(crossesDisc(name(-100, 0), -100, 0, jupiter)).toBe(false)
     expect(crossesDisc(name(-10, 5), -10, 5, jupiter)).toBe(false)
+  })
+})
+
+describe('where a body may be', () => {
+  it('spreads it round its orbit as a whole, from a narrow bell to even all the way round, with no step where the two meet', () => {
+    for (const s of [0.05, 0.5, 1, 1.01, 3]) {
+      let sum = 0
+      for (let i = 0; i < 2000; i++) sum += (spread(-Math.PI + (2 * Math.PI * (i + 0.5)) / 2000, s) * 2 * Math.PI) / 2000
+      expect(sum).toBeCloseTo(1, 6)
+    }
+    for (const x of [0, 1, Math.PI]) expect(spread(x, 1 + 1e-9)).toBeCloseTo(spread(x, 1), 4)
+    expect(spread(1, 10)).toBeCloseTo(1 / (2 * Math.PI), 6)
   })
 })
 
