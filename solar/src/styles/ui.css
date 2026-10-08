@@ -980,9 +980,9 @@
 
 /* Opened over the clock rather than the middle of the dock, and never past its left end. */
 .sl-when {
-  left: max(0px, calc(var(--sl-when-x, 50%) - 119px));
-  width: 238px;
-  gap: 8px;
+  left: max(0px, calc(var(--sl-when-x, 50%) - 106px));
+  width: 212px;
+  gap: 7px;
   transform: translate(0, 6px) scale(0.97);
 }
 
@@ -990,32 +990,33 @@
   transform: translate(0, 0) scale(1);
 }
 
-.sl-when-head {
+/* The year first and large: a sky is looked at across years more than days. */
+.sl-when-year {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  margin: -2px -4px 1px;
 }
 
-/* Wide enough for September, so the arrows stay under the pointer. */
-.sl-when-month {
-  width: 62px;
-  font-size: 11px;
-  font-weight: 500;
-  text-align: center;
-  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
+/* Held, a step repeats, and a long press should not select or call up a menu. */
+.sl-when .lb-step-btn {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
 }
 
-/* Typed over or stepped with the arrows. The stage turns selection off, and
-   Safari will not type into a field without it. */
+/* Typed over or stepped. The stage turns selection off, and Safari will not
+   type into a field without it. */
 .sl-field {
-  width: 3.4ch;
+  width: 66px;
   height: 22px;
   padding: 0;
   border: 0;
   border-radius: 6px;
   background: none;
-  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10.5px;
-  font-variant-numeric: slashed-zero tabular-nums;
+  font-family: var(--lb-font, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   text-align: center;
   color: var(--lb-ink, rgba(255, 255, 255, 0.86));
   user-select: text;
@@ -1023,8 +1024,22 @@
   transition: background-color var(--lb-t-quick, 120ms) ease;
 }
 
-.sl-field[size='4'] {
-  width: 5.4ch;
+.sl-field.is-year {
+  width: 84px;
+  height: 36px;
+  border-radius: 9px;
+  font-size: 26px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  color: var(--lb-ink-strong, #fff);
+}
+
+.sl-field.is-time {
+  width: 3.4ch;
+  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  font-weight: 400;
+  font-variant-numeric: slashed-zero tabular-nums;
 }
 
 .sl-field:hover {
@@ -1044,95 +1059,11 @@
   background: rgba(255, 255, 255, 0.28);
 }
 
-.sl-when-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 28px);
-  gap: 2px;
-  justify-content: space-between;
-}
-
-.sl-when-weekday {
-  padding: 2px 0 3px;
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-align: center;
-  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
-}
-
-.sl-day {
-  position: relative;
-  display: grid;
-  place-items: center;
-  height: 28px;
-  border-radius: 50%;
-  font-family: var(--lb-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--lb-ink-soft, rgba(255, 255, 255, 0.58));
-  transition:
-    color var(--lb-t-quick, 120ms) ease,
-    background-color var(--lb-t-quick, 120ms) ease;
-}
-
-.sl-day:hover:not(:disabled) {
-  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
-  background: var(--sl-hover, rgba(255, 255, 255, 0.07));
-}
-
-/* Today on the wall clock, wherever the sky's clock is. */
-.sl-day.is-today {
-  color: var(--lb-ink, rgba(255, 255, 255, 0.86));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
-}
-
-/* The day the clock is on. */
-.sl-day[aria-pressed='true'] {
-  font-weight: 600;
-  color: var(--lb-surface, #030407);
-  background: var(--lb-ink, rgba(255, 255, 255, 0.86));
-}
-
-.sl-day:disabled {
-  color: var(--lb-ink-faint, rgba(255, 255, 255, 0.34));
-  opacity: 0.4;
-}
-
-/* An eclipse peaks that day, in the colours of its marks on the tape. */
-.sl-day-marks {
-  position: absolute;
-  bottom: 3px;
-  left: 50%;
-  display: flex;
-  gap: 2px;
-  transform: translateX(-50%);
-}
-
-.sl-day-mark {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-}
-
-.sl-day-mark.is-solar {
-  background: var(--sl-solar, rgb(255, 214, 140));
-  box-shadow: 0 0 3px var(--sl-solar-glow, rgba(255, 190, 90, 0.55));
-}
-
-.sl-day-mark.is-lunar {
-  background: var(--sl-lunar, rgb(226, 124, 82));
-  box-shadow: 0 0 3px var(--sl-lunar-glow, rgba(226, 110, 70, 0.5));
-}
-
-.sl-when-time {
-  padding-top: 8px;
-  border-top: 1px solid var(--lb-hairline, rgba(255, 255, 255, 0.1));
-}
-
 .sl-when-hm {
   display: flex;
   align-items: center;
   gap: 1px;
+  padding-right: 3px;
 }
 
 .sl-when-colon {

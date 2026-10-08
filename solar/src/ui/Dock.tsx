@@ -14,6 +14,7 @@ import { Sphere } from './Sphere'
 import { Timeline } from './Timeline'
 import type { TimelineProps } from './Timeline'
 import { When } from './When'
+import type { To } from './When'
 
 export interface DockProps {
   snap: Snapshot
@@ -26,8 +27,8 @@ export interface DockProps {
   onWatch(e: Eclipse): void
   onStep(type: EclipseType, way: 1 | -1): void
   onNow(): void
-  /** To a date picked in the drawer behind the clock. */
-  onPick(ms: number): void
+  /** To a date set in the drawer behind the clock. */
+  onGo(to: To): boolean
   /** Whether a date is being picked, for a fast clock to wait. */
   onHold(on: boolean): void
   onPhoto(): void
@@ -36,10 +37,10 @@ export interface DockProps {
 type Drawer = 'bodies' | 'when' | 'options' | null
 
 export function Dock(props: DockProps): ReactElement {
-  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onStep, onNow, onPick, onHold, onPhoto } = props
+  const { snap, attachClock, timeline, onTogglePlay, onDial, onBecome, onWatch, onStep, onNow, onGo, onHold, onPhoto } = props
   const { playing } = snap
   const [drawer, setDrawer] = useState<Drawer>(null)
-  const [opened, setOpened] = useState({ at: 0, ms: 0 })
+  const [at, setAt] = useState(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const bodyRef = useRef<HTMLButtonElement | null>(null)
   const clockRef = useRef<HTMLButtonElement | null>(null)
@@ -114,7 +115,7 @@ export function Dock(props: DockProps): ReactElement {
         aria-expanded={picking}
         onClick={(e) => {
           const c = e.currentTarget
-          setOpened({ at: c.offsetLeft + c.offsetWidth / 2, ms: Date.now() })
+          setAt(c.offsetLeft + c.offsetWidth / 2)
           toggle('when')
         }}
       >
@@ -123,7 +124,7 @@ export function Dock(props: DockProps): ReactElement {
         <span className="sl-clock-zone">UTC</span>
       </button>
       {/* Next to its opener, so Tab goes from the clock into it. */}
-      <When open={picking} ms={snap.ms} at={opened.at} opened={opened.ms} onPick={onPick} />
+      <When open={picking} ms={snap.ms} at={at} onGo={onGo} />
 
       {/* As on a live stream: lit while the clock plays the present, and the way back to it once it has left. */}
       <button

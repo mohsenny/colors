@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent, ReactElement } from 'react'
-import { daysIn, leadOf, momentOf, partsOf, shiftMonths } from '../app/time'
-import { eclipsesBetween } from '../sky/eclipses'
-import type { Eclipse } from '../sky/eclipses'
+import type { CSSProperties, ReactElement } from 'react'
+import { daysIn, momentOf, partsOf, shiftMonths } from '../app/time'
+import type { Parts } from '../app/time'
 import { TIME_MAX, TIME_MIN } from '../sky/ephemeris'
-import { StepIcon } from './Icons'
+import { DoubleStepIcon, StepIcon } from './Icons'
 
 const DAY_MS = 86_400_000
 const YEAR_MIN = new Date(TIME_MIN).getUTCFullYear()
 const YEAR_MAX = new Date(TIME_MAX).getUTCFullYear()
 const NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-const WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-/** Days the grid's arrow keys move, Up and Down a week. */
-const MOVES: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }
-const NONE = new Map<number, Eclipse[]>()
+/** How long a step is held before it repeats, then how often it does, ms. */
+const HOLD_MS = 400
+const REPEAT_MS = 80
+
+/** The way from the moment on the clock to another. */
+export type To = (ms: number) => number
 
 export interface WhenProps {
   open: boolean
@@ -21,92 +22,123 @@ export interface WhenProps {
   ms: number
   /** Where the clock's centre is along the dock, px, for the drawer to open over it. */
   at: number
-  /** When the drawer was opened, UTC ms, for today's ring. */
-  opened: number
-  onPick(ms: number): void
+  /** Goes the way given from the moment the clock is on, and says whether that moved it. */
+  onGo(to: To): boolean
 }
 
 function clamp(ms: number): number {
   return Math.max(TIME_MIN, Math.min(TIME_MAX, ms))
 }
 
-let last: { key: number; marks: Map<number, Eclipse[]> } | null = null
+/** What some typing means so far, null if nothing yet, and whether it is complete. */
+type Read = (text: string) => { n: number; full: boolean } | null
 
-/** The eclipses with their peak in a month, by the day of it. The last month asked for is kept. */
-function marksOf(year: number, month: number): Map<number, Eclipse[]> {
-  const key = year * 12 + month
-  if (last?.key === key) return last.marks
-  const marks = new Map<number, Eclipse[]>()
-  try {
-    for (const e of eclipsesBetween(Date.UTC(year, month, 1), Date.UTC(year, month + 1, 1))) {
-      const day = new Date(e.peak).getUTCDate()
-      marks.set(day, [...(marks.get(day) ?? []), e])
-    }
-  } catch {
-    // Unmarked rather than broken, as the eclipse drawer is when a search fails.
+/** A number, complete once all its digits are in or one more would take it past `max`. */
+function numberRead(min: number, max: number, digits: number): Read {
+  return (text) => {
+    const t = text.replace(/\D/g, '')
+    const n = Number(t)
+    if (t === '') return null
+    if (t.length >= digits) return { n: Math.max(min, Math.min(max, n)), full: true }
+    return n >= min && n <= max ? { n, full: n * 10 > max } : null
   }
-  last = { key, marks }
-  return marks
+}
+
+const yearRead = numberRead(YEAR_MIN, YEAR_MAX, 4)
+const hourRead = numberRead(0, 23, 2)
+const minuteRead = numberRead(0, 59, 2)
+const monthNumber = numberRead(1, 12, 2)
+
+/** A month by its number or the start of its name, the first it could be until there is only one. */
+const monthRead: Read = (text) => {
+  const t = text.trim().toLowerCase()
+  if (/^\d+$/.test(t)) {
+    const r = monthNumber(t)
+    return r && { n: r.n - 1, full: r.full }
+  }
+  const hits = NAMES.filter((name) => t && name.toLowerCase().startsWith(t))
+  return hits.length ? { n: NAMES.indexOf(hits[0] as string), full: false } : null
 }
 
 interface FieldProps {
-  value: number
-  digits: number
-  min: number
-  max: number
+  text: string
+  read: Read
+  /** Characters it holds. */
+  size: number
   label: string
   tab: number | undefined
+  className?: string
+  numeric?: boolean
+  /** Goes there while still being typed, as soon as it means anything. */
+  live?: boolean
   onSet(n: number): void
   onStep(n: number): void
 }
 
 /**
- * A number to type over, or step with the arrow keys, Shift for ten. It takes
- * as soon as all its digits are in; fewer count when it is left, if they make
- * sense on their own.
+ * Something to type over, or step with the arrow keys, Shift for ten. It
+ * takes as soon as it is complete, and otherwise when it is left, if it means
+ * anything by then.
  */
-function Field({ value, digits, min, max, label, tab, onSet, onStep }: FieldProps): ReactElement {
+function Field({ text, read, size, label, tab, className = '', numeric = true, live = false, onSet, onStep }: FieldProps): ReactElement {
   const [draft, setDraft] = useState<string | null>(null)
   const ref = useRef<HTMLInputElement | null>(null)
+  const fresh = useRef(false)
 
-  const done = (text: string, whole: boolean): void => {
+  const leave = (): void => {
+    if (draft === null) return
+    const r = read(draft)
+    if (r) onSet(r.n)
     setDraft(null)
-    const n = Number(text)
-    if (text === '') return
-    if (whole) onSet(Math.max(min, Math.min(max, n)))
-    else if (n >= min && n <= max) onSet(n)
+  }
+  // Selected again, so what is typed next starts afresh.
+  const again = (): void => {
+    requestAnimationFrame(() => {
+      if (document.activeElement === ref.current) ref.current?.select()
+    })
   }
 
   return (
     <input
       ref={ref}
       type="text"
-      className="sl-field"
-      inputMode="numeric"
+      className={`sl-field ${className}`}
+      inputMode={numeric ? 'numeric' : 'text'}
       autoComplete="off"
+      autoCapitalize="off"
       spellCheck={false}
       enterKeyHint="done"
-      maxLength={digits}
-      size={digits}
+      maxLength={size}
       aria-label={label}
       tabIndex={tab}
-      value={draft ?? String(value).padStart(digits, '0')}
+      value={draft ?? text}
       onFocus={(e) => e.target.select()}
+      // Safari puts the caret where it was clicked, after the focus.
+      onPointerDown={(e) => {
+        fresh.current = document.activeElement !== e.currentTarget
+      }}
+      onClick={(e) => {
+        if (fresh.current) e.currentTarget.select()
+        fresh.current = false
+      }}
       onChange={(e) => {
-        const text = e.target.value.replace(/\D/g, '').slice(0, digits)
-        if (text.length < digits) {
-          setDraft(text)
+        const typed = e.target.value
+        const r = read(typed)
+        if (!r?.full) {
+          setDraft(typed)
+          if (live && r) onSet(r.n)
           return
         }
-        done(text, true)
-        // Selected again, so the next digit typed starts a new number.
-        requestAnimationFrame(() => {
-          if (document.activeElement === ref.current) ref.current?.select()
-        })
+        setDraft(null)
+        onSet(r.n)
+        again()
       }}
-      onBlur={() => draft !== null && done(draft, false)}
+      onBlur={leave}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' && draft !== null) done(draft, false)
+        if (e.key === 'Enter') {
+          leave()
+          again()
+        }
         if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
         e.preventDefault()
         setDraft(null)
@@ -116,50 +148,84 @@ function Field({ value, digits, min, max, label, tab, onSet, onStep }: FieldProp
   )
 }
 
-/**
- * The drawer behind the clock: a month of days to pick from, with the
- * eclipses in it marked, and the time. Each change goes there at once and the
- * drawer stays, so the sky can be watched while the date is found. A day keeps
- * the time of day, and a time keeps the day.
- */
-export function When({ open, ms, at, opened, onPick }: WhenProps): ReactElement {
-  const tab = open ? undefined : -1
-  const p = partsOf(ms)
-  const { year, month, day } = p
-  const lead = leadOf(year, month)
-  const today = Math.floor(opened / DAY_MS) * DAY_MS
-  const gridRef = useRef<HTMLDivElement | null>(null)
-  const follow = useRef(false)
-  // Searched only while open: closed, a fast clock would cross months many times a second.
-  const marks = open ? marksOf(year, month) : NONE
+interface StepProps {
+  label: string
+  back?: boolean
+  /** Ten years at a time, with two chevrons. */
+  far?: boolean
+  ms: number
+  to: To
+  tab: number | undefined
+  onGo(to: To): boolean
+}
 
-  // A day moved to with the keys takes the focus with it.
-  useEffect(() => {
-    if (!follow.current) return
-    follow.current = false
-    gridRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus()
-  }, [year, month, day])
+/** A step one way, taken again and again while it is held down. */
+function Step({ label, back = false, far = false, ms, to, tab, onGo }: StepProps): ReactElement {
+  const timer = useRef(0)
+  const pressed = useRef(false)
+  useEffect(() => () => clearTimeout(timer.current), [])
 
-  const go = (to: number): void => onPick(clamp(to))
-  const can = (to: number): boolean => clamp(to) !== ms
-
-  const onGridKey = (e: KeyboardEvent<HTMLDivElement>): void => {
-    const by = MOVES[e.key]
-    let to: number
-    if (by !== undefined) to = ms + by * DAY_MS
-    else if (e.key === 'PageUp' || e.key === 'PageDown') to = shiftMonths(ms, (e.key === 'PageUp' ? -1 : 1) * (e.shiftKey ? 12 : 1))
-    else return
-    e.preventDefault()
-    if (!can(to)) return
-    follow.current = true
-    go(to)
-  }
-
-  const step = (label: string, to: number, back: boolean): ReactElement => (
-    <button type="button" className="lb-step-btn" aria-label={label} disabled={!can(to)} tabIndex={tab} onClick={() => go(to)}>
-      <StepIcon back={back} />
+  return (
+    <button
+      type="button"
+      className="lb-step-btn"
+      aria-label={label}
+      disabled={clamp(to(ms)) === ms}
+      tabIndex={tab}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        pressed.current = true
+        if (!onGo(to)) return
+        const stop = (): void => {
+          clearTimeout(timer.current)
+          window.removeEventListener('pointerup', stop)
+          window.removeEventListener('pointercancel', stop)
+        }
+        const again = (wait: number): void => {
+          timer.current = window.setTimeout(() => (onGo(to) ? again(REPEAT_MS) : stop()), wait)
+        }
+        window.addEventListener('pointerup', stop)
+        window.addEventListener('pointercancel', stop)
+        again(HOLD_MS)
+      }}
+      onKeyDown={() => {
+        pressed.current = false
+      }}
+      // A pointer stepped on its way down; the keys, and readers, step here.
+      onClick={() => {
+        if (!pressed.current) onGo(to)
+        pressed.current = false
+      }}
+    >
+      {far ? <DoubleStepIcon back={back} /> : <StepIcon back={back} />}
     </button>
   )
+}
+
+const years = (n: number): To => (ms) => shiftMonths(ms, 12 * n)
+const months = (n: number): To => (ms) => shiftMonths(ms, n)
+const days = (n: number): To => (ms) => ms + n * DAY_MS
+const turn =
+  (part: 'hour' | 'minute', n: number): To =>
+  (ms) => {
+    const p = partsOf(ms)
+    return momentOf({ ...p, [part]: p[part] + n, second: 0 })
+  }
+
+/**
+ * The drawer behind the clock, for the years a sky is looked at across: the
+ * year first and large, ten at a time or one, then the month and the day, and
+ * the time. Each is typed over or stepped, and held a step repeats. Each change
+ * goes there at once and the drawer stays, so the sky can be watched while the
+ * date is found. A day keeps the time of day, and a time keeps the day.
+ */
+export function When({ open, ms, at, onGo }: WhenProps): ReactElement {
+  const tab = open ? undefined : -1
+  const p = partsOf(ms)
+  const step = { ms, tab, onGo }
+  const set = (change: Partial<Parts>): void => {
+    onGo((now) => momentOf({ ...partsOf(now), ...change }))
+  }
 
   return (
     <div
@@ -167,92 +233,88 @@ export function When({ open, ms, at, opened, onPick }: WhenProps): ReactElement 
       style={{ '--sl-when-x': `${at}px` } as CSSProperties}
       aria-hidden={open ? undefined : 'true'}
     >
-      <div className="sl-when-head">
-        <div className="lb-stepper" role="group" aria-label="Month">
-          {step('Previous month', shiftMonths(ms, -1), true)}
-          <span className="sl-when-month">{NAMES[month]}</span>
-          {step('Next month', shiftMonths(ms, 1), false)}
-        </div>
-        <div className="lb-stepper" role="group" aria-label="Year">
-          {step('Previous year', shiftMonths(ms, -12), true)}
+      <div className="sl-when-year" role="group" aria-label="Year">
+        <Step {...step} label="Ten years back" back far to={years(-10)} />
+        <Step {...step} label="A year back" back to={years(-1)} />
+        <Field
+          text={String(p.year)}
+          read={yearRead}
+          size={4}
+          label="Year"
+          tab={tab}
+          className="is-year"
+          onSet={(year) => set({ year })}
+          onStep={(n) => onGo(years(n))}
+        />
+        <Step {...step} label="A year on" to={years(1)} />
+        <Step {...step} label="Ten years on" far to={years(10)} />
+      </div>
+
+      <div className="lb-opt-row">
+        <span className="lb-opt-label" id="sl-when-month">
+          Month
+        </span>
+        <div className="lb-stepper" role="group" aria-labelledby="sl-when-month">
+          <Step {...step} label="A month back" back to={months(-1)} />
           <Field
-            value={year}
-            digits={4}
-            min={YEAR_MIN}
-            max={YEAR_MAX}
-            label="Year"
+            text={NAMES[p.month] as string}
+            read={monthRead}
+            size={9}
+            label="Month"
             tab={tab}
-            onSet={(y) => go(momentOf({ ...p, year: y }))}
-            onStep={(n) => go(shiftMonths(ms, 12 * n))}
+            numeric={false}
+            live
+            onSet={(month) => set({ month })}
+            onStep={(n) => onGo(months(n))}
           />
-          {step('Next year', shiftMonths(ms, 12), false)}
+          <Step {...step} label="A month on" to={months(1)} />
         </div>
       </div>
 
-      <div ref={gridRef} className="sl-when-grid" role="group" aria-label={`${NAMES[month]} ${year}`} onKeyDown={onGridKey}>
-        {WEEK.map((w) => (
-          <span key={w} className="sl-when-weekday" aria-hidden="true">
-            {w[0]}
-          </span>
-        ))}
-        {Array.from({ length: lead }, (_, i) => (
-          <span key={`lead-${i}`} />
-        ))}
-        {Array.from({ length: daysIn(year, month) }, (_, i) => {
-          const d = i + 1
-          const start = Date.UTC(year, month, d)
-          const seen = marks.get(d) ?? []
-          return (
-            <button
-              key={d}
-              type="button"
-              className={`sl-day${start === today ? ' is-today' : ''}`}
-              aria-pressed={d === day}
-              aria-current={start === today ? 'date' : undefined}
-              aria-label={[`${WEEK[(lead + i) % 7]} ${d} ${NAMES[month]} ${year}`, ...seen.map((e) => `${e.kind.toLowerCase()} ${e.type} eclipse`)].join(', ')}
-              title={seen.map((e) => `${e.kind} ${e.type} eclipse`).join(', ') || undefined}
-              disabled={start > TIME_MAX || start + DAY_MS <= TIME_MIN}
-              tabIndex={d === day ? tab : -1}
-              onClick={() => go(momentOf({ ...p, day: d }))}
-            >
-              {d}
-              {seen.length > 0 && (
-                <span className="sl-day-marks" aria-hidden="true">
-                  {seen.map((e) => (
-                    <span key={e.type} className={`sl-day-mark is-${e.type}`} />
-                  ))}
-                </span>
-              )}
-            </button>
-          )
-        })}
+      <div className="lb-opt-row">
+        <span className="lb-opt-label" id="sl-when-day">
+          Day
+        </span>
+        <div className="lb-stepper" role="group" aria-labelledby="sl-when-day">
+          <Step {...step} label="A day back" back to={days(-1)} />
+          <Field
+            text={String(p.day)}
+            read={numberRead(1, daysIn(p.year, p.month), 2)}
+            size={2}
+            label="Day"
+            tab={tab}
+            onSet={(day) => set({ day })}
+            onStep={(n) => onGo(days(n))}
+          />
+          <Step {...step} label="A day on" to={days(1)} />
+        </div>
       </div>
 
-      <div className="lb-opt-row sl-when-time">
+      <div className="lb-opt-row">
         <span className="lb-opt-label">Time</span>
         <div className="sl-when-hm">
           <Field
-            value={p.hour}
-            digits={2}
-            min={0}
-            max={23}
+            text={String(p.hour).padStart(2, '0')}
+            read={hourRead}
+            size={2}
             label="Hour, UTC"
             tab={tab}
-            onSet={(h) => go(momentOf({ ...p, hour: h, second: 0 }))}
-            onStep={(n) => go(momentOf({ ...p, hour: p.hour + n, second: 0 }))}
+            className="is-time"
+            onSet={(hour) => set({ hour, second: 0 })}
+            onStep={(n) => onGo(turn('hour', n))}
           />
           <span className="sl-when-colon" aria-hidden="true">
             :
           </span>
           <Field
-            value={p.minute}
-            digits={2}
-            min={0}
-            max={59}
+            text={String(p.minute).padStart(2, '0')}
+            read={minuteRead}
+            size={2}
             label="Minute"
             tab={tab}
-            onSet={(m) => go(momentOf({ ...p, minute: m, second: 0 }))}
-            onStep={(n) => go(momentOf({ ...p, minute: p.minute + n, second: 0 }))}
+            className="is-time"
+            onSet={(minute) => set({ minute, second: 0 })}
+            onStep={(n) => onGo(turn('minute', n))}
           />
           <span className="sl-when-zone">UTC</span>
         </div>

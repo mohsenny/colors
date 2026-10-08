@@ -146,8 +146,3 @@ export function shiftMonths(ms: number, n: number): number {
   const p = partsOf(ms)
   return momentOf({ ...p, month: p.month + n })
 }
-
-/** How many days of the week before the 1st, for a calendar that starts on Monday. */
-export function leadOf(year: number, month: number): number {
-  return (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7
-}

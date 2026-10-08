@@ -818,16 +818,17 @@ export class Instrument {
     this.emit(true)
   }
 
-  /** To a moment picked on the calendar, the clock going on as it was. */
-  goTo(ms: number): void {
-    const to = Math.max(TIME_MIN, Math.min(TIME_MAX, ms))
-    if (to === this.ms) return
+  /** To a date set in the drawer, worked out from the moment the clock is on, as it goes on as it was. False if that is where it is. */
+  goTo(way: (ms: number) => number): boolean {
+    const to = Math.max(TIME_MIN, Math.min(TIME_MAX, way(this.ms)))
+    if (to === this.ms) return false
     this.branch()
     this.ms = to
     this.tape.jump(to)
     this.eclipses.from = NaN
     this.touch(`${dayLabel(to)}, ${clockLabel(to)} UTC`)
     this.emit(true)
+    return true
   }
 
   hold(on: boolean): void {

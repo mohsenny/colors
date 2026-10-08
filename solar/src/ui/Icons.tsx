@@ -48,6 +48,16 @@ export function StepIcon({ back = false }: { back?: boolean }): ReactElement {
   )
 }
 
+/** A long step, two of the one above. */
+export function DoubleStepIcon({ back = false }: { back?: boolean }): ReactElement {
+  return (
+    <Icon flip={back}>
+      <path d="M3.2 3.3 6.9 7l-3.7 3.7" />
+      <path d="M7.1 3.3 10.8 7l-3.7 3.7" />
+    </Icon>
+  )
+}
+
 /** The plus, and the cross it becomes. */
 export function PlusIcon({ open }: { open: boolean }): ReactElement {
   return (

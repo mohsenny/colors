@@ -71,7 +71,7 @@ function Chrome({ instrument }: { instrument: Instrument }): ReactElement {
         onWatch={(e) => instrument.watch(e)}
         onStep={(type, way) => instrument.stepEclipse(type, way)}
         onNow={() => instrument.now()}
-        onPick={(ms) => instrument.goTo(ms)}
+        onGo={(way) => instrument.goTo(way)}
         onHold={hold}
         onPhoto={() => {
           void savePhoto('Solar', () => instrument.photo()).then(

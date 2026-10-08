@@ -2,7 +2,7 @@ import { Body as AE, HelioVector, Illumination, MakeTime } from 'astronomy-engin
 import { describe, expect, it } from 'vitest'
 import { AU_KM, BODIES, bodyById } from './bodies'
 import type { BodyId } from './bodies'
-import { eclipsesBetween, nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
+import { nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
 import type { Eclipse, EclipseType } from './eclipses'
 import { TIME_MAX, TIME_MIN, posesAt, toEcliptic } from './ephemeris'
 import type { Vec3 } from './ephemeris'
@@ -431,16 +431,6 @@ describe('eclipses', () => {
     // Greatest eclipse was over Nazas, Mexico.
     expect(e.where?.lat).toBeCloseTo(25.3, 0)
     expect(e.where?.lon).toBeCloseTo(-104.1, 0)
-  })
-
-  it('lists both kinds in a stretch, in order', () => {
-    expect(eclipsesBetween(Date.UTC(2026, 7, 1), Date.UTC(2026, 8, 1)).map((e) => `${e.type} ${say(e)}`)).toEqual([
-      'solar 2026-08-12 Total',
-      'lunar 2026-08-28 Partial',
-    ])
-    // July 2000 had a solar eclipse at either end.
-    expect(eclipsesBetween(Date.UTC(2000, 6, 1), Date.UTC(2000, 7, 1)).map((e) => e.type)).toEqual(['solar', 'lunar', 'solar'])
-    expect(eclipsesBetween(Date.UTC(2026, 9, 1), Date.UTC(2026, 10, 1))).toEqual([])
   })
 })
 
