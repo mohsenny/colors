@@ -22,7 +22,7 @@ export const SLOT = '<!-- cv-text -->'
 /** The paper's element, for the app to find it by. */
 export const PAPER_ID = 'cv-paper'
 
-/** A run of the closing line, linked where it names an instrument. */
+/** A run of text, linked where it names an org or an instrument. */
 export interface Part {
   text: string
   href?: string
@@ -68,6 +68,11 @@ export function orgParts(text: string, life: Life = LIFE): Part[] {
     parts.push(href ? { text: run, href } : { text: run })
   }
   return parts
+}
+
+/** A face's copy in runs: each org with a site links out, each instrument it names links to it. */
+export function copyParts(text: string, life: Life = LIFE): Part[] {
+  return orgParts(text, life).flatMap((p) => (p.href ? [p] : closingParts(p.text)))
 }
 
 function esc(text: string): string {

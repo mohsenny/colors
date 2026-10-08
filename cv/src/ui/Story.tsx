@@ -6,7 +6,7 @@ import { LIFE, yearsOf } from '../life'
 import type { Chapter } from '../life'
 import { LOGOS } from '../logos'
 import type { Logo as LogoData, LogoId } from '../logos'
-import { orgParts, siteOf } from '../text'
+import { copyParts, siteOf } from '../text'
 import { PageIcon, PlayIcon } from './Icons'
 
 /** The old face fading out, as `--lb-t-grow`. */
@@ -162,28 +162,32 @@ function Copy({ text, line }: { text: string; line: (paragraph: string) => React
 }
 
 /**
- * A chapter: when and where, the line it is, what happened, and the logos.
- * Each company named in the copy links to its site, in a new tab.
+ * Text with its links: a company it names to its site, in a new tab, and an
+ * instrument to itself, in this one, as the title's names go.
  */
+function withLinks(text: string): ReactNode {
+  return copyParts(text).map((p, i) =>
+    p.href?.startsWith('https://') ? (
+      <a key={i} className="cv-link" href={p.href} target="_blank" rel="noreferrer">
+        {p.text}
+      </a>
+    ) : p.href ? (
+      <a key={i} className="cv-link" href={p.href}>
+        {p.text}
+      </a>
+    ) : (
+      <span key={i}>{p.text}</span>
+    ),
+  )
+}
+
+/** A chapter: when and where, the line it is, what happened, and the logos. */
 function ChapterFace({ chapter }: { chapter: Chapter }): ReactElement {
   return (
     <>
       <p className="cv-kicker">{kickerOf(chapter)}</p>
       <h2 className="cv-headline">{chapter.headline}</h2>
-      <Copy
-        text={chapter.copy}
-        line={(paragraph) =>
-          orgParts(paragraph).map((p, i) =>
-            p.href ? (
-              <a key={i} className="cv-link" href={p.href} target="_blank" rel="noreferrer">
-                {p.text}
-              </a>
-            ) : (
-              <span key={i}>{p.text}</span>
-            ),
-          )
-        }
-      />
+      <Copy text={chapter.copy} line={withLinks} />
       <Logos chapter={chapter} />
     </>
   )
@@ -192,7 +196,7 @@ function ChapterFace({ chapter }: { chapter: Chapter }): ReactElement {
 /**
  * The cover, the face before any chapter: where, a hello, who he is and the
  * ways in. Play and CV in it press the dock's buttons, each with its mark, so
- * the words teach the dock.
+ * the words teach the dock. A company it names links out, as in a chapter.
  */
 function CoverFace({ actions }: { actions?: StoryActions }): ReactElement {
   const { cover } = LIFE
@@ -210,7 +214,7 @@ function CoverFace({ actions }: { actions?: StoryActions }): ReactElement {
                 {part}
               </button>
             ) : (
-              <span key={i}>{part}</span>
+              <span key={i}>{withLinks(part)}</span>
             ),
           )
         }
