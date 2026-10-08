@@ -352,7 +352,7 @@ export const LIFE: Life = {
       from: 2024,
       to: 'now',
       headline: 'Building with AI',
-      copy: 'AI has been part of how I work since 2024, and since 2025 I ship real things with it.\nAt CGM I built an AI workflow hub where agents, tools and human review take a Jira ticket through test cases, automated tests and a merge request to a code review. There is also my test reporting dashboard for nightly runs: trends, flaky tests, coverage by team and results synced to Zephyr.\nOutside work I made this site with Claude Code: the CV, Solar, Gravity and Lightbox.',
+      copy: 'AI has been part of how I work since 2024, and since 2025 I ship real things with it.\nAt CGM I built an AI workflow hub where agents, tools and human review take a Jira ticket through test cases, automated tests and a merge request to a code review. There is also my test reporting dashboard for nightly runs: trends, flaky tests, coverage by team and results synced to Zephyr.\nOutside work I made this site with Claude Code: this CV, Solar, Gravity and Lightbox.',
       orgs: [],
       tools: ['claude', 'openai', 'deepseek', 'jira', 'figma', 'react'],
       dye: { L: 0.75, C: 0.14, h: 190, d: 0.55 },
