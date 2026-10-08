@@ -1368,11 +1368,12 @@ body > .cv-paper .cv-text {
 /*
  * The paper comes in over the right of the stage. Where the story still fits
  * to the left of it, 680px and the column's 680 and 24px either side, it
- * moves over into the rest; where it does not, it goes, the paper being the
- * whole of it.
+ * moves over only as far as clears the paper by 24px: its column ends 340px
+ * past the middle, and has to end 704px from the right. Where it does not
+ * fit, it goes, the paper being the whole of it.
  */
 .cv-story.is-reading {
-  transform: translateX(-340px);
+  transform: translateX(clamp(-340px, calc(50vw - 1044px), 0px));
 }
 
 @media (max-width: 1407px) {
@@ -1403,14 +1404,13 @@ body > .cv-paper .cv-text {
 }
 
 /*
- * The dock never sits across the paper's edge, and slides as the paper does.
- * Where the surface beside the paper holds it, it moves over into it with the
- * story, centred there as it is on the page. It starts half its playing
- * width, 133px, left of that centre, so 382px keeps it 16px clear of the
- * legend's 232px. From 1360px: 680 of paper, 382, the other 282 of the open
- * dock, and 16px. Short of that it sits on the paper, centred under the
- * reading, 340px in less the open dock's 74px shift, from 795px, where that
- * clears the legend too.
+ * The dock never sits across the paper's edge, and slides as the paper does,
+ * only as far as it must. Where the surface beside the paper holds it, it
+ * stops 24px short of it, as the story does. Its `left` is not its middle:
+ * the open dock ends 282px past it, so it is at most 986px from the right,
+ * and either dock starts 133px before it, so 382px keeps it 16px clear of the
+ * legend's 232px; it fits from 1368px. Short of that it goes onto the paper,
+ * its start in line with the reading's 32px inset, 514px from the right.
  */
 .cv-stage .lb-dock {
   transition:
@@ -1419,15 +1419,13 @@ body > .cv-paper .cv-text {
     left var(--lb-t-enter, 240ms) var(--lb-ease, cubic-bezier(0.4, 0, 0.2, 1));
 }
 
-@media (min-width: 795px) {
-  .cv-stage:has(.cv-paper.is-in) .lb-dock {
-    left: calc(100% - 414px);
-  }
+.cv-stage:has(.cv-paper.is-in) .lb-dock {
+  left: max(50%, calc(100% - 514px));
 }
 
-@media (min-width: 1360px) {
+@media (min-width: 1368px) {
   .cv-stage:has(.cv-paper.is-in) .lb-dock {
-    left: max(382px, calc((100% - 680px) / 2));
+    left: max(382px, min(50%, calc(100% - 986px)));
   }
 }
 
