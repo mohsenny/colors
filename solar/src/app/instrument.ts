@@ -10,7 +10,7 @@ import type { Body, BodyId } from '../sky/bodies'
 import { CROWD, CROWD_COLOURS, crowdAt, crowdAxes, crowdPresence } from '../sky/crowd'
 import { NEAR_MS, nearEclipse, stepTo, stepsFrom, withinEclipses } from '../sky/eclipses'
 import type { Eclipse, EclipseSteps, EclipseType } from '../sky/eclipses'
-import { PERIOD, TIME_MAX, TIME_MIN, orbitOf, posesAt } from '../sky/ephemeris'
+import { PERIOD, TIME_MAX, TIME_MIN, hubOf, orbitOf, posesAt } from '../sky/ephemeris'
 import type { Poses, Vec3 } from '../sky/ephemeris'
 import { presenceOf, smearOf, ttOf } from '../sky/deep'
 import { engulfed, sunAt, sunTint } from '../sky/sun'
@@ -1712,7 +1712,7 @@ export class Instrument {
     }
     for (const o of this.locals.values()) {
       const b = bodyById(o.id) as Body
-      line(o, this.at(b.parent as BodyId), this.localInk(b) * shown, this.localGlow(b))
+      line(o, hubOf(o.id, this.poses), this.localInk(b) * shown, this.localGlow(b))
     }
     return out
   }

@@ -169,13 +169,18 @@ const CHARON_SHARE = 0.10877
 /** The Moon's share of the mass of the Earth and the Moon. */
 const MOON_SHARE = 0.0121505856
 
+/** Pluto's small moons, which go round the point Pluto and Charon both go round rather than Pluto. */
+function roundBoth(id: BodyId): id is KeplerMoon {
+  return id !== 'charon' && bodyById(id)?.parent === 'pluto'
+}
+
 /** A moon from its planet's centre, km. `jupiter` is where Jupiter's are, if already known. */
 function localAt(id: BodyId, m: Moment, jupiter?: JupiterMoonsInfo | null): Vec3 {
   const jde = m.tt + J2000
   if (isKepler(id)) {
     const l = fromElements(id, jde)
-    if (id === 'charon' || bodyById(id)?.parent !== 'pluto') return l
-    // Pluto's small moons go round the point Pluto and Charon both go round, which Pluto is off, away from Charon.
+    if (!roundBoth(id)) return l
+    // Pluto is off that point, away from Charon.
     const c = fromElements('charon', jde)
     return [l[0] + CHARON_SHARE * c[0], l[1] + CHARON_SHARE * c[1], l[2] + CHARON_SHARE * c[2]]
   }
@@ -451,8 +456,8 @@ export const PERIOD: Partial<Record<BodyId, number>> = {
 
 /**
  * One lap of an orbit, centred on `ms`: km from the Sun's centre, or for a
- * moon from its planet's. The planets barely change lap to lap, so this is
- * worked out now and then rather than every frame.
+ * moon from what it goes round (hubOf). The planets barely change lap to lap,
+ * so this is worked out now and then rather than every frame.
  */
 export function orbitOf(id: BodyId, ms: number, samples: number): Float64Array {
   const days = PERIOD[id] ?? 0
@@ -460,7 +465,20 @@ export function orbitOf(id: BodyId, ms: number, samples: number): Float64Array {
   const out = new Float64Array(samples * 3)
   for (let i = 0; i < samples; i++) {
     const m = momentAt(ms + (i / (samples - 1) - 0.5) * days * DAY_MS)
-    out.set(moon ? localAt(id, m) : centreAt(id, m), i * 3)
+    out.set(roundBoth(id) ? fromElements(id, m.tt + J2000) : moon ? localAt(id, m) : centreAt(id, m), i * 3)
   }
   return out
+}
+
+/**
+ * What a moon's path is drawn round, km from the Sun's centre: its planet, or
+ * for Pluto's small moons the point Pluto and Charon both go round. Pluto
+ * swings 2,100 km about that every 6.4 days, and a path drawn round it would
+ * wobble with it and not close.
+ */
+export function hubOf(id: BodyId, poses: Poses): Vec3 {
+  const p = poses[bodyById(id)?.parent as BodyId].at
+  if (!roundBoth(id)) return p
+  const c = poses.charon.at
+  return [p[0] + CHARON_SHARE * (c[0] - p[0]), p[1] + CHARON_SHARE * (c[1] - p[1]), p[2] + CHARON_SHARE * (c[2] - p[2])]
 }

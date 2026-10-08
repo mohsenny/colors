@@ -7,7 +7,7 @@ import type { CrowdMoon } from './crowd'
 import { BLEND, EXACT, J2000_MS, YEAR_MS, presenceOf, smearOf } from './deep'
 import { ECLIPSES_FROM, ECLIPSES_TO, nearEclipse, nextEclipse, previousEclipse, stepTo, stepsFrom } from './eclipses'
 import type { Eclipse, EclipseType } from './eclipses'
-import { TIME_MAX, TIME_MIN, posesAt, spins, toEcliptic } from './ephemeris'
+import { TIME_MAX, TIME_MIN, hubOf, orbitOf, posesAt, spins, toEcliptic } from './ephemeris'
 import type { Vec3 } from './ephemeris'
 import { keplerMoon } from './kepler'
 import { DARK, bareMagnitude, excess, gain, glareOf, limit, luxOf, magnitude, noonLux, pointLook, ringsMagnitude, skyAt } from './light'
@@ -436,6 +436,21 @@ describe('Pluto and Charon', () => {
         const p = posesAt(msAt(MOMENTS[k]))
         expect(len(toward(want, toward(p.pluto.at, p[id].at))), id).toBeLessThan(within)
       })
+    }
+  })
+
+  it('draws their paths round the point they go round, which close, with each moon on its own', () => {
+    const ms = Date.UTC(2026, 9, 8)
+    const p = posesAt(ms)
+    for (const id of ['styx', 'nix', 'kerberos', 'hydra'] as const) {
+      const lap = orbitOf(id, ms, 513)
+      const at = (i: number): Vec3 => [lap[i * 3], lap[i * 3 + 1], lap[i * 3 + 2]]
+      const r = Array.from({ length: 513 }, (_, i) => len(at(i)))
+      const mean = r.reduce((a, b) => a + b) / r.length
+      // Round Pluto, which swings 2,100 km about that point, they went out and in by as much and missed by twice it.
+      expect(Math.max(...r.map((x) => Math.abs(x / mean - 1))), id).toBeLessThan(0.01)
+      expect(len(toward(at(0), at(512))), id).toBeLessThan(100)
+      expect(len(toward(at(256), toward(hubOf(id, p), p[id].at))), id).toBeLessThan(1)
     }
   })
 
