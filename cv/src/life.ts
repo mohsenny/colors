@@ -437,10 +437,11 @@ export const LIFE: Life = {
       url: 'https://medium.com/@mohsenny/your-agent-is-just-a-markdown-file-we-can-do-better-0a681cb78739',
     },
   ],
-  outside: 'Space and physics, quantum field theory especially, and my golden retriever.',
+  outside: 'Space and physics, quantum physics especially, tennis and my golden retriever.',
   interests: [
     { glyph: 'orbit', text: 'Space and physics' },
-    { glyph: 'atom', text: 'Quantum field theory' },
+    { glyph: 'atom', text: 'Quantum physics' },
+    { glyph: 'tennis', text: 'Tennis' },
     { glyph: 'dog', text: 'My golden retriever' },
   ],
   closing:
