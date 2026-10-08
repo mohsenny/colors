@@ -217,7 +217,11 @@ vec3 facing(vec3 x) {
 float hills(vec3 x, vec3 n, vec3 L) {
   x += 0.01 * n;
   float b = dot(x, L);
-  float far = -b + sqrt(max(0.0, b * b - dot(x, x) + 1.0));
+  float d = b * b - dot(x, x) + 1.0;
+  // Off the highest ground the look can start outside the sphere round it,
+  // and heading away from it, nothing is in the way.
+  float far = d > 0.0 ? -b + sqrt(d) : 0.0;
+  if (far <= 0.03) return 1.0;
   float lit = 1.0;
   for (int i = 0; i < 16; i++) {
     float s = 0.03 + (far - 0.03) * float(i * i) / 225.0;
