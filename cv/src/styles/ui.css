@@ -478,7 +478,7 @@ body > .cv-paper .cv-text {
   color: var(--cv-ink-2);
 }
 
-/* The dot, in its chapter's film; a degree's is a ring. Mount white round
+/* The dot, in its section's film; a degree's is a ring. Mount white round
    it cuts the line. */
 .cv-node::before {
   content: '';

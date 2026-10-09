@@ -111,7 +111,7 @@ function yearOf(role: Role): string {
 }
 
 /**
- * A role on the spine: its year down the side, a dot in its chapter's film,
+ * A role on the spine: its year down the side, a dot in its section's film,
  * then the org's mark and the title, where and when, and what was done. The
  * org's name in words is read out and printed with the title; on screen a
  * wordmark says it, and a mark alone has it over the dates.
@@ -163,6 +163,12 @@ const SECTIONS: { id: SectionId; label: string; icon: GlyphId }[] = [
   { id: 'outside', label: 'Outside work', icon: 'star' },
 ]
 
+/** The film each section on the spine dots its items in, whatever chapter they fall in: the jobs pink, the degrees blue. */
+const SPINE_FILM = {
+  experience: filmHex({ L: 0.7, C: 0.17, h: 20, d: 0.5 }),
+  education: filmHex({ L: 0.72, C: 0.15, h: 240, d: 0.55 }),
+}
+
 /** The marks the glance leads with: the tools most of the work was done in. */
 const MAIN_TOOLS: LogoId[] = ['cypress', 'webdriverio', 'selenium', 'k6', 'python', 'grafana', 'claude']
 
@@ -208,9 +214,7 @@ function ways(life: Life, tab?: -1): string {
  * closing line.
  */
 export function textCv(life: Life = LIFE): string {
-  const film = new Map(life.chapters.flatMap((c) => (c.roles ?? []).map((r) => [r, filmHex(c.dye)] as const)))
-  const spine = (roles: Role[]): string =>
-    `<ol class="cv-spine">${roles.map((r) => node(r, film.get(r) ?? 'currentColor')).join('')}</ol>`
+  const spine = (roles: Role[], film: string): string => `<ol class="cv-spine">${roles.map((r) => node(r, film)).join('')}</ol>`
   const skills = life.skills
     .map((set) => `<div><dt>${esc(set.label)}</dt><dd><ul class="cv-chips">${set.skills.map(chip).join('')}</ul></dd></div>`)
     .join('')
@@ -219,8 +223,8 @@ export function textCv(life: Life = LIFE): string {
   const medium = `<p class="cv-profile"><a href="${esc(life.reach.medium)}">${mark('medium')}${esc(bare(life.reach.medium))}</a></p>`
   const interests = life.interests.map((i) => `<li>${glyph(i.glyph)}<span>${esc(i.text)}</span></li>`).join('')
   const body: Record<SectionId, string> = {
-    experience: spine(jobs(life).reverse()),
-    education: spine(degrees(life).reverse()),
+    experience: spine(jobs(life).reverse(), SPINE_FILM.experience),
+    education: spine(degrees(life).reverse(), SPINE_FILM.education),
     skills: `<dl class="cv-skills">${skills}</dl>`,
     writing: `${medium}<ul class="cv-writing">${writing}</ul>`,
     outside: `<ul class="cv-interests">${interests}</ul>`,
