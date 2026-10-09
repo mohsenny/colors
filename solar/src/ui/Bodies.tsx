@@ -6,8 +6,18 @@ import { Sphere } from './Sphere'
 
 const KIND: Record<BodyKind, string> = { star: 'Star', planet: 'Planet', dwarf: 'Dwarf planet', moon: 'Moon' }
 
-/** The moons, under their planet. */
-const MOONS = new Map<BodyId, Body[]>(KEYED.map((b) => [b.id, BODIES.filter((m) => m.parent === b.id)]))
+/** The moons round under their own weight, each with a map of its face but Titan, whose haze hides it. */
+const ROUND = new Set<BodyId>([
+  'moon',
+  'io', 'europa', 'ganymede', 'callisto',
+  'mimas', 'enceladus', 'tethys', 'dione', 'rhea', 'titan', 'iapetus',
+  'miranda', 'ariel', 'umbriel', 'titania', 'oberon',
+  'triton',
+  'charon',
+])
+
+/** The round moons, under their planet. The small ones are found in the sky. */
+const MOONS = new Map<BodyId, Body[]>(KEYED.map((b) => [b.id, BODIES.filter((m) => m.parent === b.id && ROUND.has(m.id))]))
 
 export interface BodiesProps {
   open: boolean
@@ -19,7 +29,7 @@ export interface BodiesProps {
 
 /**
  * The drawer behind the seat chip: the Sun, the planets and Pluto, Sun
- * outward, each with its key, and the moons under what they go round.
+ * outward, each with its key, and the round moons under what they go round.
  */
 export function Bodies({ open, seat, gone, onSelect }: BodiesProps): ReactElement {
   const tab = open ? undefined : -1
