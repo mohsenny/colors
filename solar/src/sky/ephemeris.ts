@@ -1,13 +1,14 @@
 /*
  * Where everything is, and which way it is turned, at any moment. Positions
  * come from Astronomy Engine (VSOP87 for the planets, ELP for the Moon, L1.2
- * for the big moons of Jupiter, its own integration for Pluto), from Meeus for
- * the round moons of Saturn and from ellipses, JPL's mean elements or fitted
- * to Horizons, for the rest, all checked against JPL Horizons. The turn of
- * each planet, of Pluto and of the Moon is the IAU's, so the right face of
- * the Earth is in daylight and the Moon shows the side it really shows; the
- * other moons keep one face to their planet, but for the few seen to turn on
- * their own (SPIN).
+ * for the big moons of Jupiter, its own integration for Pluto), from more of
+ * VSOP87 than it keeps for Mercury (mercury.ts), from Meeus for the round
+ * moons of Saturn and from ellipses, JPL's mean elements or fitted to
+ * Horizons, for the rest, all checked against JPL Horizons. The turn of each
+ * planet, of Pluto and of the Moon is the IAU's, so the right face of the
+ * Earth is in daylight and the Moon shows the side it really shows; the other
+ * moons keep one face to their planet, but for the few seen to turn on their
+ * own (SPIN).
  *
  * Past 2000 BC and AD 3000 the theories give way to mean orbits (deep.ts),
  * which the Sun's life widens (sun.ts), and each body's turn goes on as it was
@@ -26,6 +27,7 @@ import { BLEND, DAY_MS, EXACT, J2000_MS, YEAR_MS, meanMoon, meanPlanet, pastTheo
 import type { Planet } from './deep'
 import { farMoon, isFar, isKepler, keplerMoon } from './kepler'
 import type { FarMoon, KeplerMoon } from './kepler'
+import { mercuryAt } from './mercury'
 import { saturnMoon } from './saturn'
 import type { SaturnMoon } from './saturn'
 import { moonWidening, widening } from './sun'
@@ -197,7 +199,7 @@ function localAt(id: BodyId, m: Moment, jupiter?: JupiterMoonsInfo | null): Vec3
 
 /** A planet or Pluto, km from the Sun's centre, by the theories. */
 function centreOf(id: BodyId, time: AstroTime): Vec3 {
-  const c = km(HelioVector(ENGINE[id] as AE, time))
+  const c = km(id === 'mercury' ? mercuryAt(time.tt) : HelioVector(ENGINE[id] as AE, time))
   if (id !== 'pluto') return c
   // Astronomy Engine follows the point Pluto and Charon both go round, so Pluto is off it, away from Charon.
   const m = fromElements('charon', time.tt + J2000)

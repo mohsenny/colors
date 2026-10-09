@@ -87,6 +87,25 @@ describe('where things are', () => {
   })
 })
 
+describe('Mercury', () => {
+  // JPL Horizons (DE441), km from the Sun on the ecliptic of J2000, in 1993 BC,
+  // 1002 BC, 3 BC and AD 1001, 2024 and 2991.
+  const MERCURY: Array<[number, Vec3]> = [
+    [993730.5, [18_113_742, -63_809_114, -6_698_503]],
+    [1355513.5, [-59_386_679, -3_467_420, 5_630_613]],
+    [1720575.5, [-36_605_914, 34_465_550, 6_267_906]],
+    [2086730.5, [-37_805_809, -57_497_839, -1_053_945]],
+    [2460536.5, [39_210_739, -49_653_063, -7_654_217]],
+    [2813575.5, [43_885_467, 22_260_424, -2_068_434]],
+  ]
+
+  it('puts Mercury where JPL Horizons has it from 2000 BC to AD 3000', () => {
+    // Astronomy Engine's own Mercury, 29 of VSOP87's terms, is six minutes of arc off by the first.
+    const within = [2_000, 1_200, 400, 150, 100, 350]
+    MERCURY.forEach(([jd, p], k) => expect(len(toward(p, posesAt(msAt(jd)).mercury.at))).toBeLessThan(within[k]))
+  })
+})
+
 describe('the moons of Mars', () => {
   const fromMars = (ms: number, id: BodyId): Vec3 => {
     const p = posesAt(ms)
